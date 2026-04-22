@@ -148,7 +148,8 @@ function build(): void {
     maxZoom: 2.5,
     wheelSensitivity: 0.25,
     boxSelectionEnabled: false,
-    autoungrabify: true,
+    autoungrabify: false,
+    autounselectify: true,
   });
 
   cy.on('tap', 'node', (evt) => {
