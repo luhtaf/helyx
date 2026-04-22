@@ -3,6 +3,7 @@ import { computed, toRef } from 'vue';
 import { useThreatActorDetail } from '@/composables/useThreatActors';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import EntityGraph, { type GraphNode, type GraphEdge } from '@/components/graph/EntityGraph.vue';
+import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import { signalHex } from '@/utils/severity';
 import { phaseTier, tierColor, tierLabel, type PhaseTier } from '@/utils/killChain';
 
@@ -64,14 +65,14 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
 <template>
   <div class="px-12 py-10 max-w-[1080px] relative z-10">
     <header class="border-b border-rule-strong pb-4 mb-12">
-      <div class="flex items-baseline justify-between mb-3">
-        <RouterLink to="/threat-actors" class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-dim hover:text-ink transition">
-          ← actor catalog
-        </RouterLink>
-        <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
-          actor · detail
-        </p>
-      </div>
+      <Breadcrumb
+        :crumbs="[
+          { label: 'overview', to: '/' },
+          { label: 'actors', to: '/threat-actors' },
+          { label: ta?.name ?? id, mono: !ta },
+        ]"
+        class="mb-3"
+      />
       <div v-if="ta" class="flex items-baseline justify-between gap-4">
         <div class="flex items-baseline gap-4">
           <span class="font-mono text-[14px] text-ink-dim tabular-nums">{{ ta.id }}</span>

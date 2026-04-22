@@ -3,6 +3,7 @@ import { computed, toRef } from 'vue';
 import { useAttackPatternDetail } from '@/composables/useAttackPatterns';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import EntityGraph, { type GraphEdge, type GraphNode } from '@/components/graph/EntityGraph.vue';
+import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import { phaseTier, tierColor, tierLabel } from '@/utils/killChain';
 import { inkDimHex, signalHex } from '@/utils/severity';
 
@@ -50,14 +51,14 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
 <template>
   <div class="px-12 py-10 max-w-[1080px] relative z-10">
     <header class="border-b border-rule-strong pb-4 mb-12">
-      <div class="flex items-baseline justify-between mb-3">
-        <RouterLink to="/threat-actors" class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-dim hover:text-ink transition">
-          ← actor catalog
-        </RouterLink>
-        <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
-          ttp · detail
-        </p>
-      </div>
+      <Breadcrumb
+        :crumbs="[
+          { label: 'overview', to: '/' },
+          { label: 'matrix', to: '/techniques' },
+          { label: id, mono: true },
+        ]"
+        class="mb-3"
+      />
 
       <div v-if="ap" class="flex flex-wrap items-baseline justify-between gap-4">
         <div class="flex flex-wrap items-baseline gap-4">

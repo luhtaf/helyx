@@ -5,6 +5,7 @@ import type { MatchMode } from '@/composables/useDashboard';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityWord from '@/components/ui/SeverityWord.vue';
 import EntityGraph, { type GraphNode, type GraphEdge } from '@/components/graph/EntityGraph.vue';
+import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import { severityHex, severityBorderVar, inkDimHex, inkFaintHex, signalHex } from '@/utils/severity';
 
 const props = defineProps<{ id: string }>();
@@ -94,14 +95,14 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
 <template>
   <div class="px-12 py-10 max-w-[1080px] relative z-10">
     <header class="border-b border-rule-strong pb-4 mb-12">
-      <div class="flex items-baseline justify-between mb-3">
-        <RouterLink to="/assets" class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-dim hover:text-ink transition">
-          ← inventory
-        </RouterLink>
-        <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
-          asset · detail
-        </p>
-      </div>
+      <Breadcrumb
+        :crumbs="[
+          { label: 'overview', to: '/' },
+          { label: 'inventory', to: '/assets' },
+          { label: asset?.name ?? id, mono: !asset },
+        ]"
+        class="mb-3"
+      />
       <div v-if="asset" class="flex items-baseline justify-between gap-4">
         <h1 class="text-[26px] font-medium tracking-tight text-ink">
           {{ asset.name }}

@@ -5,6 +5,7 @@ import { useCweDetail } from '@/composables/useCwes';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityWord from '@/components/ui/SeverityWord.vue';
 import Pagination from '@/components/ui/Pagination.vue';
+import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import { severityBorderVar } from '@/utils/severity';
 
 const props = defineProps<{ id: string }>();
@@ -44,18 +45,14 @@ function severityBorderColor(value: string | null | undefined): string {
 <template>
   <div class="px-12 py-10 max-w-[1080px] relative z-10">
     <header class="border-b border-rule-strong pb-4 mb-12">
-      <div class="flex items-baseline justify-between mb-3">
-        <a
-          href="#"
-          class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-dim hover:text-ink transition"
-          @click.prevent="router.back()"
-        >
-          ← back
-        </a>
-        <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
-          cwe · detail
-        </p>
-      </div>
+      <Breadcrumb
+        :crumbs="[
+          { label: 'overview', to: '/' },
+          { label: 'weaknesses', to: '/cves' },
+          { label: id, mono: true },
+        ]"
+        class="mb-3"
+      />
 
       <div v-if="cwe" class="flex flex-wrap items-baseline gap-4">
         <span class="font-mono text-[26px] font-medium text-ink tabular-nums">{{ cwe.id }}</span>
