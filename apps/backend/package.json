@@ -1,0 +1,35 @@
+{
+  "name": "@helyx/backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx src/migrations/cli.ts up",
+    "migrate:status": "tsx src/migrations/cli.ts status",
+    "nvd:sync": "tsx src/sources/nvd/cli.ts",
+    "elk:sync": "tsx src/sources/elk/cli.ts",
+    "mitre:sync": "tsx src/sources/mitre/cli.ts"
+  },
+  "dependencies": {
+    "@apollo/server": "^4.11.0",
+    "@node-rs/argon2": "^2.0.2",
+    "dataloader": "^2.2.2",
+    "dotenv": "^16.4.7",
+    "graphql": "^16.9.0",
+    "jose": "^5.9.6",
+    "neo4j-driver": "^5.26.0",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
