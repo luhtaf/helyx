@@ -36,7 +36,7 @@ pnpm --filter @helyx/backend elk:sync -- --max-batches 5 --page-size 200  # boun
 pnpm -r build
 ```
 
-Backend listens on `:4000/graphql`. Web dev server on `:5173` proxies `/graphql` → backend. Neo4j browser on `:7474`, bolt on `:7687`. Default dev creds: `neo4j / helyxdev` (in `.env.example`). `JWT_SECRET` (≥32 chars) is required — generate with `node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"`.
+Backend listens on `:4000/graphql`. Web dev server on `:5173` proxies `/graphql` → backend. Neo4j browser on `:7474`, bolt on `:7687`. Set `NEO4J_PASSWORD` in your local `.env` (any value — `docker-compose.yml` interpolates it; if you change after first init you must `docker compose down -v` to recreate the volume since Neo4j sticks the password on first boot). `JWT_SECRET` (≥32 chars) is required — generate with `node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"`.
 
 There are **no tests yet** — owner deferred them. Do not add a test runner without asking.
 
