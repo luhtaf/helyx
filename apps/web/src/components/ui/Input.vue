@@ -20,7 +20,7 @@ defineEmits<{ (e: 'update:modelValue', value: string): void }>();
   <label class="block">
     <span
       v-if="label"
-      class="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.16em] text-neutral-500"
+      class="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-faint"
     >
       {{ label }}
     </span>
@@ -32,7 +32,7 @@ defineEmits<{ (e: 'update:modelValue', value: string): void }>();
       :autocomplete="autocomplete"
       :required="required"
       :disabled="disabled"
-      class="block h-9 w-full rounded-md border border-neutral-800 bg-neutral-900/50 px-3 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+      class="block h-9 w-full rounded-md border border-rule bg-base px-3 text-sm text-ink placeholder:text-ink-faint focus:border-ink-dim focus:outline-none focus:ring-1 focus:ring-ink-dim disabled:cursor-not-allowed disabled:opacity-50"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
   </label>

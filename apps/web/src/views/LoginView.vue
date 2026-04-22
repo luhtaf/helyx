@@ -17,17 +17,17 @@ async function onSubmit(): Promise<void> {
 </script>
 
 <template>
-  <main class="flex min-h-screen items-center justify-center px-6">
+  <main class="flex min-h-screen items-center justify-center px-6 relative z-10">
     <div class="w-full max-w-sm">
       <header class="mb-10 text-center">
-        <p class="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+        <p class="mb-2 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
           helyx · threat graph
         </p>
         <h1 class="text-2xl font-medium tracking-tight">Sign in</h1>
       </header>
 
       <form
-        class="rounded-xl border border-neutral-800/80 bg-neutral-900/40 p-7 shadow-xl"
+        class="rounded-xl border border-rule bg-surface p-7 shadow-2xl"
         @submit.prevent="onSubmit"
       >
         <div class="space-y-4">
@@ -50,7 +50,7 @@ async function onSubmit(): Promise<void> {
 
         <p
           v-if="error"
-          class="mt-4 rounded-md border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-300"
+          class="mt-4 rounded-md border border-sev-crit/40 bg-sev-crit/10 px-3 py-2 text-xs text-sev-crit"
         >
           {{ error }}
         </p>
@@ -66,7 +66,7 @@ async function onSubmit(): Promise<void> {
         </Button>
       </form>
 
-      <p class="mt-6 text-center text-xs text-neutral-500">
+      <p class="mt-6 text-center text-xs text-ink-faint">
         Local instance · no account flow yet — use existing credentials
       </p>
     </div>

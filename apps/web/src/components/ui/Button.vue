@@ -12,12 +12,12 @@ withDefaults(
 );
 
 const baseClass =
-  'inline-flex items-center justify-center gap-2 rounded-md font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300/30 disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex items-center justify-center gap-2 rounded-md font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/30 disabled:cursor-not-allowed disabled:opacity-50';
 
 const variantClass: Record<string, string> = {
-  primary: 'bg-neutral-100 text-neutral-950 hover:bg-white',
-  secondary: 'border border-neutral-700/80 bg-neutral-900 text-neutral-100 hover:bg-neutral-800',
-  ghost: 'text-neutral-300 hover:bg-neutral-800/60',
+  primary: 'bg-ink text-base hover:bg-signal',
+  secondary: 'border border-rule-strong bg-surface text-ink hover:border-ink-faint',
+  ghost: 'text-ink-dim hover:text-ink hover:bg-surface/60',
 };
 
 const sizeClass: Record<string, string> = {

@@ -5,21 +5,21 @@ defineProps<{
 }>();
 
 const dotClass: Record<NonNullable<'ok' | 'down' | 'pending'>, string> = {
-  ok: 'bg-emerald-400',
-  down: 'bg-red-400',
-  pending: 'bg-neutral-600 animate-pulse',
+  ok: 'bg-sev-low',
+  down: 'bg-sev-crit',
+  pending: 'bg-ink-faint animate-pulse',
 };
 
 const labelClass: Record<NonNullable<'ok' | 'down' | 'pending'>, string> = {
-  ok: 'text-emerald-300',
-  down: 'text-red-300',
-  pending: 'text-neutral-400',
+  ok: 'text-sev-low',
+  down: 'text-sev-crit',
+  pending: 'text-ink-dim',
 };
 </script>
 
 <template>
   <div class="flex items-center justify-between py-3 text-sm">
-    <dt class="text-neutral-400">{{ label }}</dt>
+    <dt class="text-ink-dim">{{ label }}</dt>
     <dd class="flex items-center gap-2">
       <slot>
         <span
