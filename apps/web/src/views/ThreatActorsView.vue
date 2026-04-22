@@ -53,7 +53,7 @@ watch(search, () => {
         v-model="search"
         type="search"
         placeholder="actor name or id (e.g. APT28, G0007)"
-        class="bg-transparent border-b border-rule focus:border-ink-dim focus:outline-none text-ink placeholder:text-ink-faint py-1 w-full max-w-xs transition"
+        class="bg-transparent border-b border-rule focus:border-ink-dim focus:outline-none text-ink placeholder:text-ink-dim py-1 w-full max-w-xs transition"
       />
     </div>
 

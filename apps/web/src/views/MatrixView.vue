@@ -93,7 +93,7 @@ function toggleSubtechniques(event: Event): void {
           v-model="search"
           type="search"
           placeholder="technique name or id"
-          class="h-9 w-[240px] rounded-md bg-surface border border-rule px-3 text-ink placeholder:text-ink-faint focus:outline-none focus:border-ink-dim"
+          class="h-9 w-[240px] rounded-md bg-surface border border-rule px-3 text-ink placeholder:text-ink-dim focus:outline-none focus:border-ink-dim"
         />
       </label>
 

@@ -83,7 +83,7 @@ function fmtKind(k: string): string {
           v-model="search"
           type="search"
           placeholder="asset name substring"
-          class="bg-transparent border-b border-rule focus:border-ink-dim focus:outline-none text-ink placeholder:text-ink-faint py-1 w-full max-w-xs transition"
+          class="bg-transparent border-b border-rule focus:border-ink-dim focus:outline-none text-ink placeholder:text-ink-dim py-1 w-full max-w-xs transition"
         />
       </div>
     </div>

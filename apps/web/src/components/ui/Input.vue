@@ -32,7 +32,7 @@ defineEmits<{ (e: 'update:modelValue', value: string): void }>();
       :autocomplete="autocomplete"
       :required="required"
       :disabled="disabled"
-      class="block h-9 w-full rounded-md border border-rule bg-base px-3 text-sm text-ink placeholder:text-ink-faint focus:border-ink-dim focus:outline-none focus:ring-1 focus:ring-ink-dim disabled:cursor-not-allowed disabled:opacity-50"
+      class="block h-9 w-full rounded-md border border-rule-strong bg-surface px-3 text-sm text-ink placeholder:text-ink-dim focus:border-ink-faint focus:outline-none focus:ring-1 focus:ring-signal/30 disabled:cursor-not-allowed disabled:opacity-50"
       @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />
   </label>

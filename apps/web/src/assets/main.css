@@ -44,4 +44,22 @@
   .font-mono {
     font-feature-settings: 'tnum', 'zero', 'cv11';
   }
+
+  /* keep dark surface on browser autofill (Chrome forces yellow/white otherwise) */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px var(--surface) inset !important;
+    -webkit-text-fill-color: var(--ink) !important;
+    caret-color: var(--ink) !important;
+    transition: background-color 9999s ease-out 0s;
+  }
+
+  /* readable placeholders across all inputs */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--ink-dim);
+    opacity: 1;
+  }
 }

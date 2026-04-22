@@ -117,7 +117,7 @@ function severityBorderColor(s: string | null | undefined): string {
           v-model="search"
           type="search"
           placeholder="cve-id substring (e.g. 2024-0123)"
-          class="bg-transparent border-b border-rule focus:border-ink-dim focus:outline-none text-ink placeholder:text-ink-faint py-1 w-full max-w-xs transition"
+          class="bg-transparent border-b border-rule focus:border-ink-dim focus:outline-none text-ink placeholder:text-ink-dim py-1 w-full max-w-xs transition"
         />
       </div>
     </div>
