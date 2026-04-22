@@ -14,7 +14,7 @@ import {
   type DeleteMode,
 } from './assets.repo.js';
 import { countComponents, listComponents } from './sbom.repo.js';
-import { countAssetCves, listAssetCves } from './match.repo.js';
+import { listAssetCves } from './match.repo.js';
 import { ASSET_KINDS, type AssetKind, type AssetRecord, type MatchMode } from './types.js';
 
 const KindEnum = z.enum(ASSET_KINDS as readonly [AssetKind, ...AssetKind[]]);
@@ -103,7 +103,7 @@ export const assetResolvers = {
     },
     cveCount: (parent: AssetRecord, args: { mode?: MatchMode }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'VIEWER');
-      return countAssetCves(ctx.activeOrgId, parent.id, args.mode ?? 'EXACT');
+      return ctx.loaders.cveCountByAssetMode.load({ assetId: parent.id, mode: args.mode ?? 'EXACT' });
     },
   },
 
