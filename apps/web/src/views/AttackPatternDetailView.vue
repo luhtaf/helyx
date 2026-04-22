@@ -12,6 +12,19 @@ const idRef = toRef(props, 'id');
 
 const { ap, loading, error } = useAttackPatternDetail(() => idRef.value);
 
+const detectionsBySource = computed(() => {
+  const groups = new Map<string, { id: string; name: string; description: string | null; dataSourceName: string }[]>();
+  for (const detection of ap.value?.detections ?? []) {
+    const items = groups.get(detection.dataSourceName);
+    if (items) {
+      items.push(detection);
+    } else {
+      groups.set(detection.dataSourceName, [detection]);
+    }
+  }
+  return Array.from(groups.entries()).map(([dataSourceName, items]) => ({ dataSourceName, items }));
+});
+
 const graph = computed<{ nodes: GraphNode[]; edges: GraphEdge[] }>(() => {
   const pattern = ap.value;
   if (!pattern) return { nodes: [], edges: [] };
@@ -122,21 +135,32 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
       </dl>
 
       <SectionRule label="detection">
-        <template #right v-if="ap.dataSources.length">{{ ap.dataSources.length }} data source{{ ap.dataSources.length === 1 ? '' : 's' }}</template>
+        <template #right v-if="ap.detections.length">{{ ap.detections.length }} component{{ ap.detections.length === 1 ? '' : 's' }}</template>
       </SectionRule>
 
-      <p v-if="ap.detection" class="text-[13px] leading-6 text-ink-dim max-w-[68ch] whitespace-pre-line">
+      <div v-if="detectionsBySource.length" class="space-y-6">
+        <div v-for="group in detectionsBySource" :key="group.dataSourceName">
+          <h3 class="mb-2 font-mono text-[10px] uppercase tracking-wider text-ink-dim">
+            {{ group.dataSourceName }}
+          </h3>
+          <ul class="space-y-2">
+            <li
+              v-for="detection in group.items"
+              :key="detection.id"
+              class="border-l-2 border-rule-strong pl-4 py-2"
+            >
+              <p class="font-mono text-[12px] text-ink">{{ detection.name }}</p>
+              <p v-if="detection.description" class="mt-1 max-w-[68ch] text-[12px] leading-6 text-ink-dim">
+                {{ detection.description }}
+              </p>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p v-else-if="ap.detection" class="text-[13px] leading-6 text-ink-dim max-w-[68ch] whitespace-pre-line">
         {{ ap.detection }}
       </p>
       <p v-else class="text-[12px] text-ink-faint">no detection guidance recorded.</p>
-
-      <SectionRule v-if="ap.dataSources.length" label="data sources" spacing-top="md" />
-
-      <ul v-if="ap.dataSources.length" class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
-        <li v-for="ds in ap.dataSources" :key="ds" class="font-mono text-[12px] text-ink-dim">
-          {{ ds }}
-        </li>
-      </ul>
 
       <SectionRule label="threat actors using this">
         <template #right>{{ ap.threatActors.length }}</template>

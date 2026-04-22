@@ -7,9 +7,17 @@ export const attackPatternTypeDefs = /* GraphQL */ `
     platforms: [String!]!
     detection: String
     dataSources: [String!]!
+    detections: [DataComponentRef!]!
     killChainPhases: [String!]!
     isSubtechnique: Boolean!
     threatActors(limit: Int = 25): [ThreatActorOnTechnique!]!
+  }
+
+  type DataComponentRef {
+    id: ID!
+    name: String!
+    description: String
+    dataSourceName: String!
   }
 
   type ThreatActorOnTechnique {

@@ -39,6 +39,27 @@ export const AttackPattern = z.object({
   x_mitre_deprecated: z.boolean().optional(),
 }).passthrough();
 
+export const DataSource = z.object({
+  type: z.literal('x-mitre-data-source'),
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  external_references: z.array(ExternalReference).optional(),
+  x_mitre_platforms: z.array(z.string()).optional(),
+  revoked: z.boolean().optional(),
+  x_mitre_deprecated: z.boolean().optional(),
+}).passthrough();
+
+export const DataComponent = z.object({
+  type: z.literal('x-mitre-data-component'),
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  x_mitre_data_source_ref: z.string(),
+  revoked: z.boolean().optional(),
+  x_mitre_deprecated: z.boolean().optional(),
+}).passthrough();
+
 export const Relationship = z.object({
   type: z.literal('relationship'),
   id: z.string(),
@@ -51,6 +72,8 @@ export const Relationship = z.object({
 const StixObject = z.union([
   IntrusionSet,
   AttackPattern,
+  DataSource,
+  DataComponent,
   Relationship,
   z.object({ type: z.string() }).passthrough(),
 ]);
@@ -63,5 +86,7 @@ export const StixBundle = z.object({
 
 export type IntrusionSet = z.infer<typeof IntrusionSet>;
 export type AttackPattern = z.infer<typeof AttackPattern>;
+export type DataSource = z.infer<typeof DataSource>;
+export type DataComponent = z.infer<typeof DataComponent>;
 export type Relationship = z.infer<typeof Relationship>;
 export type StixBundle = z.infer<typeof StixBundle>;

@@ -8,6 +8,7 @@ export interface AttackPatternDetail {
   platforms: string[];
   detection: string | null;
   dataSources: string[];
+  detections: DataComponentRef[];
   killChainPhases: string[];
   isSubtechnique: boolean;
 }
@@ -16,6 +17,13 @@ export interface ThreatActorRef {
   id: string;
   name: string;
   techniqueCount: number;
+}
+
+export interface DataComponentRef {
+  id: string;
+  name: string;
+  description: string | null;
+  dataSourceName: string;
 }
 
 function rowToAttackPattern(rec: { get: (key: string) => unknown }): AttackPatternDetail {
@@ -27,6 +35,7 @@ function rowToAttackPattern(rec: { get: (key: string) => unknown }): AttackPatte
     platforms: (rec.get('platforms') as string[]) ?? [],
     detection: (rec.get('detection') as string | null) ?? null,
     dataSources: (rec.get('dataSources') as string[]) ?? [],
+    detections: [],
     killChainPhases: (rec.get('killChainPhases') as string[]) ?? [],
     isSubtechnique: Boolean(rec.get('isSubtechnique')),
   };
@@ -37,6 +46,15 @@ function rowToThreatActor(rec: { get: (key: string) => unknown }): ThreatActorRe
     id: rec.get('id') as string,
     name: rec.get('name') as string,
     techniqueCount: Number(rec.get('techniqueCount') ?? 0),
+  };
+}
+
+function rowToDataComponent(rec: { get: (key: string) => unknown }): DataComponentRef {
+  return {
+    id: rec.get('id') as string,
+    name: rec.get('name') as string,
+    description: (rec.get('description') as string | null) ?? null,
+    dataSourceName: rec.get('dataSourceName') as string,
   };
 }
 
@@ -54,7 +72,27 @@ export async function getAttackPattern(id: string): Promise<AttackPatternDetail 
       { id },
     );
     const record = result.records[0];
-    return record ? rowToAttackPattern(record) : null;
+    if (!record) return null;
+    const attackPattern = rowToAttackPattern(record);
+    attackPattern.detections = await listDetectionsForTechnique(id);
+    return attackPattern;
+  } finally {
+    await session.close();
+  }
+}
+
+export async function listDetectionsForTechnique(attackPatternId: string): Promise<DataComponentRef[]> {
+  const session = getSession();
+  try {
+    const result = await session.run(
+      `MATCH (ap:AttackPattern {id: $id})<-[:DETECTS]-(dc:DataComponent)
+       OPTIONAL MATCH (dc)-[:OF_DATA_SOURCE]->(ds:DataSource)
+       RETURN dc.id AS id, dc.name AS name, dc.description AS description,
+              coalesce(ds.name, 'unknown source') AS dataSourceName
+       ORDER BY dataSourceName, dc.name`,
+      { id: attackPatternId },
+    );
+    return result.records.map(rowToDataComponent);
   } finally {
     await session.close();
   }
