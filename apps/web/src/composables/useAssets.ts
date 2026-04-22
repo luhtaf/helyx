@@ -150,11 +150,11 @@ export function useAssetsList(opts: {
 }
 
 export function useAssetDetail(id: () => string, mode: () => MatchMode) {
-  const { result, loading, error } = useQuery<{ asset: AssetDetail | null }>(
+  const { result, loading, error, refetch } = useQuery<{ asset: AssetDetail | null }>(
     ASSET_DETAIL,
     () => ({ id: id(), mode: mode() }),
     () => ({ enabled: Boolean(id()), fetchPolicy: 'cache-and-network' }),
   );
   const asset = computed(() => result.value?.asset ?? null);
-  return { asset, loading, error };
+  return { asset, loading, error, refetch };
 }

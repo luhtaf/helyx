@@ -6,13 +6,17 @@ import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityWord from '@/components/ui/SeverityWord.vue';
 import EntityGraph, { type GraphNode, type GraphEdge } from '@/components/graph/EntityGraph.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
+import Button from '@/components/ui/Button.vue';
+import SbomUploadDialog from '@/components/sbom/SbomUploadDialog.vue';
+import type { SbomIngestResult } from '@/composables/useSbomUpload';
 import { severityHex, severityBorderVar, inkDimHex, inkFaintHex, signalHex } from '@/utils/severity';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
 
 const mode = ref<MatchMode>('EXACT');
-const { asset, loading, error } = useAssetDetail(() => idRef.value, () => mode.value);
+const showSbomDialog = ref(false);
+const { asset, loading, error, refetch } = useAssetDetail(() => idRef.value, () => mode.value);
 
 const modes: MatchMode[] = ['EXACT', 'MAJOR_MINOR', 'MAJOR', 'BEAST'];
 const modeLabel: Record<MatchMode, string> = {
@@ -90,6 +94,11 @@ const graph = computed<{ nodes: GraphNode[]; edges: GraphEdge[] }>(() => {
 const graphLayout = computed<'concentric' | 'cose'>(() =>
   graph.value.nodes.length > 10 ? 'cose' : 'concentric',
 );
+
+async function onIngested(_result: SbomIngestResult): Promise<void> {
+  showSbomDialog.value = false;
+  await refetch();
+}
 </script>
 
 <template>
@@ -190,7 +199,13 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
       </div>
 
       <SectionRule label="components">
-        <template #right>{{ asset.componentCount }}</template>
+        <template #right>
+          <span class="flex items-center gap-2">
+            <span>{{ asset.componentCount }}</span>
+            <span class="text-ink-faint">·</span>
+            <Button variant="ghost" size="sm" @click="showSbomDialog = true">ingest sbom</Button>
+          </span>
+        </template>
       </SectionRule>
 
       <ul v-if="asset.components.length" class="space-y-2">
@@ -212,6 +227,13 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
       <p v-else class="text-[12px] text-ink-faint">
         no components recorded — ingest an SBOM to populate.
       </p>
+
+      <SbomUploadDialog
+        :asset-id="asset.id"
+        :is-open="showSbomDialog"
+        @close="showSbomDialog = false"
+        @ingested="onIngested"
+      />
 
       <SectionRule label="vulnerabilities">
         <template #right>
