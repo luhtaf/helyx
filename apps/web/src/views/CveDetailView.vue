@@ -143,7 +143,7 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
           :key="w.id"
           class="flex items-baseline gap-3"
         >
-          <span class="font-mono text-[12px] text-ink tabular-nums w-24">{{ w.id }}</span>
+          <RouterLink :to="`/cwe/${w.id}`" class="font-mono text-[12px] text-ink tabular-nums w-24 hover:text-signal transition">{{ w.id }}</RouterLink>
           <span v-if="w.name" class="text-[12px] text-ink-dim">{{ w.name }}</span>
         </li>
       </ul>

@@ -3,6 +3,8 @@ import { assetTypeDefs } from '../assets/schema.js';
 import { dashboardTypeDefs } from '../dashboard/schema.js';
 import { cveTypeDefs } from '../cves/schema.js';
 import { threatActorTypeDefs } from '../threat-actors/schema.js';
+import { attackPatternTypeDefs } from '../attack-patterns/schema.js';
+import { cweTypeDefs } from '../cwes/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -23,4 +25,6 @@ export const typeDefs = [
   dashboardTypeDefs,
   cveTypeDefs,
   threatActorTypeDefs,
+  attackPatternTypeDefs,
+  cweTypeDefs,
 ];

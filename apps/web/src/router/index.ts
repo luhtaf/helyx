@@ -67,6 +67,20 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Threat actor' },
   },
   {
+    path: '/techniques/:id',
+    name: 'technique-detail',
+    component: () => import('@/views/AttackPatternDetailView.vue'),
+    props: true,
+    meta: { title: 'Technique' },
+  },
+  {
+    path: '/cwe/:id',
+    name: 'cwe-detail',
+    component: () => import('@/views/CweDetailView.vue'),
+    props: true,
+    meta: { title: 'CWE' },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
     component: () => import('@/views/NotFoundView.vue'),

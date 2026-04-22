@@ -7,6 +7,8 @@ import { sbomResolvers } from '../assets/sbom.resolvers.js';
 import { dashboardResolvers } from '../dashboard/resolvers.js';
 import { cveResolvers } from '../cves/resolvers.js';
 import { threatActorResolvers } from '../threat-actors/resolvers.js';
+import { attackPatternResolvers } from '../attack-patterns/resolvers.js';
+import { cweResolvers } from '../cwes/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -30,6 +32,8 @@ export const resolvers = {
     ...dashboardResolvers.Query,
     ...cveResolvers.Query,
     ...threatActorResolvers.Query,
+    ...attackPatternResolvers.Query,
+    ...cweResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -44,4 +48,6 @@ export const resolvers = {
   CveDetail: cveResolvers.CveDetail,
   AffectedAsset: cveResolvers.AffectedAsset,
   ThreatActor: threatActorResolvers.ThreatActor,
+  AttackPatternDetail: attackPatternResolvers.AttackPatternDetail,
+  CweDetail: cweResolvers.CweDetail,
 };

@@ -48,6 +48,7 @@ const graph = computed<{ nodes: GraphNode[]; edges: GraphEdge[]; truncated: bool
       label: tech.id,
       type: 'TTP',
       color: tierColor(phaseTier(tech.killChainPhases)),
+      routeTo: `/techniques/${tech.id}`,
     });
     edges.push({ source: center, target: nid });
   }
