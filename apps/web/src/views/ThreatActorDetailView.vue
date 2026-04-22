@@ -4,8 +4,27 @@ import { useThreatActorDetail } from '@/composables/useThreatActors';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import EntityGraph, { type GraphNode, type GraphEdge } from '@/components/graph/EntityGraph.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
+import MatrixColumn from '@/components/matrix/MatrixColumn.vue';
+import type { MatrixColumn as MatrixColumnShape } from '@/composables/useMatrix';
 import { signalHex } from '@/utils/severity';
 import { phaseTier, tierColor, tierLabel, type PhaseTier } from '@/utils/killChain';
+
+const TACTIC_ORDER: { shortname: string; name: string }[] = [
+  { shortname: 'reconnaissance',       name: 'Reconnaissance' },
+  { shortname: 'resource-development', name: 'Resource Development' },
+  { shortname: 'initial-access',       name: 'Initial Access' },
+  { shortname: 'execution',            name: 'Execution' },
+  { shortname: 'persistence',          name: 'Persistence' },
+  { shortname: 'privilege-escalation', name: 'Privilege Escalation' },
+  { shortname: 'defense-evasion',      name: 'Defense Evasion' },
+  { shortname: 'credential-access',    name: 'Credential Access' },
+  { shortname: 'discovery',            name: 'Discovery' },
+  { shortname: 'lateral-movement',     name: 'Lateral Movement' },
+  { shortname: 'collection',           name: 'Collection' },
+  { shortname: 'command-and-control',  name: 'Command and Control' },
+  { shortname: 'exfiltration',         name: 'Exfiltration' },
+  { shortname: 'impact',               name: 'Impact' },
+];
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
@@ -15,6 +34,32 @@ const { ta, loading, error } = useThreatActorDetail(() => idRef.value);
 function fmtDate(s: string | null | undefined): string {
   return s?.slice(0, 10) ?? '—';
 }
+
+const actorMatrix = computed<MatrixColumnShape[]>(() => {
+  if (!ta.value) return [];
+  const byPhase = new Map<string, { id: string; name: string; isSubtechnique: boolean; parentTechniqueId: string | null }[]>();
+  for (const tech of ta.value.techniques) {
+    for (const phase of tech.killChainPhases) {
+      if (!byPhase.has(phase)) byPhase.set(phase, []);
+      byPhase.get(phase)!.push({
+        id: tech.id,
+        name: tech.name,
+        isSubtechnique: tech.isSubtechnique,
+        parentTechniqueId: null,
+      });
+    }
+  }
+  return TACTIC_ORDER
+    .filter((t) => byPhase.has(t.shortname))
+    .map((t, idx) => ({
+      tactic: {
+        id: '', shortname: t.shortname, name: t.name,
+        description: null, url: null, ordering: idx,
+        techniqueCount: byPhase.get(t.shortname)!.length,
+      },
+      techniques: byPhase.get(t.shortname)!,
+    }));
+});
 
 const techniquesByTier = computed(() => {
   if (!ta.value) return [];
@@ -173,6 +218,26 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
         :layout="graphLayout"
         height="520px"
       />
+
+      <SectionRule label="ttp matrix">
+        <template #right>
+          {{ actorMatrix.length }} tactic{{ actorMatrix.length === 1 ? '' : 's' }} touched
+        </template>
+      </SectionRule>
+
+      <p class="mb-3 font-mono text-[10px] text-ink-faint">
+        only tactics this actor operates in · click any tile to open the technique
+      </p>
+
+      <div v-if="actorMatrix.length" class="flex overflow-x-auto pb-4 -mx-12 px-12 border-y border-rule">
+        <MatrixColumn
+          v-for="col in actorMatrix"
+          :key="col.tactic.shortname"
+          :column="col"
+          :show-subtechniques="true"
+        />
+      </div>
+      <p v-else class="text-[12px] text-ink-faint">no kill-chain phases mapped on this actor's techniques.</p>
     </template>
   </div>
 </template>
