@@ -32,6 +32,8 @@ export const AttackPattern = z.object({
   external_references: z.array(ExternalReference).optional(),
   kill_chain_phases: z.array(KillChainPhase).optional(),
   x_mitre_platforms: z.array(z.string()).optional(),
+  x_mitre_detection: z.string().optional(),
+  x_mitre_data_sources: z.array(z.string()).optional(),
   x_mitre_is_subtechnique: z.boolean().optional(),
   revoked: z.boolean().optional(),
   x_mitre_deprecated: z.boolean().optional(),

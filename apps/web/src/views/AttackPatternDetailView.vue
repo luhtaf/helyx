@@ -121,6 +121,23 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
         <dd class="text-ink-dim">{{ ap.isSubtechnique ? 'yes' : 'no' }}</dd>
       </dl>
 
+      <SectionRule label="detection">
+        <template #right v-if="ap.dataSources.length">{{ ap.dataSources.length }} data source{{ ap.dataSources.length === 1 ? '' : 's' }}</template>
+      </SectionRule>
+
+      <p v-if="ap.detection" class="text-[13px] leading-6 text-ink-dim max-w-[68ch] whitespace-pre-line">
+        {{ ap.detection }}
+      </p>
+      <p v-else class="text-[12px] text-ink-faint">no detection guidance recorded.</p>
+
+      <SectionRule v-if="ap.dataSources.length" label="data sources" spacing-top="md" />
+
+      <ul v-if="ap.dataSources.length" class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+        <li v-for="ds in ap.dataSources" :key="ds" class="font-mono text-[12px] text-ink-dim">
+          {{ ds }}
+        </li>
+      </ul>
+
       <SectionRule label="threat actors using this">
         <template #right>{{ ap.threatActors.length }}</template>
       </SectionRule>

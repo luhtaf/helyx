@@ -10,6 +10,8 @@ const ATTACK_PATTERN_DETAIL = gql`
       description
       url
       platforms
+      detection
+      dataSources
       killChainPhases
       isSubtechnique
       threatActors(limit: 25) {
@@ -27,6 +29,8 @@ export interface AttackPatternDetail {
   description: string | null;
   url: string | null;
   platforms: string[];
+  detection: string | null;
+  dataSources: string[];
   killChainPhases: string[];
   isSubtechnique: boolean;
   threatActors: { id: string; name: string; techniqueCount: number }[];

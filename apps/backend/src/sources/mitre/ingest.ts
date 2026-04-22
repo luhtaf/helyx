@@ -32,14 +32,16 @@ export async function writeBundle(mapped: MappedMitre): Promise<IngestResult> {
           `UNWIND $rows AS row
            MERGE (a:AttackPattern {id: row.id})
            SET a.name = row.name,
-               a.description = row.description,
-               a.url = row.url,
-               a.platforms = row.platforms,
-               a.killChainPhases = row.killChainPhases,
-               a.isSubtechnique = row.isSubtechnique,
-               a.lastSeenAt = datetime()`,
-          { rows: mapped.attackPatterns },
-        );
+                a.description = row.description,
+                a.url = row.url,
+                a.platforms = row.platforms,
+                a.detection = row.detection,
+                a.dataSources = row.dataSources,
+                a.killChainPhases = row.killChainPhases,
+                a.isSubtechnique = row.isSubtechnique,
+                a.lastSeenAt = datetime()`,
+           { rows: mapped.attackPatterns },
+         );
       }
 
       if (mapped.uses.length) {

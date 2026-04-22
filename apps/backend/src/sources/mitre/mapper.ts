@@ -16,6 +16,8 @@ export interface AttackPatternRow {
   description: string | null;
   url: string | null;
   platforms: string[];
+  detection: string | null;
+  dataSources: string[];
   killChainPhases: string[];
   isSubtechnique: boolean;
 }
@@ -97,6 +99,8 @@ export function mapBundle(bundle: StixBundle): MappedMitre {
         description: obj.description ?? null,
         url: externalAttackUrl(obj.external_references),
         platforms: obj.x_mitre_platforms ?? [],
+        detection: obj.x_mitre_detection ?? null,
+        dataSources: obj.x_mitre_data_sources ?? [],
         killChainPhases: (obj.kill_chain_phases ?? [])
           .filter((p) => p.kill_chain_name === 'mitre-attack')
           .map((p) => p.phase_name),

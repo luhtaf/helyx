@@ -5,6 +5,8 @@ export const attackPatternTypeDefs = /* GraphQL */ `
     description: String
     url: String
     platforms: [String!]!
+    detection: String
+    dataSources: [String!]!
     killChainPhases: [String!]!
     isSubtechnique: Boolean!
     threatActors(limit: Int = 25): [ThreatActorOnTechnique!]!

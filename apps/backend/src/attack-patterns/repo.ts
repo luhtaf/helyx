@@ -6,6 +6,8 @@ export interface AttackPatternDetail {
   description: string | null;
   url: string | null;
   platforms: string[];
+  detection: string | null;
+  dataSources: string[];
   killChainPhases: string[];
   isSubtechnique: boolean;
 }
@@ -23,6 +25,8 @@ function rowToAttackPattern(rec: { get: (key: string) => unknown }): AttackPatte
     description: (rec.get('description') as string | null) ?? null,
     url: (rec.get('url') as string | null) ?? null,
     platforms: (rec.get('platforms') as string[]) ?? [],
+    detection: (rec.get('detection') as string | null) ?? null,
+    dataSources: (rec.get('dataSources') as string[]) ?? [],
     killChainPhases: (rec.get('killChainPhases') as string[]) ?? [],
     isSubtechnique: Boolean(rec.get('isSubtechnique')),
   };
@@ -42,9 +46,11 @@ export async function getAttackPattern(id: string): Promise<AttackPatternDetail 
     const result = await session.run(
       `MATCH (a:AttackPattern {id: $id})
        RETURN a.id AS id, a.name AS name, a.description AS description, a.url AS url,
-              coalesce(a.platforms, []) AS platforms,
-              coalesce(a.killChainPhases, []) AS killChainPhases,
-              coalesce(a.isSubtechnique, false) AS isSubtechnique`,
+               coalesce(a.platforms, []) AS platforms,
+               a.detection AS detection,
+               coalesce(a.dataSources, []) AS dataSources,
+               coalesce(a.killChainPhases, []) AS killChainPhases,
+               coalesce(a.isSubtechnique, false) AS isSubtechnique`,
       { id },
     );
     const record = result.records[0];
