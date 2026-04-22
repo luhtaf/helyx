@@ -6,6 +6,7 @@ import { threatActorTypeDefs } from '../threat-actors/schema.js';
 import { attackPatternTypeDefs } from '../attack-patterns/schema.js';
 import { cweTypeDefs } from '../cwes/schema.js';
 import { huntTypeDefs } from '../hunts/schema.js';
+import { tacticTypeDefs } from '../tactics/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -29,4 +30,5 @@ export const typeDefs = [
   attackPatternTypeDefs,
   cweTypeDefs,
   huntTypeDefs,
+  tacticTypeDefs,
 ];

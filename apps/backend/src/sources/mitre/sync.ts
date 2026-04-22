@@ -19,6 +19,8 @@ export async function syncMitre(opts: SyncOptions = {}) {
   logger.info({
     intrusionSets: mapped.intrusionSets.length,
     attackPatterns: mapped.attackPatterns.length,
+    tactics: mapped.tactics.length,
+    techniqueTactics: mapped.techniqueTactics.length,
     uses: mapped.uses.length,
     skipped: mapped.skipped,
   }, 'mitre: mapped');

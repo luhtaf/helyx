@@ -4,6 +4,11 @@ import type { MappedMitre } from './mapper.js';
 export interface IngestResult {
   intrusionSets: number;
   attackPatterns: number;
+  tactics: number;
+  techniqueTactics: number;
+  dataSources: number;
+  dataComponents: number;
+  detects: number;
   uses: number;
   skipped: MappedMitre['skipped'];
 }
@@ -44,6 +49,68 @@ export async function writeBundle(mapped: MappedMitre): Promise<IngestResult> {
          );
       }
 
+      if (mapped.tactics.length) {
+        await tx.run(
+          `UNWIND $rows AS row
+           MERGE (t:Tactic {id: row.id})
+           SET t.name = row.name,
+               t.shortname = row.shortname,
+               t.description = row.description,
+               t.url = row.url,
+               t.ordering = row.ordering,
+               t.lastSeenAt = datetime()`,
+          { rows: mapped.tactics },
+        );
+      }
+
+      if (mapped.techniqueTactics.length) {
+        await tx.run(
+          `UNWIND $rows AS row
+           MATCH (a:AttackPattern {id: row.techniqueId}), (t:Tactic {shortname: row.tacticShortname})
+           MERGE (a)-[r:OF_TACTIC]->(t)
+           SET r.lastSeenAt = datetime()`,
+          { rows: mapped.techniqueTactics },
+        );
+      }
+
+      if (mapped.dataSources.length) {
+        await tx.run(
+          `UNWIND $rows AS row
+           MERGE (d:DataSource {id: row.id})
+           SET d.name = row.name,
+               d.description = row.description,
+               d.url = row.url,
+               d.platforms = row.platforms,
+               d.stixId = row.stixId,
+               d.lastSeenAt = datetime()`,
+          { rows: mapped.dataSources },
+        );
+      }
+
+      if (mapped.dataComponents.length) {
+        await tx.run(
+          `UNWIND $rows AS row
+           MERGE (d:DataComponent {id: row.id})
+           SET d.name = row.name,
+               d.description = row.description,
+               d.lastSeenAt = datetime()
+           WITH d, row
+           MATCH (ds:DataSource {stixId: row.dataSourceStixId})
+           MERGE (d)-[:OF_DATA_SOURCE]->(ds)`,
+          { rows: mapped.dataComponents },
+        );
+      }
+
+      if (mapped.detects.length) {
+        await tx.run(
+          `UNWIND $rows AS row
+           MATCH (dc:DataComponent {id: row.dataComponentStixId}),
+                 (ap:AttackPattern {id: row.attackPatternId})
+           MERGE (dc)-[:DETECTS]->(ap)`,
+          { rows: mapped.detects },
+        );
+      }
+
       if (mapped.uses.length) {
         await tx.run(
           `UNWIND $rows AS row
@@ -62,6 +129,11 @@ export async function writeBundle(mapped: MappedMitre): Promise<IngestResult> {
   return {
     intrusionSets: mapped.intrusionSets.length,
     attackPatterns: mapped.attackPatterns.length,
+    tactics: mapped.tactics.length,
+    techniqueTactics: mapped.techniqueTactics.length,
+    dataSources: mapped.dataSources.length,
+    dataComponents: mapped.dataComponents.length,
+    detects: mapped.detects.length,
     uses: mapped.uses.length,
     skipped: mapped.skipped,
   };

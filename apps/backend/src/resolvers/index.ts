@@ -10,6 +10,7 @@ import { threatActorResolvers } from '../threat-actors/resolvers.js';
 import { attackPatternResolvers } from '../attack-patterns/resolvers.js';
 import { cweResolvers } from '../cwes/resolvers.js';
 import { huntResolvers } from '../hunts/resolvers.js';
+import { tacticResolvers } from '../tactics/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -36,6 +37,7 @@ export const resolvers = {
     ...attackPatternResolvers.Query,
     ...cweResolvers.Query,
     ...huntResolvers.Query,
+    ...tacticResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,

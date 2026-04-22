@@ -80,6 +80,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Threat actor' },
   },
   {
+    path: '/techniques',
+    name: 'techniques',
+    component: () => import('@/views/MatrixView.vue'),
+    meta: { title: 'Matrix' },
+  },
+  {
     path: '/techniques/:id',
     name: 'technique-detail',
     component: () => import('@/views/AttackPatternDetailView.vue'),
