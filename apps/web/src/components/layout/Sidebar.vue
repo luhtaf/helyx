@@ -42,6 +42,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/',              label: 'overview', exact: true },
   { to: '/assets',        label: 'inventory' },
+  { to: '/cves',          label: 'vulnerabilities' },
+  { to: '/techniques',    label: 'matrix' },
   { to: '/hunts',         label: 'hunt' },
   { to: '/threat-actors', label: 'actors' },
 ];

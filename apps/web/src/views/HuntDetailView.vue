@@ -85,7 +85,7 @@ const graph = computed<{ nodes: GraphNode[]; edges: GraphEdge[] }>(() => {
             <span class="tabular-nums">{{ hunt.targetActorCount }} actors × {{ hunt.scopedAssetCount }} assets</span>
           </p>
         </div>
-        <Button variant="ghost" size="sm" :loading="deleting" @click="onDelete">delete</Button>
+        <Button variant="danger" size="sm" :loading="deleting" @click="onDelete">delete hunt</Button>
       </div>
     </header>
 
