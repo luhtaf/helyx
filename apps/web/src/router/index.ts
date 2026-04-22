@@ -54,6 +54,19 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Hunt' },
   },
   {
+    path: '/hunts/new',
+    name: 'hunt-new',
+    component: () => import('@/views/HuntCreateView.vue'),
+    meta: { title: 'New hunt' },
+  },
+  {
+    path: '/hunts/:id',
+    name: 'hunt-detail',
+    component: () => import('@/views/HuntDetailView.vue'),
+    props: true,
+    meta: { title: 'Hunt' },
+  },
+  {
     path: '/threat-actors',
     name: 'threat-actors',
     component: () => import('@/views/ThreatActorsView.vue'),
