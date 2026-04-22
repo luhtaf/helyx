@@ -9,6 +9,7 @@ import { cveResolvers } from '../cves/resolvers.js';
 import { threatActorResolvers } from '../threat-actors/resolvers.js';
 import { attackPatternResolvers } from '../attack-patterns/resolvers.js';
 import { cweResolvers } from '../cwes/resolvers.js';
+import { huntResolvers } from '../hunts/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -34,12 +35,14 @@ export const resolvers = {
     ...threatActorResolvers.Query,
     ...attackPatternResolvers.Query,
     ...cweResolvers.Query,
+    ...huntResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
     ...orgResolvers.Mutation,
     ...assetResolvers.Mutation,
     ...sbomResolvers.Mutation,
+    ...huntResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,
@@ -50,4 +53,6 @@ export const resolvers = {
   ThreatActor: threatActorResolvers.ThreatActor,
   AttackPatternDetail: attackPatternResolvers.AttackPatternDetail,
   CweDetail: cweResolvers.CweDetail,
+  Hunt: huntResolvers.Hunt,
+  HuntFindings: huntResolvers.HuntFindings,
 };

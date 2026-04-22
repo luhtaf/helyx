@@ -5,6 +5,7 @@ import { cveTypeDefs } from '../cves/schema.js';
 import { threatActorTypeDefs } from '../threat-actors/schema.js';
 import { attackPatternTypeDefs } from '../attack-patterns/schema.js';
 import { cweTypeDefs } from '../cwes/schema.js';
+import { huntTypeDefs } from '../hunts/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -27,4 +28,5 @@ export const typeDefs = [
   threatActorTypeDefs,
   attackPatternTypeDefs,
   cweTypeDefs,
+  huntTypeDefs,
 ];
