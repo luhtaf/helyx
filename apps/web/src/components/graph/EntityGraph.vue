@@ -101,16 +101,20 @@ function build(): void {
           'text-margin-y': 6,
           'text-max-width': '180' as unknown as string,
           'text-wrap': 'ellipsis',
-          width: 12,
-          height: 12,
-          'min-zoomed-font-size': 6,
+          width: 14,
+          height: 14,
+          'min-zoomed-font-size': 5,
+          'overlay-padding': 10,
+          'overlay-opacity': 0,
+          'transition-property': 'background-color, width, height',
+          'transition-duration': 120,
         },
       },
       {
         selector: 'node.is-center',
         style: {
-          width: 22,
-          height: 22,
+          width: 24,
+          height: 24,
           'border-width': 1.5,
           'border-color': signal,
           color: ink,
@@ -120,11 +124,19 @@ function build(): void {
       },
       {
         selector: 'node[?routeTo]',
-        style: { 'overlay-padding': 6, 'overlay-opacity': 0 },
+        style: { 'overlay-padding': 12, 'overlay-opacity': 0 },
       },
       {
         selector: 'node[?routeTo]:active',
         style: { 'overlay-color': signal, 'overlay-opacity': 0.15 },
+      },
+      {
+        selector: 'node:grabbed',
+        style: {
+          'border-width': 2,
+          'border-color': signal,
+          'overlay-opacity': 0,
+        },
       },
       {
         selector: 'edge',
@@ -144,12 +156,23 @@ function build(): void {
       },
     ],
     layout: buildLayout(props.layout),
-    minZoom: 0.4,
-    maxZoom: 2.5,
-    wheelSensitivity: 0.25,
+    minZoom: 0.3,
+    maxZoom: 3,
+    wheelSensitivity: 0.4,
     boxSelectionEnabled: false,
     autoungrabify: false,
     autounselectify: true,
+    motionBlur: true,
+    motionBlurOpacity: 0.2,
+  });
+
+  cy.on('grab', 'node', (evt) => {
+    if (container.value) container.value.style.cursor = 'grabbing';
+    evt.target.toggleClass('is-dragging', true);
+  });
+  cy.on('free', 'node', (evt) => {
+    if (container.value) container.value.style.cursor = '';
+    evt.target.toggleClass('is-dragging', false);
   });
 
   cy.on('tap', 'node', (evt) => {
