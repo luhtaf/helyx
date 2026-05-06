@@ -36,6 +36,10 @@ export const tenantTypeDefs = /* GraphQL */ `
     ok: Boolean!
   }
 
+  type RefreshResult {
+    ok: Boolean!
+  }
+
   extend type Query {
     me: User
     myOrganizations: [Organization!]!
@@ -46,6 +50,7 @@ export const tenantTypeDefs = /* GraphQL */ `
     register(email: String!, password: String!, displayName: String!): AuthPayload!
     login(email: String!, password: String!): AuthPayload!
     logout: LogoutResult!
+    refresh: RefreshResult!
     createOrganization(name: String!, slug: String!): Organization!
     addOrganizationMember(orgId: ID!, email: String!, role: OrgRole!): Membership!
   }
