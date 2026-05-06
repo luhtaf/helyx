@@ -8,6 +8,8 @@ import { createUserIfAbsent, findUserByEmail } from './users.repo.js';
 import { generateCsrfToken, storeCsrfToken, clearCsrfToken } from '../auth/csrf.js';
 import { setSessionCookie, setCsrfCookie, clearSessionCookie } from '../auth/cookie.js';
 import { invalidateUser } from '../cache/auth.js';
+import { GraphQLError } from 'graphql';
+import { isLocked, recordFail, clearFails, lockoutKey } from '../security/lockout.js';
 
 const RegisterInput = z.object({
   email: z.string().email().max(254),
@@ -40,10 +42,34 @@ export const authResolvers = {
 
     login: async (_p: unknown, raw: unknown, ctx: RequestContext) => {
       const args = parseOrThrow(LoginInput, raw);
+
+      const ip = ctx.req.ip ?? 'unknown';
+      const lKey = lockoutKey(args.email, ip);
+
+      if (await isLocked(lKey)) {
+        throw new GraphQLError('Account temporarily locked. Try again in 15 minutes.', {
+          extensions: { code: 'ACCOUNT_LOCKED' },
+        });
+      }
+
       const record = await findUserByEmail(args.email);
-      if (!record) throw unauthenticated('Invalid credentials');
+      if (!record) {
+        await recordFail(lKey);
+        throw unauthenticated('Invalid credentials.');
+      }
+
       const ok = await verifyPassword(args.password, record.passwordHash);
-      if (!ok) throw unauthenticated('Invalid credentials');
+      if (!ok) {
+        const status = await recordFail(lKey);
+        throw new GraphQLError(
+          status.locked
+            ? 'Account temporarily locked. Try again in 15 minutes.'
+            : 'Invalid credentials.',
+          { extensions: { code: status.locked ? 'ACCOUNT_LOCKED' : 'INVALID_CREDENTIALS' } },
+        );
+      }
+
+      await clearFails(lKey);
       const token = await signAccessToken(record.id);
       const csrfToken = generateCsrfToken();
       await storeCsrfToken(record.id, csrfToken);

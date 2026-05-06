@@ -11,6 +11,7 @@ import { resolvers } from './resolvers/index.js';
 import { buildContext, type RequestContext } from './context.js';
 import { closeDriver } from './db/neo4j.js';
 import { validationRules } from './security/depth.js';
+import { ipLimiter, userLimiter } from './security/rate-limit.js';
 import { readSessionCookie, readCsrfCookie } from './auth/cookie.js';
 import { loadCsrfToken, safeEqual } from './auth/csrf.js';
 import { verifyAccessToken } from './auth/jwt.js';
@@ -131,6 +132,8 @@ async function main(): Promise<void> {
     exposedHeaders: ['X-Helyx-Auth-Deprecation'],
   }));
 
+  // Order: cors → cookieParser → ipLimiter → userLimiter → csrfGuard → /graphql
+  app.use('/graphql', ipLimiter, userLimiter);
   app.use('/graphql', csrfGuard);
 
   app.use('/graphql', expressMiddleware(apollo, {
