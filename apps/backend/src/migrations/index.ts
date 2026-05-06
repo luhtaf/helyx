@@ -9,6 +9,7 @@ import { m007_hunt_schema } from './m007_hunt_schema.js';
 import { m008_tactic_schema } from './m008_tactic_schema.js';
 import { m009_data_component_schema } from './m009_data_component_schema.js';
 import { m010_detection_strategy_schema } from './m010_detection_strategy_schema.js';
+import { m011_master_data_schema } from './m011_master_data_schema.js';
 
 export const migrations: Migration[] = [
   m001_initial_schema,
@@ -21,4 +22,5 @@ export const migrations: Migration[] = [
   m008_tactic_schema,
   m009_data_component_schema,
   m010_detection_strategy_schema,
+  m011_master_data_schema,
 ];
