@@ -14,6 +14,7 @@ import { tacticResolvers } from '../tactics/resolvers.js';
 import { stakeholderResolvers } from '../stakeholders/resolvers.js';
 import { reconciliationResolvers } from '../reconciliation/resolvers.js';
 import { caseResolvers } from '../cases/resolvers.js';
+import { artifactResolvers } from '../artifacts/resolvers/index.js';
 
 const coreResolvers = {
   Query: {
@@ -54,6 +55,7 @@ export const resolvers = {
     ...stakeholderResolvers.Mutation,
     ...reconciliationResolvers.Mutation,
     ...caseResolvers.Mutation,
+    ...artifactResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,
@@ -70,4 +72,5 @@ export const resolvers = {
   Sektor: stakeholderResolvers.Sektor,
   RawStakeholder: reconciliationResolvers.RawStakeholder,
   Case: caseResolvers.Case,
+  Artifact: artifactResolvers.Artifact,
 };
