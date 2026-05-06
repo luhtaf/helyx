@@ -5,6 +5,8 @@ import { hashPassword, verifyPassword } from '../auth/password.js';
 import { badInput, conflict, unauthenticated } from '../auth/errors.js';
 import { assertAuthed } from '../auth/middleware.js';
 import { createUserIfAbsent, findUserByEmail } from './users.repo.js';
+// TODO (Plan C Task 12): when logout mutation lands, import invalidateUser from '../cache/auth.js'
+// and call invalidateUser(ctx.user.id) inside the logout handler.
 
 const RegisterInput = z.object({
   email: z.string().email().max(254),

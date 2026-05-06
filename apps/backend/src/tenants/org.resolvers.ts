@@ -15,6 +15,7 @@ import {
   type OrganizationWithRole,
 } from './orgs.repo.js';
 import { getUserOrgRole } from './users.repo.js';
+import { invalidateUserOrgRole } from '../cache/auth.js';
 
 const CreateOrgInput = z.object({
   name: z.string().trim().min(1).max(120),
@@ -72,6 +73,7 @@ export const orgResolvers = {
         role: args.role,
       });
       if (!result) throw notFound('User not found — they must register first');
+      await invalidateUserOrgRole(result.userId, result.orgId);
       return {
         user: { id: result.userId, email: result.userEmail, displayName: result.userDisplayName },
         role: result.role,

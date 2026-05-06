@@ -1,9 +1,9 @@
 import type { Request, Response } from 'express';
 import type { AppLoaders } from '../dataloaders/index.js';
-import { findUserById, getUserOrgRole } from '../tenants/users.repo.js';
 import { createLoaders } from '../dataloaders/index.js';
 import { verifyAccessToken } from './jwt.js';
 import type { AuthedUser, OrgRole } from './types.js';
+import { getCachedUser, getCachedUserOrgRole } from '../cache/auth.js';
 
 export interface RequestContext {
   user: AuthedUser | null;
@@ -55,7 +55,7 @@ export async function buildContext(req: Request, res: Response): Promise<Request
     };
   }
 
-  const user = await findUserById(payload.sub);
+  const user = await getCachedUser(payload.sub);
   if (!user) {
     return {
       user: null,
@@ -68,7 +68,7 @@ export async function buildContext(req: Request, res: Response): Promise<Request
   }
 
   const requestedOrg = extractActiveOrg(req);
-  const activeOrgRole = requestedOrg ? await getUserOrgRole(user.id, requestedOrg) : null;
+  const activeOrgRole = requestedOrg ? await getCachedUserOrgRole(user.id, requestedOrg) : null;
   const activeOrgId = activeOrgRole ? requestedOrg : null;
 
   return { user, activeOrgId, activeOrgRole, loaders: createLoaders(activeOrgId ?? ''), req, res };
