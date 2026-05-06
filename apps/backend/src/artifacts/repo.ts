@@ -289,21 +289,76 @@ export async function createArtifactNode(
 }
 
 // ---------------------------------------------------------------------------
-// Auto-link helpers — stubs (controller fills in T11)
+// Auto-link helpers — best-effort; no throw if target node missing
 // ---------------------------------------------------------------------------
 
-export async function linkIocToGlobalIoc(_artifactId: string, _value: string): Promise<void> {
-  // TODO: T11 — MATCH (:IOC {value: $value}) MERGE (a)-[:MATCHES_IOC]->(ioc)
+export async function linkIocToGlobalIoc(artifactId: string, value: string): Promise<void> {
+  const session = getSession();
+  try {
+    await session.executeWrite(async (tx) => {
+      await tx.run(
+        `MATCH (a:Artifact:Ioc {id: $artifactId})
+         OPTIONAL MATCH (g:IOC {value: $value})
+         FOREACH (i IN CASE WHEN g IS NULL THEN [] ELSE [g] END |
+           MERGE (a)-[:MATCHES_IOC]->(i))`,
+        { artifactId, value },
+      );
+    });
+  } finally {
+    await session.close();
+  }
 }
 
-export async function linkFileToHash(_artifactId: string, _sha256: string): Promise<void> {
-  // TODO: T11 — MATCH (:Hash {sha256: $sha256}) MERGE (a)-[:MATCHES_HASH]->(hash)
+export async function linkFileToHash(artifactId: string, sha256: string): Promise<void> {
+  // Best-effort: no :Hash label exists in the schema yet — this is a no-op until one is added.
+  const session = getSession();
+  try {
+    await session.executeWrite(async (tx) => {
+      await tx.run(
+        `MATCH (a:Artifact:File {id: $artifactId})
+         OPTIONAL MATCH (h:Hash {sha256: $sha256})
+         FOREACH (x IN CASE WHEN h IS NULL THEN [] ELSE [h] END |
+           MERGE (a)-[:MATCHES_HASH]->(x))`,
+        { artifactId, sha256 },
+      );
+    });
+  } finally {
+    await session.close();
+  }
 }
 
-export async function linkProcessToTtp(_artifactId: string, _ttpIds: string[]): Promise<void> {
-  // TODO: T11 — UNWIND ttpIds MATCH (:AttackPattern {id: ttpId}) MERGE (a)-[:HINTS_AT_TTP]->(ap)
+export async function linkProcessToTtp(artifactId: string, ttpIds: string[]): Promise<void> {
+  if (ttpIds.length === 0) return;
+  const session = getSession();
+  try {
+    await session.executeWrite(async (tx) => {
+      await tx.run(
+        `MATCH (a:Artifact:Process {id: $artifactId})
+         UNWIND $ttpIds AS tid
+         OPTIONAL MATCH (t:AttackPattern {id: tid})
+         FOREACH (x IN CASE WHEN t IS NULL THEN [] ELSE [t] END |
+           MERGE (a)-[:HINTS_AT_TTP]->(x))`,
+        { artifactId, ttpIds },
+      );
+    });
+  } finally {
+    await session.close();
+  }
 }
 
-export async function linkDetectionHitToRule(_artifactId: string, _ruleId: string): Promise<void> {
-  // TODO: T11 — MATCH (:DetectionRule {id: $ruleId}) MERGE (a)-[:TRIGGERED_BY]->(rule)
+export async function linkDetectionHitToRule(artifactId: string, ruleId: string): Promise<void> {
+  const session = getSession();
+  try {
+    await session.executeWrite(async (tx) => {
+      await tx.run(
+        `MATCH (a:Artifact:DetectionHit {id: $artifactId})
+         OPTIONAL MATCH (r:DetectionRule {id: $ruleId})
+         FOREACH (x IN CASE WHEN r IS NULL THEN [] ELSE [r] END |
+           MERGE (a)-[:TRIGGERED_BY]->(x))`,
+        { artifactId, ruleId },
+      );
+    });
+  } finally {
+    await session.close();
+  }
 }
