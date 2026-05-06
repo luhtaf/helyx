@@ -1,4 +1,4 @@
-import type { IncomingMessage } from 'node:http';
+import type { Request, Response } from 'express';
 import type { AppLoaders } from '../dataloaders/index.js';
 import { findUserById, getUserOrgRole } from '../tenants/users.repo.js';
 import { createLoaders } from '../dataloaders/index.js';
@@ -10,25 +10,27 @@ export interface RequestContext {
   activeOrgId: string | null;
   activeOrgRole: OrgRole | null;
   loaders: AppLoaders;
+  req: Request;
+  res: Response;
 }
 
 const ORG_HEADER = 'x-helyx-org';
 const AUTH_HEADER = 'authorization';
 
-function extractBearer(req: IncomingMessage): string | null {
+function extractBearer(req: Request): string | null {
   const raw = req.headers[AUTH_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (!value || !value.toLowerCase().startsWith('bearer ')) return null;
   return value.slice(7).trim();
 }
 
-function extractActiveOrg(req: IncomingMessage): string | null {
+function extractActiveOrg(req: Request): string | null {
   const raw = req.headers[ORG_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   return value?.trim() || null;
 }
 
-export async function buildContext(req: IncomingMessage): Promise<RequestContext> {
+export async function buildContext(req: Request, res: Response): Promise<RequestContext> {
   const token = extractBearer(req);
   if (!token) {
     return {
@@ -36,6 +38,8 @@ export async function buildContext(req: IncomingMessage): Promise<RequestContext
       activeOrgId: null,
       activeOrgRole: null,
       loaders: createLoaders(''),
+      req,
+      res,
     };
   }
 
@@ -46,6 +50,8 @@ export async function buildContext(req: IncomingMessage): Promise<RequestContext
       activeOrgId: null,
       activeOrgRole: null,
       loaders: createLoaders(''),
+      req,
+      res,
     };
   }
 
@@ -56,6 +62,8 @@ export async function buildContext(req: IncomingMessage): Promise<RequestContext
       activeOrgId: null,
       activeOrgRole: null,
       loaders: createLoaders(''),
+      req,
+      res,
     };
   }
 
@@ -63,5 +71,5 @@ export async function buildContext(req: IncomingMessage): Promise<RequestContext
   const activeOrgRole = requestedOrg ? await getUserOrgRole(user.id, requestedOrg) : null;
   const activeOrgId = activeOrgRole ? requestedOrg : null;
 
-  return { user, activeOrgId, activeOrgRole, loaders: createLoaders(activeOrgId ?? '') };
+  return { user, activeOrgId, activeOrgRole, loaders: createLoaders(activeOrgId ?? ''), req, res };
 }
