@@ -1,0 +1,309 @@
+import { randomUUID } from 'node:crypto';
+import { GraphQLError } from 'graphql';
+import { getSession } from '../db/neo4j.js';
+import type { ArtifactBaseRow, ArtifactType, Severity } from './types.js';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const SEVERITY_RANK: Record<Severity, number> = {
+  INFO: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4,
+};
+
+// Maps ArtifactType enum value → multi-label name applied alongside :Artifact
+const TYPE_TO_LABEL: Record<ArtifactType, string> = {
+  IOC: 'Ioc',
+  FILE: 'File',
+  PROCESS: 'Process',
+  NETWORK: 'Network',
+  REGISTRY: 'Registry',
+  PERSISTENCE: 'Persistence',
+  ACCOUNT: 'Account',
+  LOG_FINDING: 'LogFinding',
+  MEMORY: 'Memory',
+  DETECTION_HIT: 'DetectionHit',
+  NOTE: 'Note',
+};
+
+// ---------------------------------------------------------------------------
+// Return fragment
+// ---------------------------------------------------------------------------
+
+// Returns all node properties (including type-specific fields from SET a += $typeFields)
+// plus labels for __resolveType. `props` is a map so all fields are accessible.
+const ARTIFACT_RETURN = `
+  properties(a) AS props,
+  toString(a.observedAt) AS observedAt,
+  toString(a.addedAt) AS addedAt,
+  labels(a) AS __labels
+`;
+
+// ---------------------------------------------------------------------------
+// Row helper
+// ---------------------------------------------------------------------------
+
+function rowToArtifact(rec: { get: (k: string) => unknown }): ArtifactBaseRow & Record<string, unknown> & { __labels: string[] } {
+  const props = rec.get('props') as Record<string, unknown>;
+
+  return {
+    ...(props as Record<string, unknown>),
+    // Override datetime fields with pre-serialized strings
+    observedAt: (rec.get('observedAt') as string | null) ?? (props.observedAt as string),
+    addedAt: (rec.get('addedAt') as string | null) ?? (props.addedAt as string),
+    // Ensure ArtifactBaseRow required fields have correct types
+    id: props.id as string,
+    caseId: props.caseId as string,
+    type: props.type as ArtifactType,
+    hostAssetId: (props.hostAssetId as string | null) ?? null,
+    severity: props.severity as Severity,
+    confidence: props.confidence as ArtifactBaseRow['confidence'],
+    notes: (props.notes as string | null) ?? null,
+    tags: (props.tags as string[] | null) ?? [],
+    addedByUserId: props.addedByUserId as string,
+    __labels: (rec.get('__labels') as string[] | null) ?? [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Queries
+// ---------------------------------------------------------------------------
+
+export async function listArtifactsByCase(
+  tenantId: string,
+  caseId: string,
+  filter: { type?: string; severity?: string; limit: number; offset: number },
+): Promise<Array<ArtifactBaseRow & Record<string, unknown> & { __labels: string[] }>> {
+  const session = getSession();
+  const typeLabel = filter.type ? TYPE_TO_LABEL[filter.type as ArtifactType] : null;
+
+  try {
+    const r = await session.run(
+      `MATCH (a:Artifact)-[:HAS_ARTIFACT]->(c:Case {id: $caseId})
+       WHERE c.tenantId = $tenantId
+         AND a.tenantId = $tenantId
+         AND ($typeLabel IS NULL OR $typeLabel IN labels(a))
+         AND ($severity IS NULL OR a.severity = $severity)
+       RETURN ${ARTIFACT_RETURN}
+       ORDER BY a.observedAt DESC
+       SKIP $skip LIMIT $limit`,
+      {
+        tenantId,
+        caseId,
+        typeLabel: typeLabel ?? null,
+        severity: filter.severity ?? null,
+        skip: BigInt(filter.offset),
+        limit: BigInt(filter.limit),
+      },
+    );
+    return r.records.map(rowToArtifact);
+  } finally {
+    await session.close();
+  }
+}
+
+export async function listFindings(
+  tenantId: string,
+  caseId: string,
+  limit: number,
+): Promise<Array<ArtifactBaseRow & Record<string, unknown> & { __labels: string[] }>> {
+  const session = getSession();
+  // High-confidence + high-severity subset, severity-rank ordered
+  const highSeverities = Object.entries(SEVERITY_RANK)
+    .filter(([, rank]) => rank >= SEVERITY_RANK.HIGH)
+    .map(([s]) => s);
+
+  try {
+    const r = await session.run(
+      `MATCH (a:Artifact)-[:HAS_ARTIFACT]->(c:Case {id: $caseId})
+       WHERE c.tenantId = $tenantId
+         AND a.tenantId = $tenantId
+         AND a.confidence = 'HIGH'
+         AND a.severity IN $highSeverities
+       RETURN ${ARTIFACT_RETURN}
+       ORDER BY
+         CASE a.severity
+           WHEN 'CRITICAL' THEN 4
+           WHEN 'HIGH'     THEN 3
+           ELSE 0
+         END DESC,
+         a.observedAt DESC
+       LIMIT $limit`,
+      {
+        tenantId,
+        caseId,
+        highSeverities,
+        limit: BigInt(limit),
+      },
+    );
+    return r.records.map(rowToArtifact);
+  } finally {
+    await session.close();
+  }
+}
+
+export async function listTimeline(
+  tenantId: string,
+  caseId: string,
+  limit: number,
+): Promise<Array<ArtifactBaseRow & Record<string, unknown> & { __labels: string[] }>> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (a:Artifact)-[:HAS_ARTIFACT]->(c:Case {id: $caseId})
+       WHERE c.tenantId = $tenantId
+         AND a.tenantId = $tenantId
+       RETURN ${ARTIFACT_RETURN}
+       ORDER BY a.observedAt ASC
+       LIMIT $limit`,
+      { tenantId, caseId, limit: BigInt(limit) },
+    );
+    return r.records.map(rowToArtifact);
+  } finally {
+    await session.close();
+  }
+}
+
+export async function findArtifact(
+  tenantId: string,
+  id: string,
+): Promise<{ row: ArtifactBaseRow & Record<string, unknown> & { __labels: string[] }; labels: string[] } | null> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (a:Artifact {id: $id})
+       WHERE a.tenantId = $tenantId
+       RETURN ${ARTIFACT_RETURN}`,
+      { tenantId, id },
+    );
+    const rec = r.records[0];
+    if (!rec) return null;
+    const row = rowToArtifact(rec);
+    return { row, labels: row.__labels };
+  } finally {
+    await session.close();
+  }
+}
+
+export async function deleteArtifact(tenantId: string, id: string): Promise<boolean> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (a:Artifact {id: $id})
+       WHERE a.tenantId = $tenantId
+       DETACH DELETE a
+       RETURN count(a) AS deleted`,
+      { tenantId, id },
+    );
+    return Number(r.records[0]?.get('deleted') ?? 0) > 0;
+  } finally {
+    await session.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// createArtifactNode — shared helper used by all per-type resolvers (T7-T9)
+// ---------------------------------------------------------------------------
+
+export interface CreateArtifactBase {
+  type: ArtifactType;
+  observedAt: string;
+  hostAssetId: string | null;
+  severity: Severity;
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  notes: string | null;
+  tags: string[];
+  addedByUserId: string;
+}
+
+export interface CreateArtifactSpec {
+  /** Multi-label applied alongside :Artifact — closed enum from this module, never user input */
+  typeLabel: string;
+  /** Type-specific fields written via SET a += $typeFields */
+  typeFields: Record<string, unknown>;
+}
+
+export async function createArtifactNode(
+  tenantId: string,
+  caseId: string,
+  base: CreateArtifactBase,
+  spec: CreateArtifactSpec,
+): Promise<ArtifactBaseRow & Record<string, unknown> & { __labels: string[] }> {
+  const id = randomUUID();
+  const session = getSession();
+
+  try {
+    return await session.executeWrite(async (tx) => {
+      // typeLabel comes from TYPE_TO_LABEL (closed enum) — never user input, backtick injection is safe
+      const r = await tx.run(
+        `MATCH (c:Case {id: $caseId})
+         WHERE c.tenantId = $tenantId AND c.status IN ['DRAFT', 'ACTIVE']
+         CREATE (a:Artifact)
+         SET a:\`${spec.typeLabel}\`,
+             a.id = $id,
+             a.tenantId = $tenantId,
+             a.caseId = $caseId,
+             a.type = $type,
+             a.observedAt = datetime($observedAt),
+             a.severity = $severity,
+             a.confidence = $confidence,
+             a.notes = $notes,
+             a.tags = $tags,
+             a.addedByUserId = $addedByUserId,
+             a.addedAt = datetime(),
+             a += $typeFields
+         MERGE (c)-[:HAS_ARTIFACT]->(a)
+         WITH a, $hostAssetId AS hostId
+         FOREACH (h IN CASE WHEN hostId IS NULL THEN [] ELSE [hostId] END |
+           MATCH (asset:Asset {id: h})
+           WHERE asset.tenantId = $tenantId
+           MERGE (a)-[:ON_HOST]->(asset))
+         RETURN ${ARTIFACT_RETURN}`,
+        {
+          id,
+          tenantId,
+          caseId,
+          type: base.type,
+          observedAt: base.observedAt,
+          severity: base.severity,
+          confidence: base.confidence,
+          notes: base.notes ?? null,
+          tags: base.tags,
+          addedByUserId: base.addedByUserId,
+          typeFields: spec.typeFields,
+          hostAssetId: base.hostAssetId ?? null,
+        },
+      );
+
+      if (!r.records[0]) {
+        throw new GraphQLError('Cannot add artifact to non-active case', {
+          extensions: { code: 'INVALID_CASE_STATE' },
+        });
+      }
+
+      return rowToArtifact(r.records[0]!);
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-link helpers — stubs (controller fills in T11)
+// ---------------------------------------------------------------------------
+
+export async function linkIocToGlobalIoc(_artifactId: string, _value: string): Promise<void> {
+  // TODO: T11 — MATCH (:IOC {value: $value}) MERGE (a)-[:MATCHES_IOC]->(ioc)
+}
+
+export async function linkFileToHash(_artifactId: string, _sha256: string): Promise<void> {
+  // TODO: T11 — MATCH (:Hash {sha256: $sha256}) MERGE (a)-[:MATCHES_HASH]->(hash)
+}
+
+export async function linkProcessToTtp(_artifactId: string, _ttpIds: string[]): Promise<void> {
+  // TODO: T11 — UNWIND ttpIds MATCH (:AttackPattern {id: ttpId}) MERGE (a)-[:HINTS_AT_TTP]->(ap)
+}
+
+export async function linkDetectionHitToRule(_artifactId: string, _ruleId: string): Promise<void> {
+  // TODO: T11 — MATCH (:DetectionRule {id: $ruleId}) MERGE (a)-[:TRIGGERED_BY]->(rule)
+}

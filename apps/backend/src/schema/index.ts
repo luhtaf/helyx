@@ -9,6 +9,8 @@ import { huntTypeDefs } from '../hunts/schema.js';
 import { tacticTypeDefs } from '../tactics/schema.js';
 import { stakeholderTypeDefs } from '../stakeholders/schema.js';
 import { reconciliationTypeDefs } from '../reconciliation/schema.js';
+import { artifactTypeDefs } from '../artifacts/schema.js';
+import { caseTypeDefs } from '../cases/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -35,4 +37,6 @@ export const typeDefs = [
   tacticTypeDefs,
   stakeholderTypeDefs,
   reconciliationTypeDefs,
+  artifactTypeDefs,
+  caseTypeDefs,
 ];
