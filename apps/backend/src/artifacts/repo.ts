@@ -289,6 +289,87 @@ export async function createArtifactNode(
 }
 
 // ---------------------------------------------------------------------------
+// createArtifactNodesBulk — all IOCs in ONE executeWrite (atomic)
+// ---------------------------------------------------------------------------
+
+export interface BulkCreateRequest {
+  base: CreateArtifactBase;
+  spec: CreateArtifactSpec;
+}
+
+export async function createArtifactNodesBulk(
+  tenantId: string,
+  caseId: string,
+  requests: BulkCreateRequest[],
+): Promise<Array<ArtifactBaseRow & Record<string, unknown> & { __labels: string[] }>> {
+  if (requests.length === 0) return [];
+  const session = getSession();
+  try {
+    return await session.executeWrite(async (tx) => {
+      // Single case-status check upfront — atomic with all artifact creates
+      const caseCheck = await tx.run(
+        `MATCH (c:Case {id: $caseId})
+         WHERE c.tenantId = $tenantId AND c.status IN ['DRAFT', 'ACTIVE']
+         RETURN c.id AS id`,
+        { tenantId, caseId },
+      );
+      if (caseCheck.records.length === 0) {
+        throw new GraphQLError('Cannot add artifact to non-active case', {
+          extensions: { code: 'INVALID_CASE_STATE' },
+        });
+      }
+
+      const out: Array<ArtifactBaseRow & Record<string, unknown> & { __labels: string[] }> = [];
+      for (const req of requests) {
+        const result = await tx.run(
+          `MATCH (c:Case {id: $caseId, tenantId: $tenantId})
+           CREATE (a:Artifact)
+           SET a:\`${req.spec.typeLabel}\`,
+               a.id = randomUUID(),
+               a.tenantId = $tenantId,
+               a.caseId = $caseId,
+               a.type = $type,
+               a.observedAt = datetime($observedAt),
+               a.severity = $severity,
+               a.confidence = $confidence,
+               a.notes = $notes,
+               a.tags = $tags,
+               a.addedByUserId = $addedByUserId,
+               a.addedAt = datetime(),
+               a += $typeFields
+           MERGE (a)-[:HAS_ARTIFACT]->(c)
+           WITH a, $hostAssetId AS hostId
+           FOREACH (h IN CASE WHEN hostId IS NULL THEN [] ELSE [hostId] END |
+             MATCH (asset:Asset {id: h}) WHERE asset.tenantId = $tenantId
+             MERGE (a)-[:ON_HOST]->(asset))
+           RETURN properties(a) AS props,
+                  toString(a.observedAt) AS observedAt,
+                  toString(a.addedAt) AS addedAt,
+                  labels(a) AS __labels`,
+          {
+            tenantId,
+            caseId,
+            type: req.base.type,
+            observedAt: req.base.observedAt,
+            severity: req.base.severity,
+            confidence: req.base.confidence,
+            notes: req.base.notes ?? null,
+            tags: req.base.tags,
+            addedByUserId: req.base.addedByUserId,
+            hostAssetId: req.base.hostAssetId ?? null,
+            typeFields: req.spec.typeFields,
+          },
+        );
+        out.push(rowToArtifact(result.records[0]!));
+      }
+      return out;
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Auto-link helpers — best-effort; no throw if target node missing
 // ---------------------------------------------------------------------------
 

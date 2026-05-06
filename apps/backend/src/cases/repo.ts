@@ -201,6 +201,14 @@ export async function createCase(tenantId: string, input: CaseInput): Promise<Ca
 
       return rowToCase(r.records[0]!);
     });
+  } catch (err) {
+    const errCode = (err as { code?: string }).code ?? '';
+    if (errCode === 'Neo.ClientError.Schema.ConstraintValidationFailed') {
+      throw new GraphQLError(`Case reportNo "${input.reportNo}" already exists for this tenant`, {
+        extensions: { code: 'DUPLICATE_REPORT_NO' },
+      });
+    }
+    throw err;
   } finally {
     await session.close();
   }

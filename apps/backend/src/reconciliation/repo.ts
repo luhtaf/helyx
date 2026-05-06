@@ -1,3 +1,4 @@
+import { GraphQLError } from 'graphql';
 import { getSession } from '../db/neo4j.js';
 import { listStakeholders } from '../stakeholders/repo.js';
 import { rankSuggestions } from './fuzzy.js';
@@ -116,7 +117,20 @@ export async function resolveRawStakeholder(
   const session = getSession();
   try {
     return await session.executeWrite(async (tx) => {
-      // Delete any existing RESOLVED_TO edge (allow re-resolving)
+      // Guard: only PENDING rows may be resolved — prevents double-resolve race
+      const pendingCheck = await tx.run(
+        `MATCH (r:RawStakeholder {id: $rawId})
+         WHERE r.tenantId = $tenantId AND r.status = 'PENDING'
+         RETURN r.id AS id`,
+        { rawId, tenantId },
+      );
+      if (pendingCheck.records.length === 0) {
+        throw new GraphQLError('Raw stakeholder not PENDING (already resolved or rejected)', {
+          extensions: { code: 'ALREADY_RESOLVED' },
+        });
+      }
+
+      // Delete any existing RESOLVED_TO edge (allow re-resolving within PENDING)
       await tx.run(
         `MATCH (r:RawStakeholder {id: $rawId})
          WHERE r.tenantId = $tenantId
@@ -168,7 +182,7 @@ export async function bulkResolveRawStakeholders(
          WITH k
          UNWIND $rawIds AS rid
          MATCH (r:RawStakeholder {id: rid})
-         WHERE r.tenantId = $tenantId
+         WHERE r.tenantId = $tenantId AND r.status = 'PENDING'
          OPTIONAL MATCH (r)-[e:RESOLVED_TO]->(:Stakeholder)
          DELETE e
          WITH r, k
