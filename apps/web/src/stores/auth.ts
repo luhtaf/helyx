@@ -1,3 +1,4 @@
+// Token in HttpOnly cookie since Phase 3. Store tracks user/org only.
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 
@@ -8,7 +9,6 @@ export interface AuthUser {
 }
 
 interface PersistedAuth {
-  token: string | null;
   user: AuthUser | null;
   activeOrgId: string | null;
 }
@@ -16,18 +16,17 @@ interface PersistedAuth {
 const STORAGE_KEY = 'helyx.auth';
 
 function loadFromStorage(): PersistedAuth {
-  if (typeof localStorage === 'undefined') return { token: null, user: null, activeOrgId: null };
+  if (typeof localStorage === 'undefined') return { user: null, activeOrgId: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { token: null, user: null, activeOrgId: null };
+    if (!raw) return { user: null, activeOrgId: null };
     const parsed = JSON.parse(raw) as Partial<PersistedAuth>;
     return {
-      token: parsed.token ?? null,
       user: parsed.user ?? null,
       activeOrgId: parsed.activeOrgId ?? null,
     };
   } catch {
-    return { token: null, user: null, activeOrgId: null };
+    return { user: null, activeOrgId: null };
   }
 }
 
@@ -38,20 +37,18 @@ function persist(state: PersistedAuth): void {
 
 export const useAuthStore = defineStore('auth', () => {
   const initial = loadFromStorage();
-  const token = ref<string | null>(initial.token);
   const user = ref<AuthUser | null>(initial.user);
   const activeOrgId = ref<string | null>(initial.activeOrgId);
 
   watch(
-    [token, user, activeOrgId],
-    () => persist({ token: token.value, user: user.value, activeOrgId: activeOrgId.value }),
+    [user, activeOrgId],
+    () => persist({ user: user.value, activeOrgId: activeOrgId.value }),
     { deep: true },
   );
 
-  const isAuthed = computed(() => Boolean(token.value && user.value));
+  const isAuthed = computed(() => Boolean(user.value));
 
-  function setAuth(newToken: string, newUser: AuthUser): void {
-    token.value = newToken;
+  function setAuth(newUser: AuthUser): void {
     user.value = newUser;
   }
 
@@ -60,10 +57,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout(): void {
-    token.value = null;
     user.value = null;
     activeOrgId.value = null;
+    // Clear any legacy token keys from localStorage
+    localStorage.removeItem('token');
+    localStorage.removeItem('helyx_token');
+    localStorage.removeItem(STORAGE_KEY);
   }
 
-  return { token, user, activeOrgId, isAuthed, setAuth, setActiveOrg, logout };
+  return { user, activeOrgId, isAuthed, setAuth, setActiveOrg, logout };
 });

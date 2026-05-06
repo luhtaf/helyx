@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useLogin } from '@/composables/useAuth';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 
 const email = ref('');
 const password = ref('');
+const route = useRoute();
 const router = useRouter();
 const { submit, loading, error } = useLogin();
 
@@ -25,6 +26,13 @@ async function onSubmit(): Promise<void> {
         </p>
         <h1 class="text-2xl font-medium tracking-tight">Sign in</h1>
       </header>
+
+      <div
+        v-if="route.query.reason === 'session_expired'"
+        class="mb-4 rounded-md border border-sev-med/40 bg-sev-med/10 px-3 py-2 text-xs text-sev-med"
+      >
+        Sesi habis. Silakan login kembali.
+      </div>
 
       <form
         class="rounded-xl border border-rule bg-surface p-7 shadow-2xl"

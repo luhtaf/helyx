@@ -20,7 +20,7 @@ const ME = gql`
 `;
 
 interface LoginResult {
-  login: { token: string; user: AuthUser };
+  login: { token: string | null; user: AuthUser };
 }
 
 interface MeResult {
@@ -42,7 +42,7 @@ export function useLogin() {
         error.value = 'Login failed: empty response';
         return false;
       }
-      auth.setAuth(payload.token, payload.user);
+      auth.setAuth(payload.user);
       return true;
     } catch (err) {
       error.value = (err as Error).message ?? 'Login failed';
