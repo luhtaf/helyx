@@ -37,6 +37,10 @@ const schema = z.object({
   ELK_CVE_INDEX: z.string().default('list-cve'),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 chars'),
   JWT_EXPIRES_IN: z.string().default('7d'),
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+  COOKIE_SECURE: z.coerce.boolean().default(process.env.NODE_ENV === 'production'),
+  CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  TRUST_PROXY_HOPS: z.coerce.number().default(0),
 });
 
 const parsed = schema.safeParse(process.env);
