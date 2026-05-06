@@ -8,6 +8,7 @@ export default {
         surface: 'var(--surface)',
         ink: {
           DEFAULT: 'var(--ink)',
+          mid: 'var(--ink-mid)',
           dim: 'var(--ink-dim)',
           faint: 'var(--ink-faint)',
         },

@@ -7,6 +7,7 @@
     --bg: #0b0a08;
     --surface: #14120e;
     --ink: #e8e3d6;
+    --ink-mid: #b3a994;
     --ink-dim: #8a8273;
     --ink-faint: #5a5447;
     --rule: #1d1a14;
@@ -56,10 +57,18 @@
     transition: background-color 9999s ease-out 0s;
   }
 
-  /* readable placeholders across all inputs */
+  /* readable placeholders across all inputs — wins over utility classes */
   input::placeholder,
   textarea::placeholder {
-    color: var(--ink-dim);
+    color: var(--ink-mid) !important;
     opacity: 1;
+  }
+
+  /* typed input text: brighter + slightly heavier so it reads solid on warm dark bg */
+  input:not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    color: var(--ink);
+    font-weight: 500;
   }
 }
