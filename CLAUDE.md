@@ -18,7 +18,7 @@ pnpm workspace monorepo:
 ```
 corepack enable                # one-time, enables pnpm
 pnpm install                   # installs all workspaces
-pnpm db:up                     # docker compose up -d neo4j
+pnpm db:up                     # docker compose up -d neo4j redis
 pnpm db:down
 pnpm db:logs
 pnpm dev                       # runs backend + web in parallel (pnpm -r --parallel dev)
@@ -147,6 +147,93 @@ These are the owner's stated rules. Treat them as review gates:
 4. **Frontend composables + shared components**: reuse first, build second.
 5. **Production-grade from the start**: scaling story = "add hardware/cloud nodes." No design choice that forces a future rewrite for horizontal scale (e.g., in-process state, sticky sessions, single-node caches without invalidation story).
 6. Tests (unit/integration/e2e/k6 load), linter, Trivy in CI — **deferred**, do not build yet, but do not make choices that block them later.
+
+### Cache + ephemeral state (Redis)
+
+`apps/backend/src/cache/` is the single Redis surface. Never call ioredis directly outside this folder.
+
+- `redis.ts` — singleton ioredis client, lazy-init, `pingRedis()` for health
+- `index.ts` — `cacheGet/cacheSet/cacheDel/cacheWrap`. Use `cacheWrap(key, ttl, loader)` for cache-aside with single-flight (prevents stampede). Cache failures degrade to direct loader call — never throw on cache error.
+- `auth.ts` — typed wrappers for user + role lookups. Invalidate via `invalidateUser(id)` / `invalidateUserOrgRole(userId, orgId)` on every user/membership mutation.
+
+**Key namespace convention** (must match invalidator paths):
+- `auth:user:<userId>` — user record (60s TTL)
+- `auth:role:<userId>:<orgId>` — org role (60s TTL)
+- `auth:csrf:<userId>` — CSRF token (7d TTL)
+- `auth:refresh:<jti>` — refresh JTI primary (7d TTL)
+- `auth:refresh:grace:<jti>` — refresh grace slot (30s TTL)
+- `auth:fail:<email>:ip:<ip>` — login fail counter (15min TTL)
+- `auth:lock:<email>:ip:<ip>` — account lockout (15min TTL)
+
+Redis policy `volatile-lru` — only TTL'd keys are eviction-eligible. Auth keys are TTL'd, so they survive memory pressure unless their TTL expires.
+
+Single-flight is per-process — multi-instance backend deployments still allow stampede across instances. Acceptable for current 60s-TTL user cache. If extending to deeper entities, add Redis SETNX distributed lock first.
+
+### Auth flow (cookie + CSRF + refresh rotation)
+
+**Login** (`mutation login`):
+1. Server verifies password (argon2id + lockout check via email+IP key)
+2. Server issues 15min access JWT + 7d refresh JTI
+3. Server sets 3 cookies: `helyx_session` (HttpOnly access JWT), `helyx_csrf_token` (JS-readable CSRF), `helyx_refresh` (HttpOnly path=/graphql)
+4. Server stores CSRF in `auth:csrf:<userId>` and refresh JTI in `auth:refresh:<jti>`
+
+**Mutation request:**
+1. Browser auto-sends all cookies (SameSite=Strict)
+2. Frontend reads `helyx_csrf_token` cookie via JS, sends as `X-CSRF-Token` header
+3. Backend `csrfGuard` (`apps/backend/src/index.ts`) verifies via graphql.parse AST: header == cookie == server-stored CSRF (defense in depth)
+4. Resolver runs
+
+**401 on access expiry (Apollo errorLink in `apps/web/src/api/apollo.ts`):**
+1. errorLink intercepts 401 / `CSRF_NO_SESSION` extensions.code
+2. Calls `mutation refresh` with `helyx_refresh` cookie (single-flight: 1 refresh per burst)
+3. Server consumes refresh JTI atomically (Redis Lua MOVE: primary→grace) and issues new access + new refresh + new CSRF
+4. errorLink retries the original mutation
+
+**CSRF error codes** (`extensions.code`):
+- `CSRF_NO_SESSION` — no session cookie
+- `CSRF_MISSING_HEADER` — X-CSRF-Token header not attached
+- `CSRF_COOKIE_MISMATCH` — header doesn't match `helyx_csrf_token` cookie
+- `CSRF_SESSION_MISMATCH` — header doesn't match Redis-stored token
+- `CSRF_SESSION_EXPIRED` — Redis CSRF token expired (call refresh)
+- `REFRESH_EXPIRED` / `INVALID_REFRESH` / `NO_REFRESH` — refresh path failures (route to login)
+
+**Bearer header (deprecated):**
+- `Authorization: Bearer <jwt>` still accepted in dual-mode for one release
+- CSRF guard skips Bearer requests but sets `X-Helyx-Auth-Deprecation` response header
+- Bearer support is removed in a follow-up commit (Plan C Task 20) once prod logs confirm zero Bearer traffic for 7+ days
+
+### Audit log (`audits/`)
+
+`apps/backend/src/audits/` writes append-only `:AuditEvent` nodes to Neo4j. Wired to 4 sensitive ops as of Phase 3 (`resolveRawStakeholder`, `bulkResolveRawStakeholders`, `archiveCase`, `archiveStakeholder`). Standard: OWASP ASVS L2 V10.3.4.
+
+`logAudit(tenantId, actorUserId, action, target, before, after)` takes primitives (NOT ctx) per repo/resolver boundary. Action naming convention: `<entity>.<verb>` lowercase, e.g. `case.archive`, `reconciliation.bulk_resolve`.
+
+**Completeness caveat:** audit write is NOT atomic with the audited operation. If audit fails (Redis/Neo4j blip), op succeeds un-audited. Acceptable per project policy; for higher integrity, future phase streams to dedicated append-only sink.
+
+**Retention:** AuditEvent has NO TTL — append-only forever. Implement retention before scaling:
+
+```cypher
+MATCH (a:AuditEvent) WHERE a.ts < datetime() - duration({years: 2}) DETACH DELETE a;
+```
+
+**Compliance query — who did what in last 30d:**
+
+```cypher
+MATCH (a:AuditEvent {tenantId: $tenantId})
+WHERE a.actorUserId = $userId AND a.ts >= datetime() - duration({days: 30})
+RETURN a ORDER BY a.ts DESC LIMIT 100;
+```
+
+### Security baseline (OWASP ASVS L2)
+
+Helyx auth/session/logging implementation aligns with OWASP ASVS L2:
+- V2 (Authentication): argon2id passwords, lockout email+IP, generic error messages (no enumeration)
+- V3 (Session): HttpOnly+SameSite cookies, 15m access + 7d refresh w/ rotation + 30s grace
+- V4 (Access control): tenantId guard on every Cypher; assertOrgRole at every resolver
+- V8 (Data protection): pino redact paths for secrets in logs
+- V10 (Logging): :AuditEvent wired to 4 sensitive ops; primitive signature lets background jobs emit
+
+Future ISO 27001 / SNI ISO 27001 alignment (Indonesian gov compliance ask) layers on top of this baseline.
 
 ## When extending this file
 
