@@ -32,6 +32,10 @@ export const tenantTypeDefs = /* GraphQL */ `
     user: User!
   }
 
+  type LogoutResult {
+    ok: Boolean!
+  }
+
   extend type Query {
     me: User
     myOrganizations: [Organization!]!
@@ -41,6 +45,7 @@ export const tenantTypeDefs = /* GraphQL */ `
   type Mutation {
     register(email: String!, password: String!, displayName: String!): AuthPayload!
     login(email: String!, password: String!): AuthPayload!
+    logout: LogoutResult!
     createOrganization(name: String!, slug: String!): Organization!
     addOrganizationMember(orgId: ID!, email: String!, role: OrgRole!): Membership!
   }
