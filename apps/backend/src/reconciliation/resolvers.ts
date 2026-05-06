@@ -15,6 +15,7 @@ import { rankSuggestions } from './fuzzy.js';
 import { createStakeholder, findStakeholder, listStakeholders } from '../stakeholders/repo.js';
 import type { RawStakeholderRow, ReconciliationStatus } from './types.js';
 import type { StakeholderInput } from '../stakeholders/types.js';
+import { logAudit } from '../audits/log.js';
 
 export const reconciliationResolvers = {
   Query: {
@@ -32,13 +33,32 @@ export const reconciliationResolvers = {
     },
   },
   Mutation: {
-    resolveRawStakeholder: (_p: unknown, args: { rawId: string; stakeholderId: string }, ctx: RequestContext) => {
+    resolveRawStakeholder: async (_p: unknown, args: { rawId: string; stakeholderId: string }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'ADMIN');
-      return resolveRawStakeholder(ctx.activeOrgId, args.rawId, args.stakeholderId, ctx.user.id);
+      const before = await findRawStakeholder(ctx.activeOrgId, args.rawId);
+      const after = await resolveRawStakeholder(ctx.activeOrgId, args.rawId, args.stakeholderId, ctx.user.id);
+      await logAudit(
+        ctx.activeOrgId,
+        ctx.user.id,
+        'reconciliation.resolve',
+        { type: 'RawStakeholder', id: args.rawId },
+        before ? { status: before.status, resolvedToId: before.resolvedToId } : null,
+        { status: after.status, resolvedToId: after.resolvedToId },
+      );
+      return after;
     },
-    bulkResolveRawStakeholders: (_p: unknown, args: { rawIds: string[]; stakeholderId: string }, ctx: RequestContext) => {
+    bulkResolveRawStakeholders: async (_p: unknown, args: { rawIds: string[]; stakeholderId: string }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'ADMIN');
-      return bulkResolveRawStakeholders(ctx.activeOrgId, args.rawIds, args.stakeholderId, ctx.user.id);
+      const count = await bulkResolveRawStakeholders(ctx.activeOrgId, args.rawIds, args.stakeholderId, ctx.user.id);
+      await logAudit(
+        ctx.activeOrgId,
+        ctx.user.id,
+        'reconciliation.bulk_resolve',
+        { type: 'RawStakeholder', id: '(bulk)' },
+        null,
+        { count, rawIds: args.rawIds, stakeholderId: args.stakeholderId },
+      );
+      return count;
     },
     createStakeholderFromRaw: async (_p: unknown, args: { rawId: string; input: StakeholderInput }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'ADMIN');

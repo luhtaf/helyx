@@ -13,6 +13,7 @@ import {
   updateStakeholder,
 } from './repo.js';
 import type { SektorRow, StakeholderRow } from './types.js';
+import { logAudit } from '../audits/log.js';
 
 interface StakeholderFilterArgs {
   sektorId?: string;
@@ -90,9 +91,19 @@ export const stakeholderResolvers = {
       return updateStakeholder(ctx.activeOrgId, args.id, args.input);
     },
 
-    archiveStakeholder: (_p: unknown, args: { id: string }, ctx: RequestContext) => {
+    archiveStakeholder: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'ADMIN');
-      return archiveStakeholder(ctx.activeOrgId, args.id);
+      const before = await findStakeholder(ctx.activeOrgId, args.id);
+      const after = await archiveStakeholder(ctx.activeOrgId, args.id);
+      await logAudit(
+        ctx.activeOrgId,
+        ctx.user.id,
+        'stakeholder.archive',
+        { type: 'Stakeholder', id: args.id },
+        before ? { status: before.status } : null,
+        { status: after.status },
+      );
+      return after;
     },
 
     setStakeholderSensor: (

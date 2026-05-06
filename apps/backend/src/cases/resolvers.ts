@@ -14,6 +14,7 @@ import {
 } from './repo.js';
 import type { CaseRow, CaseInput, CaseUpdateInput } from './types.js';
 import { listFindings, listTimeline, listArtifactsByCase } from '../artifacts/repo.js';
+import { logAudit } from '../audits/log.js';
 
 interface CasesArgs {
   stakeholderId?: string;
@@ -72,9 +73,19 @@ export const caseResolvers = {
       return closeCase(ctx.activeOrgId, args.id, args.verdict);
     },
 
-    archiveCase: (_p: unknown, args: { id: string }, ctx: RequestContext) => {
+    archiveCase: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'ADMIN');
-      return archiveCase(ctx.activeOrgId, args.id);
+      const before = await findCase(ctx.activeOrgId, args.id);
+      const after = await archiveCase(ctx.activeOrgId, args.id);
+      await logAudit(
+        ctx.activeOrgId,
+        ctx.user.id,
+        'case.archive',
+        { type: 'Case', id: args.id },
+        before ? { status: before.status } : null,
+        { status: after.status },
+      );
+      return after;
     },
   },
 
