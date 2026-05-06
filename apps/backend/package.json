@@ -13,7 +13,8 @@
     "migrate:status": "tsx src/migrations/cli.ts status",
     "nvd:sync": "tsx src/sources/nvd/cli.ts",
     "elk:sync": "tsx src/sources/elk/cli.ts",
-    "mitre:sync": "tsx src/sources/mitre/cli.ts"
+    "mitre:sync": "tsx src/sources/mitre/cli.ts",
+    "bootstrap:stakeholders": "tsx src/sources/elk/cli-bootstrap-stakeholders.ts"
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",

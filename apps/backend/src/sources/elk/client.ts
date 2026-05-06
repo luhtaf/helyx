@@ -110,3 +110,12 @@ export async function totalCount(): Promise<number> {
   );
   return res.count;
 }
+
+export async function elkAggregate(indexPath: string, body: unknown): Promise<unknown> {
+  return request(
+    `/${encodeURIComponent(indexPath)}/_search`,
+    { method: 'POST', body: JSON.stringify(body) },
+    (raw) => raw,
+    `aggregate:${indexPath}`,
+  );
+}
