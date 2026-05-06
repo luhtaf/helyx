@@ -12,6 +12,7 @@ import { cweResolvers } from '../cwes/resolvers.js';
 import { huntResolvers } from '../hunts/resolvers.js';
 import { tacticResolvers } from '../tactics/resolvers.js';
 import { stakeholderResolvers } from '../stakeholders/resolvers.js';
+import { reconciliationResolvers } from '../reconciliation/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -40,6 +41,7 @@ export const resolvers = {
     ...huntResolvers.Query,
     ...tacticResolvers.Query,
     ...stakeholderResolvers.Query,
+    ...reconciliationResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -48,6 +50,7 @@ export const resolvers = {
     ...sbomResolvers.Mutation,
     ...huntResolvers.Mutation,
     ...stakeholderResolvers.Mutation,
+    ...reconciliationResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,
@@ -62,4 +65,5 @@ export const resolvers = {
   HuntFindings: huntResolvers.HuntFindings,
   Stakeholder: stakeholderResolvers.Stakeholder,
   Sektor: stakeholderResolvers.Sektor,
+  RawStakeholder: reconciliationResolvers.RawStakeholder,
 };
