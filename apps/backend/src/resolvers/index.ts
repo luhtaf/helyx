@@ -1,4 +1,5 @@
 import { pingDb } from '../db/neo4j.js';
+import { pingRedis } from '../cache/redis.js';
 import { logger } from '../logger.js';
 import { authResolvers } from '../tenants/auth.resolvers.js';
 import { orgResolvers } from '../tenants/org.resolvers.js';
@@ -24,6 +25,7 @@ const coreResolvers = {
         logger.warn({ err }, 'health: db ping failed');
         return false;
       }),
+      cache: await pingRedis(),
       serverTime: new Date().toISOString(),
     }),
   },

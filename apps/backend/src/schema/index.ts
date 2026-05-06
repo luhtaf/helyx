@@ -20,6 +20,7 @@ const coreTypeDefs = /* GraphQL */ `
   type HealthStatus {
     api: Boolean!
     db: Boolean!
+    cache: Boolean!
     serverTime: String!
   }
 `;
