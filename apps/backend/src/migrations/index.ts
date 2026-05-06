@@ -10,6 +10,7 @@ import { m008_tactic_schema } from './m008_tactic_schema.js';
 import { m009_data_component_schema } from './m009_data_component_schema.js';
 import { m010_detection_strategy_schema } from './m010_detection_strategy_schema.js';
 import { m011_master_data_schema } from './m011_master_data_schema.js';
+import { m012_seed_sektor } from './m012_seed_sektor.js';
 
 export const migrations: Migration[] = [
   m001_initial_schema,
@@ -23,4 +24,5 @@ export const migrations: Migration[] = [
   m009_data_component_schema,
   m010_detection_strategy_schema,
   m011_master_data_schema,
+  m012_seed_sektor,
 ];
