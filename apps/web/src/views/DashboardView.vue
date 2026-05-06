@@ -45,6 +45,9 @@ const counts = computed(() => ({
   low:      severityCount(stats.value?.cveCountsBySeverity, 'LOW'),
 }));
 
+const topCve = computed(() => stats.value?.topCves?.[0] ?? null);
+const restCves = computed(() => stats.value?.topCves?.slice(1, 9) ?? []);
+
 const maxKindCount = computed(() =>
   Math.max(1, ...(stats.value?.assetsByKind ?? []).map((r) => r.count)),
 );
@@ -85,6 +88,35 @@ function severityRoute(sev: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW') {
         </template>
       </div>
     </header>
+
+    <section v-if="topCve" class="mb-14">
+      <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint mb-4">
+        <span :style="{ color: severityBorderColor(topCve.severity) }">
+          {{ (topCve.severity ?? 'unknown').toLowerCase() }}
+        </span>
+        <span class="text-ink-faint mx-2">·</span>
+        <span class="text-ink-dim">{{ topCve.cveId }}</span>
+        <span class="text-ink-faint mx-2">·</span>
+        <span class="text-ink-dim">worst right now</span>
+      </p>
+      <RouterLink :to="`/cves/${topCve.cveId}`" class="block group">
+        <p
+          class="font-mono text-[96px] leading-[0.85] font-medium tabular-nums tracking-tight"
+          :style="{ color: severityBorderColor(topCve.severity) }"
+        >
+          {{ topCve.baseScore != null ? topCve.baseScore.toFixed(1) : '—' }}
+        </p>
+        <p class="mt-5 font-mono text-[11px] text-ink-dim">
+          affects
+          <span class="text-ink tabular-nums">{{ topCve.affectedAssetCount }}</span>
+          {{ topCve.affectedAssetCount === 1 ? 'asset' : 'assets' }}
+          <span class="text-ink-faint mx-1.5">·</span>
+          published {{ topCve.publishedAt?.slice(0, 10) ?? '—' }}
+          <span class="text-ink-faint mx-1.5">·</span>
+          <span class="text-signal group-hover:text-ink transition">→ open in graph</span>
+        </p>
+      </RouterLink>
+    </section>
 
     <section>
       <div class="grid grid-cols-4 gap-10 mb-6">
@@ -139,17 +171,17 @@ function severityRoute(sev: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW') {
       </p>
     </section>
 
-    <SectionRule label="what needs attention">
+    <SectionRule label="next in line">
       <template #right>
         <RouterLink :to="{ path: '/cves', query: { mode } }" class="hover:text-ink transition">
-          {{ Math.min(stats?.topCves?.length ?? 0, 8) }} of {{ stats?.cveCount ?? 0 }} →
+          {{ restCves.length }} of {{ stats?.cveCount ?? 0 }} →
         </RouterLink>
       </template>
     </SectionRule>
 
-    <ul v-if="stats?.topCves?.length" class="space-y-0">
+    <ul v-if="restCves.length" class="space-y-0">
       <li
-        v-for="cve in stats.topCves.slice(0, 8)"
+        v-for="cve in restCves"
         :key="cve.cveId"
         class="border-l-2 pl-4 py-3"
         :style="{ borderColor: severityBorderColor(cve.severity) }"
