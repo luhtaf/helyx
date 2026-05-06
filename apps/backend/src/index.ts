@@ -7,12 +7,14 @@ import { typeDefs } from './schema/index.js';
 import { resolvers } from './resolvers/index.js';
 import { buildContext, type RequestContext } from './context.js';
 import { closeDriver } from './db/neo4j.js';
+import { validationRules } from './security/depth.js';
 
 async function main(): Promise<void> {
   const apollo = new ApolloServer<RequestContext>({
     typeDefs,
     resolvers,
     introspection: config.NODE_ENV !== 'production',
+    validationRules,
   });
 
   await apollo.start();
