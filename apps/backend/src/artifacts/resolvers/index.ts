@@ -15,6 +15,8 @@ import { logFindingResolvers } from './log-finding.js';
 import { memoryResolvers } from './memory.js';
 import { detectionHitResolvers } from './detection-hit.js';
 import { noteResolvers } from './note.js';
+import { bulkIocResolvers } from './bulk-ioc.js';
+import { wazuhResolvers } from './wazuh.js';
 
 export const artifactResolvers = {
   Artifact: {
@@ -37,6 +39,8 @@ export const artifactResolvers = {
     ...memoryResolvers.Mutation,
     ...detectionHitResolvers.Mutation,
     ...noteResolvers.Mutation,
+    ...bulkIocResolvers.Mutation,
+    ...wazuhResolvers.Mutation,
     deleteArtifact: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'ANALYST');
       return deleteArtifact(ctx.activeOrgId!, args.id);
