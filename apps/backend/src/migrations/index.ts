@@ -11,6 +11,7 @@ import { m009_data_component_schema } from './m009_data_component_schema.js';
 import { m010_detection_strategy_schema } from './m010_detection_strategy_schema.js';
 import { m011_master_data_schema } from './m011_master_data_schema.js';
 import { m012_seed_sektor } from './m012_seed_sektor.js';
+import { m013_ca_case_schema } from './m013_ca_case_schema.js';
 
 export const migrations: Migration[] = [
   m001_initial_schema,
@@ -25,4 +26,5 @@ export const migrations: Migration[] = [
   m010_detection_strategy_schema,
   m011_master_data_schema,
   m012_seed_sektor,
+  m013_ca_case_schema,
 ];
