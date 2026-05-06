@@ -19,7 +19,12 @@ const visibleTechniques = computed(() =>
   <section class="w-[180px] shrink-0 border-r border-rule">
     <header class="sticky top-0 z-10 border-b border-rule-strong bg-base/95 px-3 py-3 backdrop-blur-sm">
       <div class="flex items-baseline justify-between gap-3">
-        <h2 class="text-[12px] font-medium text-ink">{{ column.tactic.name }}</h2>
+        <RouterLink
+          :to="`/tactics/${column.tactic.id}`"
+          class="text-[12px] font-medium text-ink hover:text-signal transition truncate"
+        >
+          {{ column.tactic.name }}
+        </RouterLink>
         <span class="font-mono text-[10px] text-ink-faint tabular-nums">
           {{ visibleTechniques.length }}
         </span>

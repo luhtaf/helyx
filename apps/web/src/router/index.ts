@@ -93,6 +93,13 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Technique' },
   },
   {
+    path: '/tactics/:id',
+    name: 'tactic-detail',
+    component: () => import('@/views/TacticDetailView.vue'),
+    props: true,
+    meta: { title: 'Tactic' },
+  },
+  {
     path: '/cwe/:id',
     name: 'cwe-detail',
     component: () => import('@/views/CweDetailView.vue'),

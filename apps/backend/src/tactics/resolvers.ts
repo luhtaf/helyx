@@ -1,6 +1,13 @@
 import type { RequestContext } from '../auth/context.js';
 import { assertAuthed } from '../auth/middleware.js';
-import { getMatrix, listTactics } from './repo.js';
+import {
+  findTacticById,
+  getMatrix,
+  listTactics,
+  listTechniquesForTactic,
+  listTopActorsForTactic,
+  type TacticDetailRow,
+} from './repo.js';
 
 export const tacticResolvers = {
   Query: {
@@ -15,6 +22,19 @@ export const tacticResolvers = {
     ) => {
       assertAuthed(ctx);
       return getMatrix(args.filter ?? {});
+    },
+    tactic: (_p: unknown, args: { id: string }, ctx: RequestContext) => {
+      assertAuthed(ctx);
+      return findTacticById(args.id);
+    },
+  },
+  TacticDetail: {
+    techniques: (parent: TacticDetailRow) => listTechniquesForTactic(parent.id),
+    topActors: (parent: TacticDetailRow, args: { limit?: number }) => {
+      const limit = !args.limit || !Number.isInteger(args.limit) || args.limit <= 0
+        ? 25
+        : Math.min(args.limit, 100);
+      return listTopActorsForTactic(parent.id, limit);
     },
   },
 };

@@ -7,6 +7,24 @@ export const tacticTypeDefs = /* GraphQL */ `
     url: String
     ordering: Int!
     techniqueCount: Int!
+    techniques: [TacticTechniqueDetail!]!
+    topActors(limit: Int = 25): [TacticActorDetail!]!
+  }
+
+  type TacticTechniqueDetail {
+    id: ID!
+    name: String!
+    description: String
+    isSubtechnique: Boolean!
+    platforms: [String!]!
+    killChainPhases: [String!]!
+  }
+
+  type TacticActorDetail {
+    id: ID!
+    name: String!
+    techniqueCount: Int!
+    techniquesInTacticCount: Int!
   }
 
   type MatrixTechniqueRow {
@@ -29,5 +47,6 @@ export const tacticTypeDefs = /* GraphQL */ `
   extend type Query {
     tactics: [TacticDetail!]!
     matrix(filter: MatrixFilter): [MatrixColumn!]!
+    tactic(id: ID!): TacticDetail
   }
 `;
