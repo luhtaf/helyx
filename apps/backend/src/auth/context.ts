@@ -4,6 +4,7 @@ import { createLoaders } from '../dataloaders/index.js';
 import { verifyAccessToken } from './jwt.js';
 import type { AuthedUser, OrgRole } from './types.js';
 import { getCachedUser, getCachedUserOrgRole } from '../cache/auth.js';
+import { readSessionCookie } from './cookie.js';
 
 export interface RequestContext {
   user: AuthedUser | null;
@@ -15,13 +16,13 @@ export interface RequestContext {
 }
 
 const ORG_HEADER = 'x-helyx-org';
-const AUTH_HEADER = 'authorization';
 
-function extractBearer(req: Request): string | null {
-  const raw = req.headers[AUTH_HEADER];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (!value || !value.toLowerCase().startsWith('bearer ')) return null;
-  return value.slice(7).trim();
+function extractToken(req: Request): string | null {
+  const cookieToken = readSessionCookie(req);
+  if (cookieToken) return cookieToken;
+  const auth = req.headers.authorization ?? '';
+  if (auth.startsWith('Bearer ')) return auth.slice('Bearer '.length).trim();
+  return null;
 }
 
 function extractActiveOrg(req: Request): string | null {
@@ -31,7 +32,7 @@ function extractActiveOrg(req: Request): string | null {
 }
 
 export async function buildContext(req: Request, res: Response): Promise<RequestContext> {
-  const token = extractBearer(req);
+  const token = extractToken(req);
   if (!token) {
     return {
       user: null,
