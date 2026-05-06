@@ -85,11 +85,13 @@ export async function listDetectionsForTechnique(attackPatternId: string): Promi
   const session = getSession();
   try {
     const result = await session.run(
-      `MATCH (ap:AttackPattern {id: $id})<-[:DETECTS]-(dc:DataComponent)
-       OPTIONAL MATCH (dc)-[:OF_DATA_SOURCE]->(ds:DataSource)
-       RETURN dc.id AS id, dc.name AS name, dc.description AS description,
+      `MATCH (ap:AttackPattern {id: $id})<-[:DETECTS]-(s:DetectionStrategy)
+       OPTIONAL MATCH (s)-[:USES_ANALYTIC]->(dc:DataComponent)-[:OF_DATA_SOURCE]->(ds:DataSource)
+       RETURN dc.id AS id,
+              coalesce(dc.name, s.name) AS name,
+              coalesce(dc.description, s.description) AS description,
               coalesce(ds.name, 'unknown source') AS dataSourceName
-       ORDER BY dataSourceName, dc.name`,
+       ORDER BY dataSourceName, name`,
       { id: attackPatternId },
     );
     return result.records.map(rowToDataComponent);

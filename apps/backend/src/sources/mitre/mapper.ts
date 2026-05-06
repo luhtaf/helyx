@@ -3,6 +3,7 @@ import {
   AttackPattern,
   DataComponent,
   DataSource,
+  DetectionStrategy,
   IntrusionSet,
   Relationship,
   type StixBundle,
@@ -46,14 +47,27 @@ export interface DataComponentRow {
   dataSourceStixId: string;
 }
 
+export interface DetectionStrategyRow {
+  id: string;
+  stixId: string;
+  name: string;
+  description: string | null;
+  analyticRefs: string[];
+}
+
 export interface UsesEdgeRow {
   intrusionSetId: string;
   attackPatternId: string;
 }
 
 export interface DetectsEdgeRow {
-  dataComponentStixId: string;
+  detectionStrategyId: string;
   attackPatternId: string;
+}
+
+export interface UsesAnalyticEdgeRow {
+  detectionStrategyId: string;
+  dataComponentId: string;
 }
 
 export interface MappedMitre {
@@ -64,7 +78,9 @@ export interface MappedMitre {
   uses: UsesEdgeRow[];
   dataSources: DataSourceRow[];
   dataComponents: DataComponentRow[];
+  detectionStrategies: DetectionStrategyRow[];
   detects: DetectsEdgeRow[];
+  usesAnalytics: UsesAnalyticEdgeRow[];
   skipped: { revoked: number; deprecated: number; unresolvedRefs: number };
 }
 
@@ -90,15 +106,19 @@ export function mapBundle(bundle: StixBundle): MappedMitre {
   const attackPatterns: AttackPatternRow[] = [];
   const dataSources: DataSourceRow[] = [];
   const dataComponents: DataComponentRow[] = [];
+  const detectionStrategies: DetectionStrategyRow[] = [];
   const uses: UsesEdgeRow[] = [];
   const detects: DetectsEdgeRow[] = [];
+  const usesAnalytics: UsesAnalyticEdgeRow[] = [];
   const skipped = { revoked: 0, deprecated: 0, unresolvedRefs: 0 };
 
   const stixIdToExternalId = new Map<string, string>();
   const dataComponentStixIdToId = new Map<string, string>();
+  const detectionStrategyStixIdToId = new Map<string, string>();
   const intrusionStixIds = new Set<string>();
   const attackPatternStixIds = new Set<string>();
   const dataComponentStixIds = new Set<string>();
+  const detectionStrategyStixIds = new Set<string>();
 
   for (const raw of bundle.objects) {
     const type = (raw as { type?: string }).type;
@@ -191,6 +211,39 @@ export function mapBundle(bundle: StixBundle): MappedMitre {
         description: obj.description ?? null,
         dataSourceStixId: obj.x_mitre_data_source_ref,
       });
+    } else if (type === 'x-mitre-detection-strategy') {
+      const parsed = DetectionStrategy.safeParse({
+        ...raw,
+        x_mitre_analytic_refs: Array.isArray((raw as { x_mitre_analytic_refs?: unknown }).x_mitre_analytic_refs)
+          ? (raw as { x_mitre_analytic_refs: string[] }).x_mitre_analytic_refs
+          : [],
+      });
+      if (!parsed.success) continue;
+      const obj = parsed.data;
+      if (obj.revoked) { skipped.revoked++; continue; }
+      if (obj.x_mitre_deprecated) { skipped.deprecated++; continue; }
+
+      const detectionStrategyId = externalAttackId(obj.external_references);
+      if (!detectionStrategyId) continue;
+      stixIdToExternalId.set(obj.id, detectionStrategyId);
+      detectionStrategyStixIdToId.set(obj.id, detectionStrategyId);
+      detectionStrategyStixIds.add(obj.id);
+
+      detectionStrategies.push({
+        id: detectionStrategyId,
+        stixId: obj.id,
+        name: obj.name,
+        description: obj.description ?? null,
+        analyticRefs: obj.x_mitre_analytic_refs ?? [],
+      });
+    }
+  }
+
+  for (const strategy of detectionStrategies) {
+    for (const analyticRef of strategy.analyticRefs) {
+      const dataComponentId = dataComponentStixIdToId.get(analyticRef);
+      if (!dataComponentId) continue;
+      usesAnalytics.push({ detectionStrategyId: strategy.id, dataComponentId });
     }
   }
 
@@ -210,12 +263,12 @@ export function mapBundle(bundle: StixBundle): MappedMitre {
       if (!isId || !apId) { skipped.unresolvedRefs++; continue; }
       uses.push({ intrusionSetId: isId, attackPatternId: apId });
     } else if (rel.relationship_type === 'detects'
-        && dataComponentStixIds.has(rel.source_ref)
+        && detectionStrategyStixIds.has(rel.source_ref)
         && attackPatternStixIds.has(rel.target_ref)) {
-      const dataComponentId = dataComponentStixIdToId.get(rel.source_ref);
+      const detectionStrategyId = detectionStrategyStixIdToId.get(rel.source_ref);
       const attackPatternId = stixIdToExternalId.get(rel.target_ref);
-      if (!dataComponentId || !attackPatternId) { skipped.unresolvedRefs++; continue; }
-      detects.push({ dataComponentStixId: dataComponentId, attackPatternId });
+      if (!detectionStrategyId || !attackPatternId) { skipped.unresolvedRefs++; continue; }
+      detects.push({ detectionStrategyId, attackPatternId });
     }
   }
 
@@ -227,7 +280,9 @@ export function mapBundle(bundle: StixBundle): MappedMitre {
     uses,
     dataSources,
     dataComponents,
+    detectionStrategies,
     detects,
+    usesAnalytics,
     skipped,
   };
 }

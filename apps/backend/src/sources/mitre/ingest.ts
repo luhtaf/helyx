@@ -8,7 +8,9 @@ export interface IngestResult {
   techniqueTactics: number;
   dataSources: number;
   dataComponents: number;
+  detectionStrategies: number;
   detects: number;
+  usesAnalytics: number;
   uses: number;
   skipped: MappedMitre['skipped'];
 }
@@ -101,13 +103,35 @@ export async function writeBundle(mapped: MappedMitre): Promise<IngestResult> {
         );
       }
 
+      if (mapped.detectionStrategies.length) {
+        await tx.run(
+          `UNWIND $rows AS row
+           MERGE (s:DetectionStrategy {id: row.id})
+           SET s.name = row.name,
+               s.description = row.description,
+               s.stixId = row.stixId,
+               s.lastSeenAt = datetime()`,
+          { rows: mapped.detectionStrategies },
+        );
+      }
+
       if (mapped.detects.length) {
         await tx.run(
           `UNWIND $rows AS row
-           MATCH (dc:DataComponent {id: row.dataComponentStixId}),
+           MATCH (s:DetectionStrategy {id: row.detectionStrategyId}),
                  (ap:AttackPattern {id: row.attackPatternId})
-           MERGE (dc)-[:DETECTS]->(ap)`,
+           MERGE (s)-[:DETECTS]->(ap)`,
           { rows: mapped.detects },
+        );
+      }
+
+      if (mapped.usesAnalytics.length) {
+        await tx.run(
+          `UNWIND $rows AS row
+           MATCH (s:DetectionStrategy {id: row.detectionStrategyId}),
+                 (dc:DataComponent {id: row.dataComponentId})
+           MERGE (s)-[:USES_ANALYTIC]->(dc)`,
+          { rows: mapped.usesAnalytics },
         );
       }
 
@@ -133,7 +157,9 @@ export async function writeBundle(mapped: MappedMitre): Promise<IngestResult> {
     techniqueTactics: mapped.techniqueTactics.length,
     dataSources: mapped.dataSources.length,
     dataComponents: mapped.dataComponents.length,
+    detectionStrategies: mapped.detectionStrategies.length,
     detects: mapped.detects.length,
+    usesAnalytics: mapped.usesAnalytics.length,
     uses: mapped.uses.length,
     skipped: mapped.skipped,
   };
