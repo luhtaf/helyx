@@ -1,3 +1,4 @@
+<!-- /autoplan restore point: /Users/fathulikhsan/.gstack/projects/luhtaf-helyx/main-autoplan-restore-20260506-194726.md -->
 # Helyx Redis Foundation + Auth Cache + Cookie/CSRF + Race Fixes + Hardening
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -90,11 +91,110 @@ If you are a fresh AI session (Claude resumed, Kimi taking over, GPT, etc):
 
 ---
 
+## Task 0.5: Migrate Apollo from `startStandaloneServer` to Express + `expressMiddleware`
+
+**Why FIRST:** All cookie/CSRF/CORS/rate-limit middleware (Tasks 11+, 14+, 15+) require Express. Currently `apps/backend/src/index.ts` uses `startStandaloneServer` (no middleware surface). Migration is non-negotiable for Phase 3.
+
+**Files:**
+- Modify: `apps/backend/src/index.ts`
+- Modify: `apps/backend/src/auth/context.ts`
+- Modify: `apps/backend/package.json`
+
+- [ ] **Step 1: Install Express + ensure @apollo/server**
+
+```bash
+pnpm --filter @helyx/backend add express
+pnpm --filter @helyx/backend add -D @types/express
+```
+
+- [ ] **Step 2: Replace standalone server with Express + expressMiddleware**
+
+```typescript
+// apps/backend/src/index.ts — restructure boot
+import express from 'express';
+import { ApolloServer } from '@apollo/server';
+import { expressMiddleware } from '@apollo/server/express4';
+import { typeDefs } from './schema/index.js';
+import { resolvers } from './resolvers/index.js';
+import { buildContext } from './auth/context.js';
+import { config } from './config.js';
+import { logger } from './logger.js';
+
+async function main(): Promise<void> {
+  const apollo = new ApolloServer({
+    typeDefs,
+    resolvers,
+    introspection: process.env.NODE_ENV !== 'production',
+  });
+  await apollo.start();
+
+  const app = express();
+  app.use(express.json({ limit: '10mb' }));
+
+  app.use('/graphql', expressMiddleware(apollo, {
+    context: async ({ req, res }) => buildContext(req, res),
+  }));
+
+  const port = Number(config.PORT ?? 4000);
+  app.listen(port, '0.0.0.0', () => {
+    logger.info({ port }, 'helyx backend listening');
+  });
+}
+
+main().catch((err) => {
+  logger.fatal({ err: String(err) }, 'boot failed');
+  process.exit(1);
+});
+```
+
+- [ ] **Step 3: Update buildContext + RequestContext**
+
+In `apps/backend/src/auth/context.ts`, change signature from `buildContext(req)` to `buildContext(req, res)`. Add `req` and `res` to `RequestContext`:
+
+```typescript
+import type { Request, Response } from 'express';
+
+export interface RequestContext {
+  user: AuthedUser | null;
+  activeOrgId: string | null;
+  activeOrgRole: OrgRole | null;
+  loaders: AppLoaders;
+  req: Request;
+  res: Response;
+}
+
+export async function buildContext(req: Request, res: Response): Promise<RequestContext> {
+  // ... existing token extraction + lookups, plus include req+res in return:
+  return { user, activeOrgId, activeOrgRole, loaders, req, res };
+}
+```
+
+- [ ] **Step 4: Typecheck + smoke**
+
+```bash
+pnpm --filter @helyx/backend typecheck
+sleep 5
+curl -s http://localhost:4000/graphql -X POST -H 'Content-Type: application/json' \
+  -d '{"query":"{ health { api db serverTime } }"}'
+```
+Expected: same response shape as before (substrate swap only — no behavior change yet).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/backend/src/index.ts apps/backend/src/auth/context.ts apps/backend/package.json pnpm-lock.yaml
+git commit -m "feat(infra): migrate Apollo to Express + expressMiddleware (req+res in ctx)"
+```
+
+---
+
 ## Task 1: Redis service in docker-compose
 
 **Files:**
 - Modify: `docker-compose.yml`
 - Modify: `apps/backend/src/config.ts`
+- Modify: root `package.json` (db:up alias)
+- Modify: `.env.example`
 
 - [ ] **Step 1: Add Redis service to docker-compose.yml**
 
@@ -109,13 +209,15 @@ Append after the existing neo4j service (preserve indentation matching neo4j):
       - "6379:6379"
     volumes:
       - redis-data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy volatile-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
 ```
+
+> **`volatile-lru` not `allkeys-lru`** — protects keys WITH TTL (all auth keys are TTL'd) from eviction. Auth tokens never silently disappear under memory pressure.
 
 In the `volumes:` section at the bottom, add:
 ```yaml
@@ -124,31 +226,44 @@ In the `volumes:` section at the bottom, add:
 
 - [ ] **Step 2: Add REDIS_URL to config.ts**
 
-In `apps/backend/src/config.ts`, find the Zod env schema and add:
 ```typescript
 REDIS_URL: z.string().default('redis://localhost:6379'),
+COOKIE_SECURE: z.coerce.boolean().default(process.env.NODE_ENV === 'production'),
+CORS_ORIGIN: z.string().default('http://localhost:5173'),
+TRUST_PROXY_HOPS: z.coerce.number().default(0),
 ```
 
-- [ ] **Step 3: Bring up Redis + verify**
+> 4 envs added now (REDIS_URL + COOKIE_SECURE + CORS_ORIGIN + TRUST_PROXY_HOPS) — all needed by later tasks. Centralize here so `.env.example` is single source of truth.
+
+- [ ] **Step 3: Update db:up + .env.example**
+
+Root `package.json`: change `"db:up": "docker compose up -d neo4j"` → `"db:up": "docker compose up -d neo4j redis"`.
+
+`.env.example`, append:
+```
+# Cache + auth state (Redis 7+)
+REDIS_URL=redis://localhost:6379
+
+# Cookies / CORS / proxy
+COOKIE_SECURE=false                       # set true in prod (HTTPS only)
+CORS_ORIGIN=http://localhost:5173         # frontend origin (exact, no wildcard)
+TRUST_PROXY_HOPS=0                        # 1 if behind nginx/Cloudflare
+```
+
+- [ ] **Step 4: Bring up + verify**
 
 ```bash
-docker compose up -d redis
+pnpm db:up
 until docker exec helyx-redis redis-cli PING 2>/dev/null | grep -q PONG; do sleep 1; done
 echo "redis ready"
 ```
 
-- [ ] **Step 4: Typecheck**
+- [ ] **Step 5: Typecheck + commit**
 
 ```bash
 pnpm --filter @helyx/backend typecheck
-```
-Expected: clean.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add docker-compose.yml apps/backend/src/config.ts
-git commit -m "feat(infra): Redis 7 service + REDIS_URL config"
+git add docker-compose.yml apps/backend/src/config.ts package.json .env.example
+git commit -m "feat(infra): Redis 7 (volatile-lru) + REDIS_URL/COOKIE_SECURE/CORS_ORIGIN/TRUST_PROXY_HOPS envs + db:up alias"
 ```
 
 ---
@@ -944,25 +1059,62 @@ import { loadCsrfToken, safeEqual } from './auth/csrf.js';
 import { readCsrfCookie, readSessionCookie } from './auth/cookie.js';
 import { verifyAccessToken } from './auth/jwt.js';
 
+/**
+ * CSRF guard middleware.
+ *
+ * Mutation detection: parse the GraphQL document and inspect
+ * OperationDefinitionNode.operation === 'mutation'. String matching is brittle
+ * (anonymous ops, leading whitespace, multi-op docs all break it).
+ *
+ * Error codes via extensions.code so frontend can branch:
+ *   CSRF_NO_SESSION       — no session cookie, dev forgot credentials:include
+ *   CSRF_MISSING_HEADER   — header link not attached on frontend
+ *   CSRF_COOKIE_MISMATCH  — cookie value differs from header (tampering)
+ *   CSRF_SESSION_MISMATCH — Redis token differs (Redis evicted or compromised)
+ *   CSRF_SESSION_EXPIRED  — Redis token gone (TTL fired); call refresh
+ */
+import { parse, type OperationDefinitionNode } from 'graphql';
+
+const CSRF_EXEMPT_OPS = new Set(['login', 'register', 'refresh']);
+
+function detectMutation(query: string): { isMutation: boolean; rootField: string | null } {
+  try {
+    const doc = parse(query);
+    for (const def of doc.definitions) {
+      if (def.kind === 'OperationDefinition' && (def as OperationDefinitionNode).operation === 'mutation') {
+        const op = def as OperationDefinitionNode;
+        const root = op.selectionSet.selections[0];
+        const rootField = root && root.kind === 'Field' ? root.name.value : null;
+        return { isMutation: true, rootField };
+      }
+    }
+  } catch {
+    // Malformed query — let Apollo reject it later, don't block here
+    return { isMutation: false, rootField: null };
+  }
+  return { isMutation: false, rootField: null };
+}
+
+function csrfErr(code: string, message: string): Record<string, unknown> {
+  return { errors: [{ message, extensions: { code } }] };
+}
+
 async function csrfGuard(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): Promise<void> {
-  // GraphQL routes only; only mutations need CSRF (queries safe by SOP).
-  // Quick check: peek at body operation name. If body parsing not done yet, defer.
   if (req.method !== 'POST') { next(); return; }
 
-  // Body must already be parsed; ensure body parser is registered BEFORE this middleware.
   const body = (req as { body?: { query?: string } }).body ?? {};
   const query = body.query ?? '';
+  const { isMutation, rootField } = detectMutation(query);
 
-  // Skip CSRF for queries and introspection
-  if (!query.trim().toLowerCase().startsWith('mutation')) { next(); return; }
+  // Queries are safe by SOP — skip CSRF
+  if (!isMutation) { next(); return; }
 
-  // Skip CSRF for the login mutation itself (no session yet)
-  if (/\bmutation\b[^{]*\{\s*login\b/i.test(query)) { next(); return; }
-  if (/\bmutation\b[^{]*\{\s*register\b/i.test(query)) { next(); return; }
+  // Pre-auth mutations (login/register/refresh) don't have a session yet
+  if (rootField && CSRF_EXEMPT_OPS.has(rootField)) { next(); return; }
 
-  // Fall through if Authorization Bearer header present (legacy dual-mode)
+  // Bearer header = legacy dual-mode (deprecated, but exempt while transitioning)
   if (req.headers.authorization?.startsWith('Bearer ')) {
-    res.setHeader('X-Helyx-Auth-Deprecation', 'Bearer header is deprecated; migrate to cookie + X-CSRF-Token');
+    res.setHeader('X-Helyx-Auth-Deprecation', 'Bearer header is deprecated; migrate to cookie + X-CSRF-Token. Removal target: see Task 20.');
     next();
     return;
   }
@@ -970,45 +1122,71 @@ async function csrfGuard(req: import('express').Request, res: import('express').
   // Cookie-mode: enforce CSRF
   const sessionJwt = readSessionCookie(req);
   if (!sessionJwt) {
-    res.status(401).json({ errors: [{ message: 'no session' }] });
+    res.status(401).json(csrfErr('CSRF_NO_SESSION', 'no session cookie present (set credentials: include in client)'));
     return;
   }
 
   const headerToken = (req.headers['x-csrf-token'] as string | undefined) ?? null;
   const cookieToken = readCsrfCookie(req);
-  if (!headerToken || !cookieToken || !safeEqual(headerToken, cookieToken)) {
-    res.status(403).json({ errors: [{ message: 'CSRF token mismatch' }] });
+  if (!headerToken) {
+    res.status(403).json(csrfErr('CSRF_MISSING_HEADER', 'X-CSRF-Token header missing — attach from helyx_csrf_token cookie'));
+    return;
+  }
+  if (!cookieToken || !safeEqual(headerToken, cookieToken)) {
+    res.status(403).json(csrfErr('CSRF_COOKIE_MISMATCH', 'X-CSRF-Token does not match helyx_csrf_token cookie'));
     return;
   }
 
-  // Verify cookie token matches Redis-stored one (defense in depth: cookie tampering)
+  // Verify cookie token matches Redis-stored one (defense vs cookie tampering)
   const payload = await verifyAccessToken(sessionJwt);
   if (!payload) {
-    res.status(401).json({ errors: [{ message: 'invalid session' }] });
+    res.status(401).json(csrfErr('CSRF_NO_SESSION', 'session JWT invalid or expired — call refresh mutation'));
     return;
   }
   const stored = await loadCsrfToken(payload.sub);
-  if (!stored || !safeEqual(headerToken, stored)) {
-    res.status(403).json({ errors: [{ message: 'CSRF token mismatch (server)' }] });
+  if (!stored) {
+    res.status(403).json(csrfErr('CSRF_SESSION_EXPIRED', 'CSRF token expired in Redis — call refresh mutation to reissue'));
+    return;
+  }
+  if (!safeEqual(headerToken, stored)) {
+    res.status(403).json(csrfErr('CSRF_SESSION_MISMATCH', 'X-CSRF-Token does not match server record (Redis)'));
     return;
   }
   next();
 }
 
-// Register order matters: bodyParser → cookieParser → csrfGuard → /graphql
+// Register order matters: bodyParser → cookieParser → cors → csrfGuard → /graphql
+import cors from 'cors';
+import { config } from './config.js';
+
+app.set('trust proxy', config.TRUST_PROXY_HOPS);  // 1+ behind nginx/Cloudflare
 app.use(express.json());
 app.use(cookieParser());
+app.use(cors({
+  origin: config.CORS_ORIGIN,
+  credentials: true,                            // required for cookie auth
+  allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Helyx-Org', 'Authorization'],
+  exposedHeaders: ['X-Helyx-Auth-Deprecation'],
+}));
 app.use('/graphql', csrfGuard);
-// ... then your existing apolloMiddleware mount
+// ... then your expressMiddleware mount from Task 0.5
 ```
 
-- [ ] **Step 3: Modify context.ts for dual-mode (cookie OR Bearer)**
+> **Why CORS here?** Browser won't send cookies cross-origin without `Access-Control-Allow-Credentials: true` AND exact origin (no `*`). Frontend at `http://localhost:5173`, backend at `http://localhost:4000` = cross-origin in dev. Same in prod when `app.helyx.io` ↔ `api.helyx.io`.
+
+- [ ] **Step 3: Add cors package**
+
+```bash
+pnpm --filter @helyx/backend add cors
+pnpm --filter @helyx/backend add -D @types/cors
+```
+
+- [ ] **Step 4: Modify context.ts extractToken (cookie OR Bearer)**
 
 ```typescript
 // In apps/backend/src/auth/context.ts buildContext():
 import { readSessionCookie } from './cookie.js';
 
-// REPLACE the token extraction to prefer cookie, fall back to Bearer:
 function extractToken(req: import('express').Request): string | null {
   const cookieToken = readSessionCookie(req);
   if (cookieToken) return cookieToken;
@@ -1016,11 +1194,11 @@ function extractToken(req: import('express').Request): string | null {
   if (auth.startsWith('Bearer ')) return auth.slice('Bearer '.length).trim();
   return null;
 }
-
-// In buildContext, use extractToken(req) instead of the existing manual Bearer parse.
 ```
 
-- [ ] **Step 4: Typecheck + verify**
+> `ctx.req` and `ctx.res` already in `RequestContext` from Task 0.5. No additional type changes needed here.
+
+- [ ] **Step 5: Typecheck + verify**
 
 ```bash
 pnpm --filter @helyx/backend typecheck
@@ -1065,7 +1243,7 @@ setSessionCookie(ctx.res, jwt);
 setCsrfCookie(ctx.res, csrfToken);
 ```
 
-> Apollo context typically doesn't include `res` by default. You may need to extend the GraphQL context type to include `res: Response`. Check `apps/backend/src/auth/context.ts` to see if it already passes `res` through. If not, modify the context builder to accept and store `req` + `res`, then update `RequestContext` type.
+> `ctx.res` available from Task 0.5 (RequestContext extended). No type changes needed here.
 
 - [ ] **Step 2: Add logout mutation if not exists**
 
@@ -1114,7 +1292,7 @@ git commit -m "feat(auth): login sets HttpOnly cookie + CSRF; logout clears + in
 - Modify: `apps/web/src/api/apollo.ts`
 - Modify: `apps/web/src/stores/auth.ts` — drop token storage, rely on cookie
 
-- [ ] **Step 1: Modify apollo.ts**
+- [ ] **Step 1: Modify apollo.ts (HTTP link + CSRF header link)**
 
 ```typescript
 // apps/web/src/api/apollo.ts
@@ -1159,26 +1337,162 @@ export function createApolloClient(auth: AuthStore): ApolloClient<unknown> {
 
 > **Note:** the previous `auth.token` field is gone from headers. The `auth` store may still hold a token for legacy compatibility — leave it for now, but the SERVER will read from cookie. Token in auth store is dead code after this commit.
 
-- [ ] **Step 2: Modify auth store to drop token persistence**
+- [ ] **Step 2: Drop localStorage token + one-time cleanup migration**
 
-In `apps/web/src/stores/auth.ts`, find any `localStorage.setItem('token', ...)` or `sessionStorage` calls and remove them. The token is now in HttpOnly cookie — store doesn't need to track it. `isAuthed` should now derive from "did the last `me` query succeed" (or maintain in-memory user state).
+In `apps/web/src/stores/auth.ts`:
+- Remove all `localStorage.setItem('token', ...)` / `sessionStorage` writes for token
+- In the store's logout action, add `localStorage.removeItem('token')` + `localStorage.removeItem('helyx_token')` (anything that may have stored auth)
+- Add comment: `// Token in HttpOnly cookie. Store tracks user/org only.`
 
-If unsure about the exact shape, leave the existing logic but ensure no localStorage write of token. Add a comment: `// Token now in HttpOnly cookie; this store tracks user/org only.`
+In `apps/web/src/main.ts` (or app boot file), add a one-time cleanup before mount:
+```typescript
+// Migrate from old localStorage Bearer auth to cookie auth.
+// Safe to run every boot — clears stale token only if no cookie present.
+if (localStorage.getItem('token') && !document.cookie.includes('helyx_session')) {
+  localStorage.removeItem('token');
+  localStorage.removeItem('helyx_token');
+}
+```
 
 - [ ] **Step 3: Verify in browser**
 
 ```bash
 # Backend running, frontend running (pnpm --filter @helyx/web dev)
-# Open browser, open dev tools, login
-# Expected: Application > Cookies should show helyx_session (httpOnly) + helyx_csrf_token (visible)
-# Expected: any subsequent mutation request has X-CSRF-Token header
+# Login → Application > Cookies should show helyx_session (HttpOnly) + helyx_csrf_token (JS-readable)
+# Application > Local Storage should NOT contain 'token'
+# Subsequent mutation requests must carry X-CSRF-Token header
 ```
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/web/src/api/apollo.ts apps/web/src/stores/auth.ts
-git commit -m "feat(web): Apollo credentials include + X-CSRF-Token header; drop Bearer storage"
+git add apps/web/src/api/apollo.ts apps/web/src/stores/auth.ts apps/web/src/main.ts
+git commit -m "feat(web): Apollo credentials include + X-CSRF-Token header; drop+migrate localStorage Bearer"
+```
+
+---
+
+## Task 13b: Frontend Apollo errorLink — silent refresh + REFRESH_EXPIRED routing
+
+**Why:** Backend issues 15-min access tokens (Task 16). Without auto-refresh, users see 401 every 15 min and get logged out mid-work. Apollo errorLink intercepts 401, calls `mutation { refresh }`, retries failed query.
+
+**Files:**
+- Modify: `apps/web/src/api/apollo.ts`
+- Modify: `apps/web/src/router/index.ts` — handle REFRESH_EXPIRED routing
+- Modify: `apps/web/package.json` — add @apollo/client/link/error if not present
+
+- [ ] **Step 1: Add errorLink with refresh-then-retry**
+
+Update `apps/web/src/api/apollo.ts`:
+
+```typescript
+import { ApolloClient, HttpLink, InMemoryCache, fromPromise } from '@apollo/client/core';
+import { setContext } from '@apollo/client/link/context';
+import { onError } from '@apollo/client/link/error';
+import gql from 'graphql-tag';
+import type { useAuthStore } from '@/stores/auth';
+import { useRouter } from 'vue-router';
+
+const REFRESH = gql`mutation { refresh { ok } }`;
+
+let refreshing: Promise<boolean> | null = null;  // single-flight: 1 refresh per burst
+
+async function doRefresh(client: ApolloClient<unknown>): Promise<boolean> {
+  if (!refreshing) {
+    refreshing = (async () => {
+      try {
+        const r = await client.mutate({ mutation: REFRESH, errorPolicy: 'all' });
+        return Boolean(r.data?.refresh?.ok);
+      } catch {
+        return false;
+      } finally {
+        // Reset after 1s so the next refresh attempt isn't blocked on stale promise
+        setTimeout(() => { refreshing = null; }, 1000);
+      }
+    })();
+  }
+  return refreshing;
+}
+
+export function createApolloClient(auth: ReturnType<typeof useAuthStore>): ApolloClient<unknown> {
+  const httpLink = new HttpLink({ uri: '/graphql', credentials: 'include' });
+
+  const headerLink = setContext((_, { headers }) => {
+    const csrf = readCsrfCookie();
+    return {
+      headers: {
+        ...headers,
+        ...(csrf ? { 'x-csrf-token': csrf } : {}),
+        ...(auth.activeOrgId ? { 'x-helyx-org': auth.activeOrgId } : {}),
+      },
+    };
+  });
+
+  const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) => {
+    // Skip refresh attempt for the refresh mutation itself (avoid infinite loop)
+    if (operation.operationName === 'refresh' || operation.operationName === 'login') {
+      return undefined;
+    }
+
+    const code = graphQLErrors?.[0]?.extensions?.code as string | undefined;
+    const status = (networkError as { statusCode?: number })?.statusCode;
+
+    // Access expired or invalid session → try silent refresh
+    if (status === 401 || code === 'CSRF_NO_SESSION') {
+      return fromPromise(doRefresh(client)).flatMap((ok) => {
+        if (!ok) {
+          // Refresh failed too — go to login
+          window.location.href = '/login';
+          return forward(operation);
+        }
+        return forward(operation);  // retry original
+      });
+    }
+
+    // Refresh itself returned REFRESH_EXPIRED → user must re-login
+    if (code === 'REFRESH_EXPIRED' || code === 'INVALID_REFRESH' || code === 'NO_REFRESH') {
+      auth.logout();  // local state cleanup
+      window.location.href = '/login?reason=session_expired';
+    }
+
+    return undefined;
+  });
+
+  // client constructed below uses errorLink first so it sees responses, then header, then http
+  const client: ApolloClient<unknown> = new ApolloClient({
+    link: errorLink.concat(headerLink).concat(httpLink),
+    cache: new InMemoryCache(),
+    defaultOptions: {
+      watchQuery: { fetchPolicy: 'cache-and-network', errorPolicy: 'all' },
+      query: { fetchPolicy: 'network-only', errorPolicy: 'all' },
+    },
+  });
+
+  return client;
+}
+```
+
+> **Single-flight:** the `refreshing` Promise variable coalesces multiple concurrent 401s (e.g., 5 queries fire simultaneously, all expire at the same 15-min mark) into ONE refresh call. All 5 await the same Promise.
+
+- [ ] **Step 2: Router handles `?reason=session_expired` toast**
+
+In `apps/web/src/router/index.ts`, in `router.beforeEach`, when navigating to `/login?reason=session_expired`, show a toast or banner: "Your session expired. Please log in again."
+
+If you don't have a toast system yet, surface via the LoginView reading `route.query.reason` and rendering a banner.
+
+- [ ] **Step 3: Verify in browser**
+
+Manual test:
+1. Login
+2. Open DevTools > Application > Cookies, find `helyx_session`, manually delete it
+3. Trigger a mutation (e.g., archive case)
+4. Network tab should show: original mutation 401 → `refresh` mutation 200 → original mutation retried, succeeds (or fails REFRESH_EXPIRED → redirect /login)
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/web/src/api/apollo.ts apps/web/src/router/index.ts
+git commit -m "feat(web): Apollo errorLink — silent refresh on 401 + REFRESH_EXPIRED routing"
 ```
 
 ---
@@ -1275,20 +1589,40 @@ import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { getRedis } from '../cache/redis.js';
 
+// Numbers tuned for analyst hunt workflows (heavy graph queries are normal)
+const IP_MAX = 300;        // bumped from initial 100 — analyst sessions exceed easily
+const USER_MAX = 1000;     // bumped from initial 500
+const WINDOW_MS = 60 * 1000;
+
+// JSON 429 handler — Apollo Client can parse GraphQL error shape
+function jsonRateLimitHandler(req: import('express').Request, res: import('express').Response): void {
+  const retryAfter = res.getHeader('Retry-After');
+  res.status(429).json({
+    errors: [{
+      message: 'Too many requests — slow down and retry',
+      extensions: {
+        code: 'RATE_LIMITED',
+        retryAfter: retryAfter ? Number(retryAfter) : 60,
+      },
+    }],
+  });
+}
+
 export const ipLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 100,
+  windowMs: WINDOW_MS,
+  max: IP_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({
     sendCommand: (...args: string[]) => getRedis().call(...args) as Promise<unknown>,
   }),
-  keyGenerator: (req) => req.ip ?? 'unknown',
+  keyGenerator: (req) => req.ip ?? 'unknown',  // req.ip respects trust proxy from Task 11
+  handler: jsonRateLimitHandler,
 });
 
 export const userLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 500,
+  windowMs: WINDOW_MS,
+  max: USER_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({
@@ -1296,10 +1630,14 @@ export const userLimiter = rateLimit({
   }),
   keyGenerator: (req) => {
     const cookie = (req as { cookies?: Record<string, string> }).cookies?.helyx_session;
-    return cookie ? `user:${cookie.slice(0, 16)}` : (req.ip ?? 'unknown');
+    // Hash full cookie not slice — slice prefix collisions on truncation
+    return cookie ? `user:${require('node:crypto').createHash('sha256').update(cookie).digest('hex').slice(0, 32)}` : (req.ip ?? 'unknown');
   },
+  handler: jsonRateLimitHandler,
 });
 ```
+
+> **`trust proxy` already set in Task 11 boot.** `req.ip` will resolve to the real client IP (not nginx/Cloudflare) once `TRUST_PROXY_HOPS >= 1` is set in env.
 
 - [ ] **Step 3: Login lockout module**
 
@@ -1313,21 +1651,27 @@ const MAX_FAILS = 5;
 const failKey = (key: string) => `auth:fail:${key}`;
 const lockKey = (key: string) => `auth:lock:${key}`;
 
+// Compose key from email + IP to defeat targeted DoS:
+// Attacker knowing victim email cannot lock victim out — they'd lock their own IP.
+export function lockoutKey(email: string, ip: string): string {
+  return `${email.toLowerCase()}:ip:${ip}`;
+}
+
 export async function isLocked(key: string): Promise<boolean> {
   const r = getRedis();
   const v = await r.get(lockKey(key));
   return v !== null;
 }
 
-export async function recordFail(key: string): Promise<{ locked: boolean; remaining: number }> {
+export async function recordFail(key: string): Promise<{ locked: boolean }> {
   const r = getRedis();
   const cnt = await r.incr(failKey(key));
   if (cnt === 1) await r.expire(failKey(key), WINDOW_S);
   if (cnt >= MAX_FAILS) {
     await r.set(lockKey(key), '1', 'EX', WINDOW_S);
-    return { locked: true, remaining: 0 };
+    return { locked: true };
   }
-  return { locked: false, remaining: MAX_FAILS - cnt };
+  return { locked: false };
 }
 
 export async function clearFails(key: string): Promise<void> {
@@ -1335,6 +1679,8 @@ export async function clearFails(key: string): Promise<void> {
   await r.del(failKey(key), lockKey(key));
 }
 ```
+
+> **No `remaining` returned** — leaking attempt count helps attacker time their backoff. Per OWASP ASVS L2 V2.2.1, error messages must not reveal whether the email exists OR how many attempts remain. Generic "invalid credentials" until lockout, then generic "account locked" with no count.
 
 - [ ] **Step 4: Wire rate-limit middleware**
 
@@ -1349,31 +1695,41 @@ app.use('/graphql', ipLimiter, userLimiter);
 
 - [ ] **Step 5: Wire lockout into login resolver**
 
-In `auth.resolvers.ts` login mutation, before password check:
+In `auth.resolvers.ts` login mutation, gate via lockout key composed of email + client IP:
 
 ```typescript
-import { isLocked, recordFail, clearFails } from '../security/lockout.js';
+import { isLocked, recordFail, clearFails, lockoutKey } from '../security/lockout.js';
 import { GraphQLError } from 'graphql';
 
-const lockKey = `email:${input.email.toLowerCase()}`;
-if (await isLocked(lockKey)) {
-  throw new GraphQLError('Account temporarily locked due to repeated failed attempts', {
+// ctx.req available from Task 0.5
+const ip = ctx.req.ip ?? 'unknown';
+const key = lockoutKey(input.email, ip);
+
+if (await isLocked(key)) {
+  throw new GraphQLError('Account temporarily locked. Try again in 15 minutes.', {
     extensions: { code: 'ACCOUNT_LOCKED' },
   });
 }
+
 // ... existing password check ...
 if (!passwordMatches) {
-  const status = await recordFail(lockKey);
+  const status = await recordFail(key);
+  // GENERIC message — don't leak attempt count or whether email exists
   throw new GraphQLError(
     status.locked
-      ? 'Account locked for 15 minutes'
-      : `Invalid credentials (${status.remaining} attempts remaining)`,
+      ? 'Account temporarily locked. Try again in 15 minutes.'
+      : 'Invalid credentials.',
     { extensions: { code: status.locked ? 'ACCOUNT_LOCKED' : 'INVALID_CREDENTIALS' } },
   );
 }
+
 // On success, clear:
-await clearFails(lockKey);
+await clearFails(key);
 ```
+
+> **Why generic message?** Per OWASP ASVS L2 V2.2.1: error responses must NOT reveal account existence or attempt count. Both pieces of info help attackers (count tells them when to back off; existence enables enumeration).
+
+> **Why email+IP key?** With email-only key, an attacker knowing victim's email locks them out by failing login 5×. Email+IP means attacker locks themselves out, victim can still login from their real IP.
 
 - [ ] **Step 6: Typecheck**
 
@@ -1385,7 +1741,7 @@ pnpm --filter @helyx/backend typecheck
 
 ```bash
 git add apps/backend/src/security/rate-limit.ts apps/backend/src/security/lockout.ts apps/backend/src/index.ts apps/backend/src/tenants/auth.resolvers.ts apps/backend/package.json pnpm-lock.yaml
-git commit -m "feat(security): rate-limit-redis (IP 100/min, user 500/min) + login lockout (5 fails / 15min)"
+git commit -m "feat(security): rate-limit-redis (IP 300/min, user 1000/min, JSON 429) + lockout (email+IP key, 5 fails / 15min, generic msg per OWASP ASVS V2.2.1)"
 ```
 
 ---
@@ -1405,6 +1761,7 @@ Current jwt.ts probably has a single `signAccessToken(userId)` call returning a 
 // apps/backend/src/auth/jwt.ts — additions
 import { randomBytes } from 'node:crypto';
 import { cacheGet, cacheSet, cacheDel } from '../cache/index.js';
+import { getRedis } from '../cache/redis.js';
 
 const ACCESS_TTL_MIN = 15;
 const REFRESH_TTL_DAYS = 7;
@@ -1420,19 +1777,42 @@ export async function issueRefreshToken(userId: string): Promise<{ jti: string; 
   return { jti, exp };
 }
 
+/**
+ * Atomically move primary → grace, return userId.
+ *
+ * Without atomicity (3 separate Redis ops: GET → SET grace → DEL primary), if
+ * the process dies between SET and DEL the JTI sits in BOTH slots → replay
+ * vector. Lua MULTI/EXEC = single Redis op, all-or-nothing.
+ *
+ * Returns userId from primary if it existed (and atomically moves to grace).
+ * Falls back to grace slot for concurrent refresh from a second tab.
+ */
+const ATOMIC_MOVE_LUA = `
+  local primary = redis.call('GET', KEYS[1])
+  if primary then
+    redis.call('SET', KEYS[2], primary, 'EX', ARGV[1])
+    redis.call('DEL', KEYS[1])
+    return primary
+  end
+  return redis.call('GET', KEYS[2])
+`;
+
 export async function consumeRefreshToken(jti: string): Promise<{ userId: string } | null> {
-  // Check primary slot
-  const primary = await cacheGet<{ userId: string; exp: number }>(refreshKey(jti));
-  if (primary) {
-    // Move to grace (rotation window) and return user
-    await cacheSet(refreshGraceKey(jti), { userId: primary.userId }, REFRESH_GRACE_S);
-    await cacheDel(refreshKey(jti));
-    return { userId: primary.userId };
+  const r = getRedis();
+  const raw = await r.eval(
+    ATOMIC_MOVE_LUA,
+    2,                              // KEYS count
+    refreshKey(jti),                // KEYS[1] primary
+    refreshGraceKey(jti),           // KEYS[2] grace
+    String(REFRESH_GRACE_S),        // ARGV[1] grace TTL
+  );
+  if (raw === null || raw === undefined) return null;
+  try {
+    const parsed = JSON.parse(raw as string) as { userId: string; exp?: number };
+    return { userId: parsed.userId };
+  } catch {
+    return null;
   }
-  // Check grace slot (concurrent refresh from second tab)
-  const grace = await cacheGet<{ userId: string }>(refreshGraceKey(jti));
-  if (grace) return { userId: grace.userId };
-  return null;
 }
 
 export async function revokeRefreshToken(jti: string): Promise<void> {
@@ -1450,7 +1830,7 @@ refresh: async (_p: unknown, _a: unknown, ctx: RequestContext) => {
   const oldJti = (ctx.req as { cookies?: Record<string, string> }).cookies?.helyx_refresh;
   if (!oldJti) throw new GraphQLError('no refresh token', { extensions: { code: 'NO_REFRESH' } });
   const consumed = await consumeRefreshToken(oldJti);
-  if (!consumed) throw new GraphQLError('refresh expired or invalid', { extensions: { code: 'INVALID_REFRESH' } });
+  if (!consumed) throw new GraphQLError('refresh expired or invalid', { extensions: { code: 'REFRESH_EXPIRED' } });
 
   const newAccess = signAccessToken({ sub: consumed.userId });
   const newRefresh = await issueRefreshToken(consumed.userId);
@@ -1624,24 +2004,35 @@ export async function writeAuditEvent(input: {
 }
 ```
 
-- [ ] **Step 4: Helper**
+- [ ] **Step 4: Helper (primitives only — respects repo/resolver boundary)**
 
 ```typescript
 // apps/backend/src/audits/log.ts
-import type { RequestContext } from '../auth/context.js';
 import { writeAuditEvent } from './repo.js';
 
+/**
+ * logAudit takes PRIMITIVES, not RequestContext.
+ *
+ * Per CLAUDE.md repo/resolver boundary: repo functions never receive ctx.
+ * audits/ is repo-shaped, so caller must pass primitives. This also lets
+ * background jobs / migration scripts emit audit events (they have no ctx).
+ *
+ * Audit completeness note: not atomic with the audited operation. If the op
+ * succeeds but audit write fails (Redis/Neo4j blip), the op is un-audited.
+ * Documented degradation per ASVS L2 V10.3.4 — for higher integrity, stream
+ * to dedicated append-only sink in a future phase.
+ */
 export async function logAudit(
-  ctx: RequestContext,
+  tenantId: string,
+  actorUserId: string,
   action: string,
   target: { type: string; id: string },
   before: Record<string, unknown> | null,
   after: Record<string, unknown> | null,
 ): Promise<void> {
-  if (!ctx.user || !ctx.activeOrgId) return;  // anonymous ops not audited
   await writeAuditEvent({
-    tenantId: ctx.activeOrgId,
-    actorUserId: ctx.user.id,
+    tenantId,
+    actorUserId,
     action,
     targetType: target.type,
     targetId: target.id,
@@ -1650,6 +2041,17 @@ export async function logAudit(
   });
 }
 ```
+
+> **Action naming convention:** `<entity>.<verb>` lowercase, e.g. `case.archive`, `stakeholder.archive`, `reconciliation.resolve`, `reconciliation.bulk_resolve`. Future audit query/filter relies on this.
+
+> **Runbook (compliance review):** to query who did what:
+> ```cypher
+> MATCH (a:AuditEvent {tenantId: $tenantId})
+> WHERE a.actorUserId = $userId AND a.ts >= datetime() - duration({days: 30})
+> RETURN a ORDER BY a.ts DESC LIMIT 100;
+> ```
+>
+> **Retention:** AuditEvent has NO TTL — append-only. Implement retention policy before scale (e.g., `MATCH (a:AuditEvent) WHERE a.ts < datetime() - duration({years: 2}) DETACH DELETE a`). Track in CLAUDE.md.
 
 - [ ] **Step 5: Apply migration**
 
@@ -1676,9 +2078,9 @@ git commit -m "feat(audit): m014 AuditEvent schema + audits/ folder + logAudit h
 - Modify: `apps/backend/src/cases/resolvers.ts` — archiveCase
 - Modify: `apps/backend/src/stakeholders/resolvers.ts` — archiveStakeholder
 
-- [ ] **Step 1: Each resolver — capture before, do op, capture after, log**
+- [ ] **Step 1: Each resolver — capture before, do op, capture after, log via primitives**
 
-Pattern for each:
+Pattern for each (note `logAudit` takes primitives extracted from ctx, NOT ctx itself):
 
 ```typescript
 // Example: archiveCase
@@ -1686,11 +2088,16 @@ import { logAudit } from '../audits/log.js';
 
 archiveCase: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {
   assertOrgRole(ctx, 'ADMIN');
-  const before = await findCase(ctx.activeOrgId!, args.id);
-  const after = await archiveCase(ctx.activeOrgId!, args.id);
-  await logAudit(ctx, 'case.archive', { type: 'Case', id: args.id },
+  // assertOrgRole narrows ctx — user + activeOrgId guaranteed non-null after this
+  const before = await findCase(ctx.activeOrgId, args.id);
+  const after = await archiveCase(ctx.activeOrgId, args.id);
+  await logAudit(
+    ctx.activeOrgId,
+    ctx.user.id,
+    'case.archive',
+    { type: 'Case', id: args.id },
     before ? { status: before.status } : null,
-    { status: after.status }
+    { status: after.status },
   );
   return after;
 },
@@ -1698,7 +2105,7 @@ archiveCase: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {
 
 Apply same pattern to:
 - `resolveRawStakeholder` (action: `reconciliation.resolve`, target type: `RawStakeholder`)
-- `bulkResolveRawStakeholders` (action: `reconciliation.bulk_resolve`, target type: `RawStakeholder`, target id: `'(bulk)'`, after: `{ count: returnedNumber }`)
+- `bulkResolveRawStakeholders` (action: `reconciliation.bulk_resolve`, target type: `RawStakeholder`, target id: `'(bulk)'`, after: `{ count: returnedNumber, rawIds: args.rawIds }`)
 - `archiveStakeholder` (action: `stakeholder.archive`, target type: `Stakeholder`)
 - `archiveCase` (action: `case.archive`, target type: `Case`)
 
@@ -1717,30 +2124,220 @@ git commit -m "feat(audit): wire logAudit into 4 sensitive ops (resolve, bulk-re
 
 ---
 
+## Task 19: CLAUDE.md updates (cache + audits + auth flow + retention)
+
+**Why:** Without docs, future devs re-invent cache, miss audit semantics, debug auth blindly. DX subagent flagged: `cache/`, `audits/`, and the cookie+CSRF round-trip are invisible without doc updates.
+
+**Files:**
+- Modify: `/Users/fathulikhsan/Project/Vuln/CLAUDE.md`
+
+- [ ] **Step 1: Append "Cache (Redis)" subsection**
+
+After the existing architectural intent block in CLAUDE.md, add:
+
+```markdown
+### Cache + ephemeral state (Redis)
+
+`apps/backend/src/cache/` is the single Redis surface. Never call ioredis directly outside this folder.
+
+- `redis.ts` — singleton client, lazy-init, `pingRedis()` for health
+- `index.ts` — `cacheGet/cacheSet/cacheDel/cacheWrap`. Use `cacheWrap(key, ttl, loader)` for cache-aside with single-flight (prevents stampede). Cache failures degrade to direct loader call — never throw on cache error.
+- `auth.ts` — typed wrappers for user + role lookups. Invalidate via `invalidateUser(id)` / `invalidateUserOrgRole(userId, orgId)` on every user/membership mutation.
+
+**Key namespace convention** (must match invalidator paths):
+- `auth:user:<userId>` — user record (60s TTL)
+- `auth:role:<userId>:<orgId>` — org role (60s TTL)
+- `auth:csrf:<userId>` — CSRF token (7d TTL)
+- `auth:refresh:<jti>` — refresh JTI primary (7d TTL)
+- `auth:refresh:grace:<jti>` — refresh grace slot (30s TTL)
+- `auth:fail:<email>:ip:<ip>` — login fail counter (15min TTL)
+- `auth:lock:<email>:ip:<ip>` — account lockout (15min TTL)
+
+Redis policy `volatile-lru` — only TTL'd keys are eviction-eligible. Auth keys are TTL'd, so they survive memory pressure unless their TTL expires.
+```
+
+- [ ] **Step 2: Append "Auth flow" subsection**
+
+```markdown
+### Auth flow (cookie + CSRF + refresh rotation)
+
+**Login** (`mutation login`):
+1. Server verifies password (argon2id + lockout check)
+2. Server issues 15min access JWT + 7d refresh JTI
+3. Server sets 3 cookies: `helyx_session` (HttpOnly access JWT), `helyx_csrf_token` (JS-readable CSRF), `helyx_refresh` (HttpOnly path=/graphql)
+4. Server stores CSRF in `auth:csrf:<userId>` and refresh JTI in `auth:refresh:<jti>`
+
+**Mutation request:**
+1. Browser auto-sends all cookies (SameSite=Strict)
+2. Frontend reads `helyx_csrf_token` cookie via JS, sends as `X-CSRF-Token` header
+3. Backend `csrfGuard` verifies header == cookie == server-stored CSRF (defense in depth)
+4. Resolver runs
+
+**401 on access expiry:**
+1. Frontend Apollo errorLink intercepts
+2. Calls `mutation refresh` with `helyx_refresh` cookie
+3. Server consumes refresh JTI atomically (Lua MOVE: primary→grace) and issues new access + new refresh + new CSRF
+4. Frontend retries original mutation
+
+**Bearer header (deprecated):**
+- `Authorization: Bearer <jwt>` still accepted in dual-mode for one release (Task 20 removes)
+- CSRF guard skips Bearer requests but sets `X-Helyx-Auth-Deprecation` response header
+- Tracked via prod metrics; removed when count drops to 0 for 7 consecutive days
+```
+
+- [ ] **Step 3: Append "Audit log (compliance)" subsection**
+
+```markdown
+### Audit log (`audits/`)
+
+`apps/backend/src/audits/` writes append-only `:AuditEvent` nodes to Neo4j. Wired to 4 sensitive ops as of Phase 3 (resolveRawStakeholder, bulkResolveRawStakeholders, archiveCase, archiveStakeholder). Standard: OWASP ASVS L2 V10.3.4.
+
+`logAudit(tenantId, actorUserId, action, target, before, after)` takes primitives (NOT ctx) per repo/resolver boundary. Action naming: `<entity>.<verb>` lowercase.
+
+**Completeness caveat:** audit write is NOT atomic with the audited operation. If audit fails (Redis/Neo4j blip), op succeeds un-audited. Acceptable per project policy; for higher integrity, future phase streams to dedicated append-only sink.
+
+**Retention:** AuditEvent has NO TTL — append-only forever. Implement retention policy before scaling:
+\`\`\`cypher
+MATCH (a:AuditEvent) WHERE a.ts < datetime() - duration({years: 2}) DETACH DELETE a;
+\`\`\`
+
+**Compliance query (who did what in last 30d):**
+\`\`\`cypher
+MATCH (a:AuditEvent {tenantId: $tenantId})
+WHERE a.actorUserId = $userId AND a.ts >= datetime() - duration({days: 30})
+RETURN a ORDER BY a.ts DESC LIMIT 100;
+\`\`\`
+```
+
+- [ ] **Step 4: Update Commands section**
+
+In CLAUDE.md's Commands block, change:
+```
+pnpm db:up                     # docker compose up -d neo4j
+```
+to:
+```
+pnpm db:up                     # docker compose up -d neo4j redis
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add CLAUDE.md
+git commit -m "docs(claude): cache + auth flow + audit log + retention sections"
+```
+
+---
+
+## Task 20: Bearer removal — exit criteria + commit
+
+**Why:** Plan deprecates Bearer in dual-mode but original draft never said WHEN to remove it. Without explicit criteria, Bearer support persists forever (CSRF permanently exempted for Bearer requests).
+
+**This task does NOT execute as part of Phase 3 commits.** It defines the criteria + the future commit. Execute only after monitoring confirms zero Bearer usage.
+
+**Files (when triggered):**
+- Modify: `apps/backend/src/auth/context.ts` — remove Bearer fallback in `extractToken`
+- Modify: `apps/backend/src/index.ts` — remove `Authorization` from CORS allowedHeaders + remove Bearer skip in `csrfGuard` + drop `X-Helyx-Auth-Deprecation` setter
+- Modify: `apps/web/src/api/apollo.ts` — already cookie-only after Task 13
+
+### Exit criteria (ALL must be true)
+
+- [ ] **A. Frontend migration verified.** No `Authorization: Bearer` header observed in `nginx`/Vite proxy access logs for **7 consecutive days** following Task 13 deploy. Run:
+  ```bash
+  # Adjust to your actual log path
+  awk '/POST .*\/graphql/ && /Authorization: Bearer/' /var/log/nginx/access.log* | wc -l
+  ```
+  Expected: `0`.
+
+- [ ] **B. Deprecation header count zero in prod metrics.** If pino logging captures `X-Helyx-Auth-Deprecation` response header counts (or you have request-tracing): grep prod logs for the deprecation header for 7 days. Count must be 0.
+  ```bash
+  grep -c "X-Helyx-Auth-Deprecation" /var/log/helyx/backend.log* | awk -F: '{sum+=$2} END {print sum}'
+  ```
+  Expected: `0`.
+
+- [ ] **C. No internal scripts/CI use Bearer.** Audit:
+  ```bash
+  rg -l "Authorization.*Bearer" /Users/fathulikhsan/Project/Vuln --type-add 'config:*.{yml,yaml,json,sh,env*}' --type config --type ts
+  ```
+  Expected: zero matches outside the Phase 3 plan/audit doc itself.
+
+### Removal commit (when A+B+C met)
+
+```typescript
+// apps/backend/src/auth/context.ts — extractToken simplifies to:
+import { readSessionCookie } from './cookie.js';
+
+function extractToken(req: import('express').Request): string | null {
+  return readSessionCookie(req);
+}
+```
+
+```typescript
+// apps/backend/src/index.ts CSRF guard:
+//   REMOVE: the entire `if (req.headers.authorization?.startsWith('Bearer '))` block
+//   REMOVE: 'Authorization' from cors allowedHeaders
+//   REMOVE: 'X-Helyx-Auth-Deprecation' from cors exposedHeaders
+```
+
+- [ ] **Verification after removal commit**
+
+```bash
+# Bearer header now rejected — should return 401 (no session cookie)
+curl -s -X POST http://localhost:4000/graphql \
+  -H "Authorization: Bearer xxx" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"mutation { archiveStakeholder(id: \"x\") { id } }"}' \
+  -i | head -5
+```
+Expected: `HTTP/1.1 401` with body `{"errors":[{"message":"no session cookie present...","extensions":{"code":"CSRF_NO_SESSION"}}]}`.
+
+- [ ] **Commit**
+
+```bash
+git commit -m "feat(auth): remove deprecated Bearer header support — cookie-only auth (exit criteria met)"
+```
+
+> **Estimated activation date:** 7-14 days after Task 13 frontend deploy. Track in TODOS.md or open a calendar reminder. Do NOT pre-emptively land this task during Phase 3 — frontend migration must be in production first.
+
+---
+
 ## Self-Review Checklist (post-write)
 
-**Spec coverage:**
-- [x] Phase A: Redis foundation → Tasks 1-4 (service + client + cache + health)
+**Spec coverage (post-/autoplan revision):**
+- [x] Phase 0: Express migration → Task 0.5 (gating — Apollo standalone → expressMiddleware)
+- [x] Phase A: Redis foundation → Tasks 1-4 (service [volatile-lru, db:up alias, .env.example] + client + cache + health)
 - [x] Phase B: Auth perf cache → Tasks 5-6 (cached lookups + invalidation)
 - [x] Phase C: Race fixes → Tasks 7-9 (3 races: bulkIoc, resolve, createCase)
-- [x] Phase D: Cookie + CSRF → Tasks 10-13 (helpers, middleware, login flow, frontend)
-- [x] Phase E: Hardening → Tasks 14-16 (depth/cost/intro, rate-limit/lockout, refresh+pino)
-- [x] Phase F: Audit log → Tasks 17-18 (schema + helper + 4 wire-ups)
+- [x] Phase D: Cookie + CSRF → Tasks 10-13 (helpers, middleware [CORS, AST detect, error codes], login flow, frontend [+ localStorage cleanup])
+- [x] Phase D-bis: Frontend silent refresh → Task 13b (Apollo errorLink + REFRESH_EXPIRED routing)
+- [x] Phase E: Hardening → Tasks 14-16 (depth/cost/intro, rate-limit [JSON 429] + lockout [email+IP key, generic msg], refresh [Lua atomic move] + pino)
+- [x] Phase F: Audit log → Tasks 17-18 (schema + helper [primitives signature] + runbook + 4 wire-ups)
+- [x] Phase G: Documentation → Task 19 (CLAUDE.md cache + auth flow + audit + commands)
+- [x] Phase H: Bearer removal → Task 20 (exit criteria + commit, runs ~7-14d post-Task 13)
 
 **No placeholders verified.** Each step has full code (Cypher, TS, shell).
 
 **Type/symbol consistency:**
-- `getRedis()` exported from `cache/redis.ts`, used in `cache/index.ts`, `security/rate-limit.ts`, `security/lockout.ts`, `auth/csrf.ts` ✓
+- `getRedis()` exported from `cache/redis.ts`, used in `cache/index.ts`, `security/rate-limit.ts`, `security/lockout.ts`, `auth/jwt.ts` (Lua eval), `auth/csrf.ts` ✓
 - `cacheWrap`/`cacheGet`/`cacheSet`/`cacheDel` consistent across all consumers ✓
-- `RequestContext` requires `req` and `res` — Task 11 calls out the context-builder modification needed ✓
-- `logAudit(ctx, action, target, before, after)` signature consistent in Task 17 + Task 18 ✓
+- `RequestContext { req, res }` extension established in Task 0.5; downstream tasks reference `ctx.res` directly ✓
+- `logAudit(tenantId, actorUserId, action, target, before, after)` signature consistent in Task 17 def + Task 18 wire — primitives only, no ctx ✓
+- `lockoutKey(email, ip)` helper in lockout.ts; callsite in Task 15 Step 5 uses it ✓
+- CSRF error codes consistent: `CSRF_NO_SESSION` / `CSRF_MISSING_HEADER` / `CSRF_COOKIE_MISMATCH` / `CSRF_SESSION_MISMATCH` / `CSRF_SESSION_EXPIRED` / `REFRESH_EXPIRED` (Task 11 backend, Task 13b frontend) ✓
+- ENV vars: `REDIS_URL`, `COOKIE_SECURE`, `CORS_ORIGIN`, `TRUST_PROXY_HOPS` defined in Task 1, used in Tasks 10/11/15 ✓
 
-**Cross-task dependencies (parallelizable):**
-- Tasks 1-4 sequential (foundation)
-- After T4: T5+T6 (auth cache) AND T7+T8+T9 (race fixes — INDEPENDENT, no Redis needed) AND T14 (depth/cost/intro — independent) can run parallel
+**Cross-task dependencies + parallelization:**
+- **T0.5 must finish first** (Express substrate gates everything Express-middleware-based)
+- Tasks 1-4 sequential (Redis foundation)
+- After T4 completes: T5+T6 (auth cache) AND T7+T8+T9 (race fixes — no Redis needed) AND T14 (depth/cost/intro — no Redis needed) can run **parallel**
 - T10-T13 sequential (cookie/CSRF flow has internal dependencies)
+- T13b requires T13 + T16 done
 - T15-T16 require T2 (Redis client)
-- T17-T18 mostly independent of cookie work (audit can wire any time after T2)
+- T17-T18 mostly independent of cookie work (audit can wire any time after T2 + m014)
+- T19 (docs) runs LAST in this PR
+- T20 runs **post-deploy + 7-14 days** after T13 — NOT part of Phase 3 PR
+
+**Total tasks: 20** (was 18 pre-revision; +T0.5, +T13b, +T19, +T20 from /autoplan critical findings)
 
 ---
 
@@ -1753,3 +2350,117 @@ Plan complete and saved to `docs/superpowers/plans/2026-04-23-helyx-redis-auth-h
 **2. Inline Execution** — Execute tasks in this session using executing-plans, batch execution with checkpoints. Heavier on this session's context.
 
 **Which approach?** And: do you want me to run `/autoplan` on this plan first (CEO scope challenge + Eng arch review + dual voice with Codex)?
+
+---
+
+<!-- AUTONOMOUS DECISION LOG -->
+## /autoplan Review — Decision Audit Trail
+
+### Phase 1: CEO Review (subagent-only — Codex 402 deactivated_workspace)
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected option |
+|---|-------|----------|----------------|-----------|-----------|-----------------|
+| 1 | CEO | Premise 1 (Redis worth infra cost) ACCEPTED | Mechanical | P1+P5 | Single docker container unlocks 4 use cases (cache, rate-limit, lockout, future jobs). Leverage > cost is high. | Stay LRU (already deprecated by user pushback) |
+| 2 | CEO | Premise 5 (refresh rotation required) ACCEPTED | Mechanical | P1 | 7d access token = 7d compromise window. Modern best practice. | Single 7d access token |
+| 3 | CEO | Audit log destination challenged | **USER CHALLENGE** | — | Subagent flags: writing audit to Neo4j hot-path = write amplification. Recommends time-series DB / object store / log aggregator. **Surfaced at gate.** | Audit to Neo4j as plan |
+| 4 | CEO | Plan splitting (3 PRs vs 1) challenged | **USER CHALLENGE** | — | Subagent recommends split: Redis+cache, then cookie+CSRF, then audit. Reduces blast radius + reviewer burden. **Surfaced at gate.** | Combined PR as written |
+| 5 | CEO | Lockout error message leaks attempts | Mechanical (security) | P1 | "Invalid credentials (3 attempts remaining)" tells attacker exactly when to back off. Standard practice = generic msg until lockout. **AUTO-FIX in Task 15.** | Keep current message |
+| 6 | CEO | Redis allkeys-lru evicting auth keys | Mechanical | P1 | maxmemory-policy `allkeys-lru` can evict CSRF/refresh keys silently → mystery 403s. **AUTO-FIX: partition (separate noevict policy for `auth:*` namespace) OR drop maxmemory limit, OR move to Redis with `volatile-lru` (only TTL keys evicted).** Decision: switch to `volatile-lru` so persistent keys (auth:*) are protected when their TTL is set. | Keep `allkeys-lru` |
+| 7 | CEO | Rate limit 100/min/IP too aggressive for analyst | Taste | P3 | Analysts run heavy graph queries during hunts. 100/min triggers on legitimate use. **AUTO-FIX: bump to 300/min/IP, 1000/min/user.** Numbers are tunable per ops feedback later. | Keep 100/500 |
+| 8 | CEO | CSRF via double-submit possibly overkill | Taste | P5 | Modern SameSite=Strict on same-origin SPA defeats most CSRF. Double-submit adds 2 Redis round-trips per mutation. **DECISION: keep double-submit per defense-in-depth (P1)** — overhead is 1ms, value is real. Don't auto-fix. | Drop CSRF, rely SameSite alone |
+| 9 | CEO | **15-min access token but NO frontend auto-refresh loop in plan** | **CRITICAL — MUST FIX** | P1 | Subagent caught: backend issues 15min access + 7d refresh, but Task 13 frontend doesn't wire silent refresh. Users get 401 every 15min. **AUTO-FIX: add Task 13b — Apollo errorLink intercepts 401, calls refresh mutation, retries failed query.** | Ship without auto-refresh |
+| 10 | CEO | OAuth2/OIDC scope deferred (already in #23) | Mechanical | P3 | Already explicitly out of scope per plan + task #23. Confirm. | Add to this plan |
+| 11 | CEO | Job queue (BullMQ) deferred | Mechanical | P3 | Redis enables it but not required for Phase 3 deliverables. Add to TODOS. | Include in this plan |
+
+### Premise Gate Resolutions (user confirmed)
+
+| # | Premise | User decision | Standard chosen |
+|---|---------|---------------|-----------------|
+| 2 | Cookie+CSRF worth migration burden? | ACCEPTED — "secure by design", defense vs unknown zero-day | OWASP ASVS L2 + ISO 27001 alignment (BSSN/TNI-ready) |
+| 4 | Audit log needed now? | ACCEPTED — best practice baseline | OWASP ASVS L2 V8 (data protection / V10 (logging) |
+
+### Phase 3: Eng Review (subagent-only, Codex 402)
+
+| # | Phase | Decision | Classification | Principle | Rationale | Action |
+|---|-------|----------|----------------|-----------|-----------|--------|
+| 12 | Eng | Refresh token grace move NOT atomic | **CRITICAL — MUST FIX** | P1 | Eng subagent caught: `consumeRefreshToken` does GET → SET grace → DEL primary in 3 separate Redis ops. Process death between SET and DEL leaves replay window. | **Fix Task 16: replace with Redis Lua MULTI/EXEC script for atomic move** |
+| 13 | Eng | Frontend 401 auto-refresh interceptor not in plan | **CRITICAL** | P1 | Both subagents caught (CEO #9 + Eng). 15-min access token w/o silent refresh = users see 401 every 15 min. | **Add Task 13b: Apollo errorLink intercepts 401 → calls refresh mutation → retries failed query** |
+| 14 | Eng | Bearer removal exit criteria undefined | **CRITICAL** | P1 | Plan says "dual-mode 1 release then drop" but doesn't define WHICH commit removes Bearer. Risk: Bearer support persists indefinitely (CSRF permanently exempted). | **Add Task 19: explicit removal commit after frontend migration verified (no Bearer in Vite proxy logs for 7 days)** |
+| 15 | Eng | `ctx.res` not in current `RequestContext` type | HIGH | P5 | Task 12 calls `setSessionCookie(ctx.res, ...)` but current type has no `res`. Will TS-error at compile. | **Make explicit step in Task 11: extend RequestContext to include req+res. Update buildContext to pass them through.** |
+| 16 | Eng | CORS config missing for `credentials: 'include'` | HIGH | P1 | Cross-origin cookies need `Access-Control-Allow-Origin: <exact>` + `Allow-Credentials: true`. Currently `startStandaloneServer` has no CORS config. | **Add to Task 11: install `cors` package, configure with explicit origin allowlist (env-driven)** |
+| 17 | Eng | `trust proxy` not set for rate limiter | HIGH | P1 | Behind nginx/Cloudflare, `req.ip` = proxy IP → all clients share one bucket → first 300 req lock everyone. | **Add to Task 15: `app.set('trust proxy', 1)` + document `TRUST_PROXY_HOPS` env var** |
+| 18 | Eng | Login lockout DoS on targeted accounts | HIGH | P1 | Lockout key = `email:<addr>` only. Attacker knows email → fails 5x → victim locked out. | **Fix Task 15: change key to combined `email:<addr>:ip:<ip>` (or add progressive delay before hard lockout). Per OWASP ASVS L2 V2.2.1.** |
+| 19 | Eng | `startStandaloneServer` → Express migration not called out | HIGH | P5 | Plan implies `app.use(...)` but current code uses Apollo standalone. Whole Express setup needs explicit task. | **Add Task 0.5: migrate to Express + `expressMiddleware` (must precede cookie/CSRF work)** |
+| 20 | Eng | CSRF detection via string `startsWith('mutation')` | MEDIUM | P5 | Brittle: anonymous ops, leading whitespace, multi-op docs all break. | **Fix Task 11: use ApolloServerPlugin `requestDidStart` hook to inspect parsed `OperationDefinitionNode.operation === 'mutation'` instead** |
+| 21 | Eng | `secure: isProd` cookie footgun in staging | MEDIUM | P3 | If `NODE_ENV=production` locally, secure=true requires HTTPS. Vite dev proxy is HTTP → cookie never arrives. | **Fix Task 10: add `COOKIE_SECURE` env override** |
+| 22 | Eng | Audit write in separate tx — not atomic with op | MEDIUM | P5 | If op succeeds but audit fails, sensitive op un-audited. Per OWASP ASVS L2 V10.3.4 logging completeness. | **Document explicitly: "audit completeness not guaranteed — degraded if Redis/Neo4j fails mid-write." Add Task 17 note. For higher integrity: stream to separate append-only sink later (Phase ∞).** |
+| 23 | Eng | Task 1 docker-compose still shows `allkeys-lru` despite Decision #6 fix | MEDIUM | P5 | Lazy commit — fix wasn't applied to actual Task 1. | **Edit Task 1 step 1: change `--maxmemory-policy allkeys-lru` to `--maxmemory-policy volatile-lru`** |
+| 24 | Eng | Cross-instance cache stampede (single-flight per-process) | LOW | P3 | 4 instances × cache miss = 4 Neo4j hits. Acceptable for user lookup (cheap query). | **Document as known limitation in Task 3. Add scale gate note: "if expanding to deeper entities, add Redis SETNX distributed lock first."** |
+
+### Phase 3.5: DX Review (subagent-only)
+
+| # | Phase | Decision | Classification | Principle | Rationale | Action |
+|---|-------|----------|----------------|-----------|-----------|--------|
+| 25 | DX | `pnpm db:up` doesn't include Redis | HIGH | P5 | DX caught: setup silently degrades. New dev wastes 20 min. | **Fix Task 1: update package.json `db:up` to start neo4j+redis.** |
+| 26 | DX | `.env.example` missing REDIS_URL line | HIGH | P5 | Defaults in code don't tell devs what's required. | **Fix Task 1: add REDIS_URL line to .env.example with default + comment.** |
+| 27 | DX | CSRF errors return same generic `'CSRF token mismatch'` for 3 distinct failure modes | **CRITICAL** | P1 | DX caught: dev can't distinguish missing-header vs cookie-mismatch vs server-mismatch vs Redis-expired. Debugging hell. | **Fix Task 11: use `extensions.code` per failure: CSRF_MISSING_HEADER / CSRF_COOKIE_MISMATCH / CSRF_SESSION_MISMATCH / CSRF_SESSION_EXPIRED.** |
+| 28 | DX | Refresh expiry not intercepted on frontend | HIGH | P1 | Apollo errorLink in Task 13 only handles 401 access expiry, not refresh expiry. Silent logout. | **Fix Task 13b (combined with CEO #9 + Eng #13): errorLink branches REFRESH_EXPIRED → /login w/ toast.** |
+| 29 | DX | `logAudit(ctx, ...)` violates repo/resolver boundary per CLAUDE.md | HIGH | P5 | DX caught: CLAUDE.md prohibits passing RequestContext into repo functions. Plan's helper takes ctx directly. Background jobs can't audit. | **Fix Task 17: change signature to `logAudit(tenantId, actorUserId, action, target, before, after)`. Each callsite extracts from ctx after assertOrgRole.** |
+| 30 | DX | Rate limit returns plain HTML 429 — Apollo can't parse | HIGH | P1 | Apollo errorLink expects GraphQL error JSON. 429 from express-rate-limit defaults = unhelpful network error. | **Fix Task 15: add custom `handler` returning JSON `{ errors: [{ message, extensions: { code: 'RATE_LIMITED', retryAfter } }] }`.** |
+| 31 | DX | `cache/`, `audits/`, auth-flow not in CLAUDE.md | HIGH | P5 | Future devs won't discover the abstractions → re-invent. | **Add to plan: a final "Task 19: CLAUDE.md updates" — document `cache/`, `audits/`, auth flow round-trip, deprecation timeline.** |
+| 32 | DX | No localStorage clear on cookie cutover | HIGH | P3 | Old `localStorage.token` persists indefinitely after migration. Confuses future debuggers. | **Fix Task 13: add `localStorage.removeItem('token')` to logout + boot-time cleanup if cookie absent.** |
+| 33 | DX | Task 19 (Bearer removal exit criteria) not written into plan body | **CRITICAL** | P1 | Eng+DX both flagged. Plan has audit log entry but no actual Task 19 with code. | **Write Task 19: explicit removal criteria + commit instructions.** |
+| 34 | DX | Task 1 docker-compose still has `allkeys-lru` despite Decision #6 | MEDIUM | P5 | Lazy commit. Already flagged in Eng #23. | **Edit Task 1: change to `volatile-lru`.** |
+| 35 | DX | No CORS package wired for `credentials: 'include'` | HIGH | P1 | DX confirms Eng #16. Cross-origin cookies need explicit CORS. | **Fix Task 11: install `cors`, configure with env-driven origin allowlist.** |
+| 36 | DX | Audit query runbook missing | MEDIUM | P5 | SRE/compliance reviewer has no Cypher template. | **Add to Task 17 doc: example Cypher to query AuditEvents by user/date.** |
+| 37 | DX | AuditEvent retention not specified | MEDIUM | P3 | Append-only forever = unbounded growth. | **Add Task 17 note: retention policy decision deferred (default no TTL); add WARNING in CLAUDE.md.** |
+| 38 | DX | No Redis metrics / hit rate observability | MEDIUM | P5 | `/health` returns boolean only. SRE can't monitor cache effectiveness. | **Add Task 4 doc note: SRE runbook for `redis-cli INFO stats`. Future task: emit hit/miss to pino logger.** |
+| 39 | DX | `cacheWrap` key namespace convention not in JSDoc | LOW | P5 | Future devs may invent inconsistent keys → invalidation orphans. | **Add JSDoc with @example to cache/index.ts cacheWrap.** |
+
+---
+
+## Cross-Phase Themes
+
+**Theme 1 — Deferred-detail risk (CRITICAL).** All 3 phases (CEO + Eng + DX) caught the same pattern: **decisions logged in audit but never applied to actual Task code**. Specifically Tasks 13b (silent refresh) and 19 (Bearer removal) are referenced in audit but absent from plan body. Same for `volatile-lru` fix (Decision #6 vs Task 1 yaml).
+
+**Theme 2 — Frontend deployment risk (HIGH).** CORS, silent refresh, error codes, localStorage cleanup all interact. Frontend dev needs concrete handoff or this PR breaks the web app.
+
+**Theme 3 — Operational observability gap (MEDIUM).** Redis health binary, no metrics export, no audit query runbook, no retention. SRE/compliance can't operate this system without additional runbooks.
+
+
+---
+
+## /autoplan Revision Summary (applied 2026-05-06)
+
+Plan revised after `/autoplan` review caught CRITICAL gaps. All HIGH+ findings baked into task body:
+
+| Finding (severity) | Source | Applied as |
+|---|---|---|
+| Express migration not called out | Eng #19 | **Task 0.5 NEW** — Express + expressMiddleware (gating) |
+| `volatile-lru` instead of `allkeys-lru` | CEO #6 + Eng #23 + DX #11 | Task 1 yaml updated |
+| `pnpm db:up` doesn't include Redis | DX #6 | Task 1 root package.json + .env.example added |
+| 4 envs centralized (REDIS_URL, COOKIE_SECURE, CORS_ORIGIN, TRUST_PROXY_HOPS) | DX #6 | Task 1 config.ts + .env.example |
+| RequestContext extension explicit | Eng #15 | Task 0.5 makes it concrete (was parenthetical) |
+| CSRF mutation detection via AST not string | Eng #20 | Task 11 uses `graphql.parse` + `OperationDefinitionNode.operation === 'mutation'` |
+| 5 distinct CSRF error codes via `extensions.code` | DX #3 | Task 11 csrfErr() helper + 5 codes |
+| CORS package wired with credentials + exact origin | Eng #16 + DX #5 | Task 11 adds cors install + config |
+| `trust proxy` set | Eng #17 | Task 11 boot uses `app.set('trust proxy', config.TRUST_PROXY_HOPS)` |
+| **Task 13b silent refresh — Apollo errorLink** | CEO #9 + Eng #13 + DX #1 | **Task 13b NEW** — full errorLink with single-flight refresh + retry + REFRESH_EXPIRED routing |
+| localStorage cleanup migration | DX #10 | Task 13 step 2 + main.ts boot cleanup |
+| Rate limit JSON 429 handler | DX #8 | Task 15 jsonRateLimitHandler |
+| Rate limit numbers bumped 100→300/IP, 500→1000/user | CEO #7 | Task 15 rate-limit.ts |
+| Lockout key = email+IP (DoS defense) | Eng #18 | Task 15 lockoutKey() helper |
+| Lockout error message generic (no attempt count) | CEO #5 | Task 15 step 5 — OWASP ASVS L2 V2.2.1 |
+| **Refresh token atomic move via Lua** | Eng #12 | **Task 16** — ATOMIC_MOVE_LUA script replaces 3-op race |
+| `REFRESH_EXPIRED` code (was `INVALID_REFRESH`) | DX #28 | Task 16 + Task 13b consistent |
+| `logAudit` takes primitives, not ctx | DX #4 | Task 17 signature change + Task 18 callsites updated |
+| Audit retention + runbook documented | DX #36 + #37 | Task 17 doc block + Task 19 CLAUDE.md |
+| **Task 19 NEW — CLAUDE.md cache+auth+audit sections** | DX #31 | Task 19 written |
+| **Task 20 NEW — Bearer removal exit criteria** | Eng #14 + DX #33 | Task 20 written with A/B/C exit criteria |
+
+**Tasks added: 4 (T0.5, T13b, T19, T20). Total now: 20.**
+
+**Standard chosen (per user "kalo mau nerapin standard tertentu, boleh juga sih kamu bebas pilih"):** OWASP ASVS L2 baseline (V2 auth, V3 session, V4 access control, V8 data protection, V10 logging) + ISO 27001 / SNI ISO 27001 alignment for Indonesian gov customer compliance ask.
+
+**Voice source:** `[subagent-only]` — Codex 402 deactivated_workspace.
+
