@@ -11,6 +11,7 @@ import { attackPatternResolvers } from '../attack-patterns/resolvers.js';
 import { cweResolvers } from '../cwes/resolvers.js';
 import { huntResolvers } from '../hunts/resolvers.js';
 import { tacticResolvers } from '../tactics/resolvers.js';
+import { stakeholderResolvers } from '../stakeholders/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -38,6 +39,7 @@ export const resolvers = {
     ...cweResolvers.Query,
     ...huntResolvers.Query,
     ...tacticResolvers.Query,
+    ...stakeholderResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -45,6 +47,7 @@ export const resolvers = {
     ...assetResolvers.Mutation,
     ...sbomResolvers.Mutation,
     ...huntResolvers.Mutation,
+    ...stakeholderResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,
@@ -57,4 +60,6 @@ export const resolvers = {
   CweDetail: cweResolvers.CweDetail,
   Hunt: huntResolvers.Hunt,
   HuntFindings: huntResolvers.HuntFindings,
+  Stakeholder: stakeholderResolvers.Stakeholder,
+  Sektor: stakeholderResolvers.Sektor,
 };
