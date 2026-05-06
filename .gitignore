@@ -19,3 +19,6 @@ COPILOT.md
 .helyx/
 docs/audits/
 .claude/
+
+# Local symlinks to sibling repos (developer convenience, see COLLABORATE.md)
+landing-page
