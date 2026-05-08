@@ -73,4 +73,13 @@ export const cveTypeDefs = /* GraphQL */ `
     cve(id: ID!): CveDetail
     tenantCves(filter: TenantCveFilterInput, page: Int = 1, perPage: Int = 25): TenantCvePage!
   }
+
+  # Stakeholder→OWNS→Asset→...→CVE fields, declared here so cves module owns
+  # the dependency on TenantCvePage/MatchMode without forcing stakeholder
+  # schema to import cve types.
+  extend type Stakeholder {
+    cveCount(mode: MatchMode = EXACT): Int!
+    cves(mode: MatchMode = EXACT, severity: String, search: String, page: Int = 1, perPage: Int = 25): TenantCvePage!
+    assetCount: Int!
+  }
 `;

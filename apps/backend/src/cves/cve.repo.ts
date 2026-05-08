@@ -1,6 +1,6 @@
 import { getSession } from '../db/neo4j.js';
 import type { MatchMode } from '../assets/types.js';
-import { TENANT_CVE_BASE } from './cypher.js';
+import { TENANT_CVE_BASE, STAKEHOLDER_CVE_BASE } from './cypher.js';
 
 export interface CveDetail {
   id: string;
@@ -222,6 +222,92 @@ export async function countTenantCves(
          AND ($search IS NULL OR cve.id CONTAINS toUpper($search))
        RETURN count(DISTINCT cve) AS total`,
       { tenantId, severity: filter.severity ?? null, search: filter.search ?? null },
+    );
+    return Number(r.records[0]?.get('total') ?? 0);
+  } finally {
+    await session.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stakeholder-rooted CVE chain: Stakeholder→OWNS→Asset→...→CVE
+// ---------------------------------------------------------------------------
+
+export async function listStakeholderCves(
+  tenantId: string,
+  stakeholderId: string,
+  mode: MatchMode,
+  filter: TenantCveFilter,
+  page: number,
+  perPage: number,
+): Promise<TenantCveRow[]> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `${STAKEHOLDER_CVE_BASE[mode]}
+       WITH cve, count(DISTINCT a) AS assetCount
+       WHERE ($severity IS NULL OR cve.cvssV31BaseSeverity = $severity)
+         AND ($search IS NULL OR cve.id CONTAINS toUpper($search))
+       RETURN cve.id AS cveId, cve.description AS description,
+              cve.cvssV31BaseSeverity AS severity, cve.cvssV31BaseScore AS score,
+              toString(cve.publishedAt) AS publishedAt, assetCount
+       ORDER BY coalesce(cve.cvssV31BaseScore, 0) DESC, cve.id DESC
+       SKIP $skip LIMIT $limit`,
+      {
+        tenantId,
+        stakeholderId,
+        severity: filter.severity ?? null,
+        search: filter.search ?? null,
+        skip: BigInt(Math.max(0, (page - 1) * perPage)),
+        limit: BigInt(perPage),
+      },
+    );
+    return r.records.map((rec) => ({
+      cveId: rec.get('cveId') as string,
+      description: (rec.get('description') as string | null) ?? null,
+      severity: (rec.get('severity') as string | null) ?? null,
+      baseScore: (rec.get('score') as number | null) ?? null,
+      publishedAt: (rec.get('publishedAt') as string | null) ?? null,
+      affectedAssetCount: Number(rec.get('assetCount')),
+    }));
+  } finally {
+    await session.close();
+  }
+}
+
+export async function countStakeholderCves(
+  tenantId: string,
+  stakeholderId: string,
+  mode: MatchMode,
+  filter: TenantCveFilter,
+): Promise<number> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `${STAKEHOLDER_CVE_BASE[mode]}
+       WITH cve
+       WHERE ($severity IS NULL OR cve.cvssV31BaseSeverity = $severity)
+         AND ($search IS NULL OR cve.id CONTAINS toUpper($search))
+       RETURN count(DISTINCT cve) AS total`,
+      { tenantId, stakeholderId, severity: filter.severity ?? null, search: filter.search ?? null },
+    );
+    return Number(r.records[0]?.get('total') ?? 0);
+  } finally {
+    await session.close();
+  }
+}
+
+export async function countStakeholderAssets(
+  tenantId: string,
+  stakeholderId: string,
+): Promise<number> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (k:Stakeholder {id: $stakeholderId, tenantId: $tenantId})
+       OPTIONAL MATCH (k)-[:OWNS]->(a:Asset {tenantId: $tenantId})
+       RETURN count(a) AS total`,
+      { tenantId, stakeholderId },
     );
     return Number(r.records[0]?.get('total') ?? 0);
   } finally {

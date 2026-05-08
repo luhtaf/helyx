@@ -70,7 +70,7 @@ export const resolvers = {
   CweDetail: cweResolvers.CweDetail,
   Hunt: huntResolvers.Hunt,
   HuntFindings: huntResolvers.HuntFindings,
-  Stakeholder: stakeholderResolvers.Stakeholder,
+  Stakeholder: { ...stakeholderResolvers.Stakeholder, ...cveResolvers.Stakeholder },
   Sektor: stakeholderResolvers.Sektor,
   RawStakeholder: reconciliationResolvers.RawStakeholder,
   Case: caseResolvers.Case,

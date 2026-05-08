@@ -4,11 +4,14 @@ import { findAssetById } from '../assets/assets.repo.js';
 import type { MatchMode } from '../assets/types.js';
 import {
   countAffectedAssets,
+  countStakeholderAssets,
+  countStakeholderCves,
   countTenantCves,
   getCve,
   listAffectedAssets,
   listCveReferences,
   listCveWeaknesses,
+  listStakeholderCves,
   listTenantCves,
   type AffectedAssetRow,
   type CveDetail,
@@ -81,5 +84,44 @@ export const cveResolvers = {
       findAssetById(parent.__tenantId, parent.__row.assetId),
     componentPurl: (parent: { __row: AffectedAssetRow }) => parent.__row.componentPurl,
     matchMode: (parent: { __row: AffectedAssetRow }) => parent.__row.matchMode,
+  },
+
+  // Stakeholder→OWNS→Asset→...→CVE field resolvers. Live in cves module
+  // because they own the CVE chain logic. Auth: VIEWER suffices (read-only).
+  Stakeholder: {
+    cveCount: async (
+      parent: { id: string },
+      args: { mode?: MatchMode },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const mode: MatchMode = args.mode ?? 'EXACT';
+      return countStakeholderCves(ctx.activeOrgId, parent.id, mode, { severity: null, search: null });
+    },
+
+    cves: async (
+      parent: { id: string },
+      args: { mode?: MatchMode; severity?: string | null; search?: string | null; page?: number; perPage?: number },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const page = clampPage(args.page);
+      const perPage = clampPerPage(args.perPage, 25, 100);
+      const mode: MatchMode = args.mode ?? 'EXACT';
+      const filter: TenantCveFilter = {
+        severity: args.severity ?? null,
+        search: args.search ?? null,
+      };
+      const [items, total] = await Promise.all([
+        listStakeholderCves(ctx.activeOrgId, parent.id, mode, filter, page, perPage),
+        countStakeholderCves(ctx.activeOrgId, parent.id, mode, filter),
+      ]);
+      return { items, total, page, perPage };
+    },
+
+    assetCount: async (parent: { id: string }, _args: unknown, ctx: RequestContext) => {
+      assertOrgRole(ctx, 'VIEWER');
+      return countStakeholderAssets(ctx.activeOrgId, parent.id);
+    },
   },
 };
