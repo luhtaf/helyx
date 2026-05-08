@@ -8,22 +8,39 @@ import type { RawStakeholderRow, ReconciliationStatus, SuggestionRow } from './t
 // Row helper
 // ---------------------------------------------------------------------------
 
+const RAW_RETURN = `
+  r.id AS id,
+  r.source AS source,
+  r.rawName AS rawName,
+  r.normalizedKey AS normalizedKey,
+  r.rawSektor AS rawSektor,
+  r.hitCount AS hitCount,
+  r.targetCount AS targetCount,
+  toString(r.lastSeen) AS lastSeen,
+  r.status AS status,
+  r.confidence AS confidence,
+  r.resolvedBy AS resolvedBy,
+  toString(r.resolvedAt) AS resolvedAt
+`;
+
 function rowToRaw(rec: { get: (k: string) => unknown }): RawStakeholderRow {
-  const r = rec.get('r') as Record<string, unknown>;
   const resolvedToId = rec.get('resolvedToId') as string | null;
+  const hitCount = rec.get('hitCount') as number | bigint | null;
+  const targetCount = rec.get('targetCount') as number | bigint | null;
+  const confidence = rec.get('confidence') as number | bigint | null;
   return {
-    id: r.id as string,
-    source: r.source as string,
-    rawName: r.rawName as string,
-    normalizedKey: r.normalizedKey as string,
-    rawSektor: (r.rawSektor as string) ?? null,
-    hitCount: Number(r.hitCount ?? 0),
-    targetCount: Number(r.targetCount ?? 0),
-    lastSeen: String(r.lastSeen),
-    status: (r.status as ReconciliationStatus) ?? 'PENDING',
-    confidence: r.confidence != null ? Number(r.confidence) : null,
-    resolvedBy: (r.resolvedBy as string) ?? null,
-    resolvedAt: r.resolvedAt != null ? String(r.resolvedAt) : null,
+    id: rec.get('id') as string,
+    source: rec.get('source') as string,
+    rawName: rec.get('rawName') as string,
+    normalizedKey: rec.get('normalizedKey') as string,
+    rawSektor: (rec.get('rawSektor') as string | null) ?? null,
+    hitCount: Number(hitCount ?? 0),
+    targetCount: Number(targetCount ?? 0),
+    lastSeen: rec.get('lastSeen') as string,
+    status: (rec.get('status') as ReconciliationStatus) ?? 'PENDING',
+    confidence: confidence != null ? Number(confidence) : null,
+    resolvedBy: (rec.get('resolvedBy') as string | null) ?? null,
+    resolvedAt: (rec.get('resolvedAt') as string | null) ?? null,
     resolvedToId: resolvedToId ?? null,
   };
 }
@@ -42,10 +59,9 @@ export async function listRawStakeholders(
     const r = await session.run(
       `MATCH (r:RawStakeholder)
        WHERE r.tenantId = $tenantId AND r.status = $status
-       OPTIONAL MATCH (r)-[:RESOLVED_TO]->(resolved:Stakeholder)
-       WHERE resolved.tenantId = $tenantId
-       RETURN r, resolved.id AS resolvedToId
-       ORDER BY r.hitCount DESC, r.lastSeen DESC
+       OPTIONAL MATCH (r)-[:RESOLVED_TO]->(resolved:Stakeholder {tenantId: $tenantId})
+       RETURN ${RAW_RETURN}, resolved.id AS resolvedToId
+       ORDER BY hitCount DESC, lastSeen DESC
        LIMIT $first`,
       { tenantId, status, first: BigInt(first) },
     );
@@ -64,9 +80,8 @@ export async function findRawStakeholder(
     const r = await session.run(
       `MATCH (r:RawStakeholder {id: $id})
        WHERE r.tenantId = $tenantId
-       OPTIONAL MATCH (r)-[:RESOLVED_TO]->(resolved:Stakeholder)
-       WHERE resolved.tenantId = $tenantId
-       RETURN r, resolved.id AS resolvedToId`,
+       OPTIONAL MATCH (r)-[:RESOLVED_TO]->(resolved:Stakeholder {tenantId: $tenantId})
+       RETURN ${RAW_RETURN}, resolved.id AS resolvedToId`,
       { tenantId, id },
     );
     const rec = r.records[0];
@@ -155,9 +170,8 @@ export async function resolveRawStakeholder(
       const result = await tx.run(
         `MATCH (r:RawStakeholder {id: $rawId})
          WHERE r.tenantId = $tenantId
-         OPTIONAL MATCH (r)-[:RESOLVED_TO]->(resolved:Stakeholder)
-         WHERE resolved.tenantId = $tenantId
-         RETURN r, resolved.id AS resolvedToId`,
+         OPTIONAL MATCH (r)-[:RESOLVED_TO]->(resolved:Stakeholder {tenantId: $tenantId})
+         RETURN ${RAW_RETURN}, resolved.id AS resolvedToId`,
         { rawId, tenantId },
       );
       return rowToRaw(result.records[0]!);
@@ -222,9 +236,8 @@ export async function rejectRawStakeholder(
       const result = await tx.run(
         `MATCH (r:RawStakeholder {id: $rawId})
          WHERE r.tenantId = $tenantId
-         OPTIONAL MATCH (r)-[:RESOLVED_TO]->(resolved:Stakeholder)
-         WHERE resolved.tenantId = $tenantId
-         RETURN r, resolved.id AS resolvedToId`,
+         OPTIONAL MATCH (r)-[:RESOLVED_TO]->(resolved:Stakeholder {tenantId: $tenantId})
+         RETURN ${RAW_RETURN}, resolved.id AS resolvedToId`,
         { rawId, tenantId },
       );
       return rowToRaw(result.records[0]!);
