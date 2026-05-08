@@ -76,7 +76,68 @@ function removeNode(nodeIdToRemove: string): void {
   totalNodes.value = cy.value.nodes().length;
 }
 
-defineExpose({ addNodes, clearGraph, relayoutAll, removeNode, getNodeCount: () => totalNodes.value });
+// Snapshot the current graph state for save-as-hunt: nodes (id, type, label,
+// data, position), edges (id, source, target, edgeType, label), viewport.
+// Position preserved so re-load doesn't relayout — user-pinned positions
+// survive.
+interface SnapshotShape {
+  nodes: Array<{ id: string; type: string; label: string; entityId: string; data: Record<string, unknown>; position: { x: number; y: number }; locked: boolean }>;
+  edges: Array<{ id: string; source: string; target: string; edgeType: string; label: string }>;
+  viewport: { zoom: number; pan: { x: number; y: number } };
+}
+function getSnapshot(): SnapshotShape {
+  if (!cy.value) return { nodes: [], edges: [], viewport: { zoom: 1, pan: { x: 0, y: 0 } } };
+  const cy_ = cy.value;
+  const nodes = cy_.nodes().map((n) => {
+    const d = n.data() as { id: string; type: string; label: string; entityId: string };
+    return {
+      id: d.id,
+      type: d.type,
+      label: d.label,
+      entityId: d.entityId,
+      data: { ...n.data() },
+      position: { ...n.position() },
+      locked: n.locked(),
+    };
+  });
+  const edges = cy_.edges().map((e) => {
+    const d = e.data() as { id: string; source: string; target: string; edgeType: string; label?: string };
+    return { id: d.id, source: d.source, target: d.target, edgeType: d.edgeType, label: d.label ?? '' };
+  });
+  return {
+    nodes,
+    edges,
+    viewport: { zoom: cy_.zoom(), pan: { ...cy_.pan() } },
+  };
+}
+
+// Inverse of getSnapshot: clear the graph and reconstruct from saved JSON.
+// Skips layout (positions are explicit). Locks nodes that were previously
+// locked. Restores viewport.
+function loadSnapshot(snap: SnapshotShape): void {
+  if (!cy.value) return;
+  const cy_ = cy.value;
+  cy_.elements().remove();
+  for (const n of snap.nodes) {
+    const added = cy_.add({
+      group: 'nodes',
+      data: n.data,
+      position: n.position,
+    });
+    if (n.locked) added.lock();
+  }
+  for (const e of snap.edges) {
+    cy_.add({
+      group: 'edges',
+      data: { id: e.id, source: e.source, target: e.target, edgeType: e.edgeType, label: e.label },
+    });
+  }
+  cy_.zoom(snap.viewport.zoom);
+  cy_.pan(snap.viewport.pan);
+  totalNodes.value = cy_.nodes().length;
+}
+
+defineExpose({ addNodes, clearGraph, relayoutAll, removeNode, getNodeCount: () => totalNodes.value, getSnapshot, loadSnapshot });
 
 // ─── event wiring (after cy is mounted) ───
 watch(cy, (instance) => {

@@ -1,5 +1,5 @@
 import { computed } from 'vue';
-import { useMutation, useQuery } from '@vue/apollo-composable';
+import { useApolloClient, useMutation, useQuery } from '@vue/apollo-composable';
 import gql from 'graphql-tag';
 
 const HUNTS_LIST = gql`
@@ -11,6 +11,7 @@ const HUNTS_LIST = gql`
       items {
         id
         name
+        kind
         status
         createdAt
         targetActorCount
@@ -60,6 +61,7 @@ const DELETE_HUNT = gql`
 export interface HuntListItem {
   id: string;
   name: string;
+  kind: 'STRUCTURED' | 'GRAPH';
   status: string;
   createdAt: string;
   targetActorCount: number;
@@ -127,4 +129,116 @@ export function useDeleteHunt() {
     return Boolean(res?.data?.deleteHunt);
   }
   return { submit, loading, error };
+}
+
+// ─── G2: Graph-kind hunt save/load + cross-entity search ──────────────
+
+const SAVE_GRAPH_AS_HUNT = gql`
+  mutation SaveGraphAsHunt($input: SaveGraphAsHuntInput!) {
+    saveGraphAsHunt(input: $input) {
+      id name kind graphSnapshot graphSeedType graphSeedId createdAt
+    }
+  }
+`;
+
+const UPDATE_HUNT_SNAPSHOT = gql`
+  mutation UpdateHuntSnapshot($id: ID!, $snapshot: String!) {
+    updateHuntSnapshot(id: $id, snapshot: $snapshot) { id updatedAt }
+  }
+`;
+
+const SEARCH_ENTITIES = gql`
+  query SearchEntities($q: String!, $first: Int) {
+    searchEntities(q: $q, first: $first) { type id label detail }
+  }
+`;
+
+export interface SaveGraphAsHuntInput {
+  name: string;
+  snapshot: string;
+  seedType?: string | null;
+  seedId?: string | null;
+}
+
+export function useSaveGraphAsHunt() {
+  const { mutate, loading, error } = useMutation<
+    { saveGraphAsHunt: { id: string; name: string; graphSnapshot: string | null } },
+    { input: SaveGraphAsHuntInput }
+  >(SAVE_GRAPH_AS_HUNT, () => ({
+    refetchQueries: ['Hunts'],
+    awaitRefetchQueries: true,
+  }));
+  async function submit(input: SaveGraphAsHuntInput) {
+    const r = await mutate({ input });
+    return r?.data?.saveGraphAsHunt ?? null;
+  }
+  return { submit, loading, error };
+}
+
+export function useUpdateHuntSnapshot() {
+  const { mutate, loading, error } = useMutation<
+    { updateHuntSnapshot: { id: string; updatedAt: string } },
+    { id: string; snapshot: string }
+  >(UPDATE_HUNT_SNAPSHOT);
+  async function submit(id: string, snapshot: string) {
+    const r = await mutate({ id, snapshot });
+    return r?.data?.updateHuntSnapshot ?? null;
+  }
+  return { submit, loading, error };
+}
+
+export interface SearchResult {
+  type: 'Stakeholder' | 'Asset' | 'CVE' | 'Case';
+  id: string;
+  label: string;
+  detail: string | null;
+}
+
+export function useSearchEntities() {
+  // Lazy: caller debounces. Returns search() bound to the active Apollo
+  // client. fetchPolicy:'no-cache' so each keystroke gets fresh results.
+  const { client } = useApolloClient();
+  return {
+    async search(q: string, first = 10): Promise<SearchResult[]> {
+      if (!q.trim()) return [];
+      const r = await client.query({
+        query: SEARCH_ENTITIES,
+        variables: { q: q.trim(), first },
+        fetchPolicy: 'no-cache',
+      });
+      return ((r.data as { searchEntities?: SearchResult[] })?.searchEntities) ?? [];
+    },
+  };
+}
+
+// Hunt detail extended w/ snapshot fields for graph-kind hunts.
+const HUNT_GRAPH_DETAIL = gql`
+  query HuntGraphDetail($id: ID!) {
+    hunt(id: $id) {
+      id name kind status createdAt updatedAt
+      graphSnapshot graphSeedType graphSeedId
+    }
+  }
+`;
+
+export interface HuntGraphDetail {
+  id: string;
+  name: string;
+  kind: 'STRUCTURED' | 'GRAPH';
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt: string;
+  updatedAt: string;
+  graphSnapshot: string | null;
+  graphSeedType: string | null;
+  graphSeedId: string | null;
+}
+
+export function useHuntGraph(id: () => string | null | undefined) {
+  const { result, loading, error, refetch } = useQuery<{ hunt: HuntGraphDetail | null }>(
+    HUNT_GRAPH_DETAIL,
+    () => ({ id: id() ?? '' }),
+    () => ({ enabled: Boolean(id()), fetchPolicy: 'cache-and-network' }),
+  );
+  const hunt = computed(() => result.value?.hunt ?? null);
+  return { hunt, loading, error, refetch };
 }

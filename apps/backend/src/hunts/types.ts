@@ -1,15 +1,27 @@
 export type HuntStatus = 'ACTIVE' | 'ARCHIVED';
+export type HuntKind = 'STRUCTURED' | 'GRAPH';
 
 export interface HuntRecord {
   id: string;
   tenantId: string;
   name: string;
+  kind: HuntKind;
   status: HuntStatus;
   createdAt: string;
   updatedAt: string;
   createdByUserId: string | null;
   targetActorCount: number;
   scopedAssetCount: number;
+  graphSnapshot: string | null;
+  graphSeedType: string | null;
+  graphSeedId: string | null;
+}
+
+export interface SearchEntityResult {
+  type: string;
+  id: string;
+  label: string;
+  detail: string | null;
 }
 
 export interface HuntActorRef {

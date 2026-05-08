@@ -11,10 +11,14 @@ import type {
 
 const HUNT_RETURN = `
   h.id AS id, h.tenantId AS tenantId, h.name AS name, h.status AS status,
+  coalesce(h.kind, 'STRUCTURED') AS kind,
   toString(h.createdAt) AS createdAt, toString(h.updatedAt) AS updatedAt,
   head([(u:User)-[:CREATED]->(h) | u.id]) AS createdByUserId,
   size([(h)-[:TARGETS]->(:IntrusionSet) | 1]) AS targetActorCount,
-  size([(h)-[:SCOPED_TO]->(:Asset) | 1]) AS scopedAssetCount
+  size([(h)-[:SCOPED_TO]->(:Asset) | 1]) AS scopedAssetCount,
+  h.graphSnapshot AS graphSnapshot,
+  h.graphSeedType AS graphSeedType,
+  h.graphSeedId AS graphSeedId
 `;
 
 function rowToHunt(rec: { get: (k: string) => unknown }): HuntRecord {
@@ -22,12 +26,16 @@ function rowToHunt(rec: { get: (k: string) => unknown }): HuntRecord {
     id: rec.get('id') as string,
     tenantId: rec.get('tenantId') as string,
     name: rec.get('name') as string,
+    kind: (rec.get('kind') as HuntRecord['kind']) ?? 'STRUCTURED',
     status: rec.get('status') as HuntStatus,
     createdAt: rec.get('createdAt') as string,
     updatedAt: rec.get('updatedAt') as string,
     createdByUserId: (rec.get('createdByUserId') as string | null) ?? null,
     targetActorCount: Number(rec.get('targetActorCount') ?? 0),
     scopedAssetCount: Number(rec.get('scopedAssetCount') ?? 0),
+    graphSnapshot: (rec.get('graphSnapshot') as string | null) ?? null,
+    graphSeedType: (rec.get('graphSeedType') as string | null) ?? null,
+    graphSeedId: (rec.get('graphSeedId') as string | null) ?? null,
   };
 }
 
@@ -264,6 +272,139 @@ export async function listTopCves(tenantId: string, huntId: string, limit: numbe
       baseScore: (rec.get('score') as number | null) ?? null,
       affectedAssetCount: Number(rec.get('affectedAssetCount') ?? 0),
     }));
+  } finally {
+    await session.close();
+  }
+}
+
+// ─── G2: Graph-kind hunt + cross-entity search ──────────────────────
+
+export interface SaveGraphHuntInput {
+  tenantId: string;
+  userId: string;
+  name: string;
+  snapshot: string;
+  seedType: string | null;
+  seedId: string | null;
+}
+
+export async function saveGraphAsHunt(input: SaveGraphHuntInput): Promise<HuntRecord> {
+  const id = newId();
+  const session = getSession();
+  try {
+    return await session.executeWrite(async (tx) => {
+      const r = await tx.run(
+        `MATCH (u:User {id: $userId})
+         CREATE (h:Hunt {
+           id: $id, tenantId: $tenantId, name: $name,
+           kind: 'GRAPH', status: 'ACTIVE',
+           graphSnapshot: $snapshot,
+           graphSeedType: $seedType, graphSeedId: $seedId,
+           createdAt: datetime(), updatedAt: datetime()
+         })
+         CREATE (u)-[:CREATED]->(h)
+         RETURN ${HUNT_RETURN}`,
+        { id, ...input },
+      );
+      return rowToHunt(r.records[0]!);
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+export async function updateHuntSnapshot(
+  tenantId: string,
+  id: string,
+  snapshot: string,
+): Promise<HuntRecord | null> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (h:Hunt {id: $id, tenantId: $tenantId})
+       WHERE coalesce(h.kind, 'STRUCTURED') = 'GRAPH'
+       SET h.graphSnapshot = $snapshot, h.updatedAt = datetime()
+       RETURN ${HUNT_RETURN}`,
+      { id, tenantId, snapshot },
+    );
+    const rec = r.records[0];
+    return rec ? rowToHunt(rec) : null;
+  } finally {
+    await session.close();
+  }
+}
+
+// Cross-entity search for graph search-add. Tenant-scoped; case-insensitive
+// substring match on name/slug/cveId across 4 entity types. Limit per type
+// to avoid one type swamping the result set.
+export async function searchEntities(
+  tenantId: string,
+  q: string,
+  perTypeLimit: number,
+): Promise<Array<{ type: string; id: string; label: string; detail: string | null }>> {
+  if (!q.trim()) return [];
+  const session = getSession();
+  const needle = q.toLowerCase().trim();
+  try {
+    // 4 small queries instead of one giant UNION — easier to maintain, and
+    // each entity has different label/detail mapping.
+    const [stake, asset, cve, kase] = await Promise.all([
+      session.run(
+        `MATCH (s:Stakeholder {tenantId: $tenantId})
+         WHERE toLower(s.name) CONTAINS $q OR toLower(s.slug) CONTAINS $q
+         RETURN s.id AS id, s.name AS label, s.slug AS detail
+         LIMIT $limit`,
+        { tenantId, q: needle, limit: BigInt(perTypeLimit) },
+      ),
+      session.run(
+        `MATCH (a:Asset {tenantId: $tenantId})
+         WHERE toLower(a.name) CONTAINS $q OR toLower(coalesce(a.hostname, '')) CONTAINS $q
+         RETURN a.id AS id, a.name AS label, a.hostname AS detail
+         LIMIT $limit`,
+        { tenantId, q: needle, limit: BigInt(perTypeLimit) },
+      ),
+      session.run(
+        `MATCH (cve:CVE)
+         WHERE toUpper(cve.id) CONTAINS toUpper($q)
+         RETURN cve.id AS id, cve.id AS label,
+                cve.cvssV31BaseSeverity AS detail
+         LIMIT $limit`,
+        { q: needle, limit: BigInt(perTypeLimit) },
+      ),
+      session.run(
+        `MATCH (c:Case {tenantId: $tenantId})
+         WHERE toLower(c.reportNo) CONTAINS $q OR toLower(coalesce(c.title, '')) CONTAINS $q
+         RETURN c.id AS id, c.reportNo AS label, c.title AS detail
+         LIMIT $limit`,
+        { tenantId, q: needle, limit: BigInt(perTypeLimit) },
+      ),
+    ]);
+    return [
+      ...stake.records.map((r) => ({
+        type: 'Stakeholder',
+        id: r.get('id') as string,
+        label: r.get('label') as string,
+        detail: (r.get('detail') as string | null) ?? null,
+      })),
+      ...asset.records.map((r) => ({
+        type: 'Asset',
+        id: r.get('id') as string,
+        label: r.get('label') as string,
+        detail: (r.get('detail') as string | null) ?? null,
+      })),
+      ...cve.records.map((r) => ({
+        type: 'CVE',
+        id: r.get('id') as string,
+        label: r.get('label') as string,
+        detail: (r.get('detail') as string | null) ?? null,
+      })),
+      ...kase.records.map((r) => ({
+        type: 'Case',
+        id: r.get('id') as string,
+        label: r.get('label') as string,
+        detail: (r.get('detail') as string | null) ?? null,
+      })),
+    ];
   } finally {
     await session.close();
   }

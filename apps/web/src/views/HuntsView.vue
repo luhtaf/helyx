@@ -36,7 +36,10 @@ function fmtDate(s: string): string {
           intersect selected actors × selected inventory · ttp + cve correlation
         </p>
       </div>
-      <Button variant="primary" size="sm" @click="router.push('/hunts/new')">+ new hunt</Button>
+      <div class="flex items-center gap-2">
+        <Button variant="ghost" size="sm" @click="router.push('/graph')">+ open graph hunt</Button>
+        <Button variant="primary" size="sm" @click="router.push('/hunts/new')">+ structured hunt</Button>
+      </div>
     </header>
 
     <SectionRule label="hunts">
@@ -52,14 +55,29 @@ function fmtDate(s: string): string {
         :key="hunt.id"
         class="border-l-2 border-rule-strong pl-4 py-3 hover:border-ink-dim transition"
       >
-        <RouterLink :to="`/hunts/${hunt.id}`" class="block group">
+        <RouterLink
+          :to="hunt.kind === 'GRAPH' ? { name: 'graph', query: { hunt: hunt.id } } : { path: `/hunts/${hunt.id}` }"
+          class="block group"
+        >
           <div class="flex items-baseline justify-between gap-4">
-            <span class="text-[14px] text-ink group-hover:text-signal transition">
-              {{ hunt.name }}
-            </span>
+            <div class="flex items-baseline gap-3 min-w-0">
+              <span
+                :class="[
+                  'shrink-0 font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-sm border',
+                  hunt.kind === 'GRAPH'
+                    ? 'border-signal/40 text-signal'
+                    : 'border-rule-strong text-ink-faint',
+                ]"
+              >{{ hunt.kind === 'GRAPH' ? 'graph' : 'structured' }}</span>
+              <span class="text-[14px] text-ink group-hover:text-signal transition truncate">
+                {{ hunt.name }}
+              </span>
+            </div>
             <div class="flex items-baseline gap-4 shrink-0 font-mono text-[11px] tabular-nums text-ink-faint">
-              <span>{{ hunt.targetActorCount }} actor{{ hunt.targetActorCount === 1 ? '' : 's' }}</span>
-              <span>{{ hunt.scopedAssetCount }} asset{{ hunt.scopedAssetCount === 1 ? '' : 's' }}</span>
+              <template v-if="hunt.kind === 'STRUCTURED'">
+                <span>{{ hunt.targetActorCount }} actor{{ hunt.targetActorCount === 1 ? '' : 's' }}</span>
+                <span>{{ hunt.scopedAssetCount }} asset{{ hunt.scopedAssetCount === 1 ? '' : 's' }}</span>
+              </template>
             </div>
           </div>
           <p class="mt-1 font-mono text-[10px] text-ink-faint">

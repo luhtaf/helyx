@@ -14,6 +14,9 @@ import {
   listTargetActors,
   listTopCves,
   listTopTtps,
+  saveGraphAsHunt,
+  searchEntities,
+  updateHuntSnapshot,
 } from './repo.js';
 import type { HuntRecord } from './types.js';
 
@@ -21,6 +24,21 @@ const CreateHuntSchema = z.object({
   name: z.string().trim().min(1).max(160),
   targetActorIds: z.array(z.string().min(1)).default([]),
   scopedAssetIds: z.array(z.string().min(1)).default([]),
+});
+
+const SaveGraphAsHuntSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  // Cap snapshot at 512KB. Cytoscape JSON of 200 nodes + edges is well under
+  // 100KB; 512KB leaves headroom for huge hunts. Reject larger to prevent
+  // someone stuffing the DB.
+  snapshot: z.string().min(2).max(512 * 1024),
+  seedType: z.string().nullable().optional(),
+  seedId: z.string().nullable().optional(),
+});
+
+const UpdateSnapshotSchema = z.object({
+  id: z.string().min(1),
+  snapshot: z.string().min(2).max(512 * 1024),
 });
 
 function clampPage(raw: number | undefined): number {
@@ -56,6 +74,16 @@ export const huntResolvers = {
       ]);
       return { items, total, page, perPage };
     },
+
+    searchEntities: async (
+      _p: unknown,
+      args: { q: string; first?: number },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const perTypeLimit = clampLimit(args.first, 10, 25);
+      return searchEntities(ctx.activeOrgId, args.q, perTypeLimit);
+    },
   },
 
   Mutation: {
@@ -79,6 +107,44 @@ export const huntResolvers = {
       const ok = await deleteHunt(ctx.activeOrgId, args.id);
       if (!ok) throw notFound('hunt not found');
       return true;
+    },
+
+    saveGraphAsHunt: async (
+      _p: unknown,
+      args: { input: unknown },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      const input = SaveGraphAsHuntSchema.parse(args.input);
+      // Sanity-parse the snapshot — if it's not valid JSON, reject early.
+      try {
+        const parsed = JSON.parse(input.snapshot);
+        if (typeof parsed !== 'object' || parsed === null) {
+          throw badInput('snapshot must be a JSON object', 'snapshot');
+        }
+      } catch {
+        throw badInput('snapshot must be valid JSON', 'snapshot');
+      }
+      return saveGraphAsHunt({
+        tenantId: ctx.activeOrgId,
+        userId: ctx.user.id,
+        name: input.name,
+        snapshot: input.snapshot,
+        seedType: input.seedType ?? null,
+        seedId: input.seedId ?? null,
+      });
+    },
+
+    updateHuntSnapshot: async (
+      _p: unknown,
+      args: { id: string; snapshot: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      const input = UpdateSnapshotSchema.parse(args);
+      const updated = await updateHuntSnapshot(ctx.activeOrgId, input.id, input.snapshot);
+      if (!updated) throw notFound('graph hunt not found');
+      return updated;
     },
   },
 

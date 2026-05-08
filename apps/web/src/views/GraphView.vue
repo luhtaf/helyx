@@ -8,6 +8,7 @@
 import { ref, computed, watch, onMounted, useTemplateRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuery } from '@vue/apollo-composable';
+import { useDebounceFn } from '@vueuse/core';
 import gql from 'graphql-tag';
 import HelyxGraph from '@/components/graph/HelyxGraph.vue';
 import ContextMenu from '@/components/graph/ContextMenu.vue';
@@ -17,7 +18,9 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities } from '@/composables/useHunts';
 import Button from '@/components/ui/Button.vue';
+import Input from '@/components/ui/Input.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -37,6 +40,8 @@ function parseSeed(raw: string | null | undefined): ParsedSeed | null {
 }
 
 const seed = computed<ParsedSeed | null>(() => parseSeed(route.query.seed as string | undefined));
+// "empty" sentinel — open canvas with no seed node, only search-add available.
+const isEmptyCanvas = computed(() => route.query.seed === 'empty');
 
 // ─── Seed entity fetch (so we can render label) ─────────────────────
 const SEED_STAKEHOLDER = gql`query SeedStakeholder($id: ID!) { stakeholder(id: $id) { id slug name } }`;
@@ -85,20 +90,61 @@ const seedNode = computed<GraphNode | null>(() => {
   }
 });
 
+// ─── Hunt mode (?hunt=<id>) — load saved snapshot, auto-save changes ──
+const huntId = computed(() => (route.query.hunt as string | undefined) ?? null);
+const { hunt, loading: huntLoading } = useHuntGraph(() => huntId.value);
+const { submit: saveHunt } = useSaveGraphAsHunt();
+const { submit: updateSnapshot } = useUpdateHuntSnapshot();
+const { search: searchEntities } = useSearchEntities();
+
 // ─── Graph state ───────────────────────────────────────────────────
 const graphRef = useTemplateRef<InstanceType<typeof HelyxGraph>>('graphRef');
 const ctxMenu = ref<{ node: GraphNode; x: number; y: number } | null>(null);
 const selected = ref<GraphNode | null>(null);
 const ctxTransforms = computed<Transform[]>(() => ctxMenu.value ? transformsFor(ctxMenu.value.node.type) : []);
+const saveOpen = ref(false);
+const saveName = ref('');
+const saving = ref(false);
+const searchOpen = ref(false);
+const searchQ = ref('');
+const searchResults = ref<Awaited<ReturnType<typeof searchEntities>>>([]);
 
 // Push the seed node into the graph once both seed + cy are ready.
+// In hunt mode, loadHunt() takes priority over plantSeed.
 let seeded = false;
 async function plantSeed(): Promise<void> {
-  if (seeded || !seedNode.value || !graphRef.value) return;
+  if (seeded || !seedNode.value || !graphRef.value || huntId.value) return;
   await graphRef.value.addNodes([seedNode.value], []);
   seeded = true;
 }
 watch([seedNode, graphRef], plantSeed, { immediate: true });
+
+// Hunt mode: load saved snapshot once both hunt data + cy are ready.
+let huntLoaded = false;
+async function loadHunt(): Promise<void> {
+  if (huntLoaded || !huntId.value || !hunt.value || !graphRef.value) return;
+  if (hunt.value.kind !== 'GRAPH' || !hunt.value.graphSnapshot) {
+    showToast('Hunt is not graph-based', 'error');
+    return;
+  }
+  try {
+    const snap = JSON.parse(hunt.value.graphSnapshot);
+    graphRef.value.loadSnapshot(snap);
+    huntLoaded = true;
+  } catch (e) {
+    showToast('Failed to load hunt snapshot', 'error');
+  }
+}
+watch([hunt, graphRef], loadHunt, { immediate: true });
+
+// Auto-save: debounce 2s after any graph change. Only when in hunt mode
+// (URL has ?hunt=<id>). Otherwise the graph is ephemeral.
+const autoSave = useDebounceFn(async () => {
+  if (!huntId.value || !graphRef.value) return;
+  const snap = graphRef.value.getSnapshot();
+  if (snap.nodes.length === 0) return;
+  await updateSnapshot(huntId.value, JSON.stringify(snap));
+}, 2000);
 
 // 404 / permission path
 watch(seedError, (err) => {
@@ -128,7 +174,54 @@ async function onPick(transform: Transform): Promise<void> {
   const result = await runTransform(transform, parent);
   if (result.nodes.length > 0 || result.edges.length > 0) {
     await graphRef.value.addNodes(result.nodes, result.edges);
+    autoSave();  // no-op outside hunt mode
   }
+}
+
+// ─── Save as Hunt ─────────────────────────────────────────────────
+async function onSaveAsHunt(): Promise<void> {
+  if (!graphRef.value || !saveName.value.trim()) return;
+  saving.value = true;
+  try {
+    const snap = graphRef.value.getSnapshot();
+    const created = await saveHunt({
+      name: saveName.value.trim(),
+      snapshot: JSON.stringify(snap),
+      seedType: seed.value?.type ?? null,
+      seedId: seed.value?.id ?? null,
+    });
+    if (created) {
+      showToast(`Saved as "${created.name}"`, 'success');
+      saveOpen.value = false;
+      saveName.value = '';
+      // Switch URL into hunt mode so subsequent edits auto-save.
+      router.replace({ query: { ...route.query, hunt: created.id } });
+    }
+  } finally {
+    saving.value = false;
+  }
+}
+
+// ─── Search-add (empty canvas / mid-exploration add anything) ─────
+const triggerSearch = useDebounceFn(async (q: string) => {
+  searchResults.value = await searchEntities(q, 8);
+}, 250);
+watch(searchQ, (q) => triggerSearch(q));
+
+async function pickSearchResult(r: { type: string; id: string; label: string; detail: string | null }): Promise<void> {
+  if (!graphRef.value) return;
+  const node: GraphNode = {
+    id: nodeId(r.type as GraphNode['type'], r.id),
+    entityId: r.id,
+    type: r.type as GraphNode['type'],
+    label: r.label,
+    data: r.detail ? { detail: r.detail } : {},
+  };
+  await graphRef.value.addNodes([node], []);
+  searchOpen.value = false;
+  searchQ.value = '';
+  searchResults.value = [];
+  autoSave();
 }
 
 function onCapReached(payload: { current: number; cap: number }): void {
@@ -139,6 +232,7 @@ function onHide(): void {
   if (!ctxMenu.value || !graphRef.value) return;
   graphRef.value.removeNode(ctxMenu.value.node.id);
   selected.value = null;
+  autoSave();
 }
 
 // ─── Empty state — last 5 stakeholders for quick-pick ──────────────
@@ -163,14 +257,16 @@ onMounted(() => { void plantSeed(); });
 
 <template>
   <div class="fixed inset-0 top-0 left-[180px] right-0 bottom-0 z-10">
-    <!-- Empty state when no seed -->
-    <div v-if="!seed" class="h-full flex flex-col items-center justify-center px-12 text-center">
+    <!-- Empty state — only show if NO seed AND NO hunt AND not empty-canvas mode -->
+    <div v-if="!seed && !huntId && !isEmptyCanvas" class="h-full flex flex-col items-center justify-center px-12 text-center">
       <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint mb-3">graph explorer</p>
-      <h1 class="text-[22px] font-medium text-ink mb-2">Pick a seed entity</h1>
+      <h1 class="text-[22px] font-medium text-ink mb-2">Pick a seed or start fresh</h1>
       <p class="text-[13px] text-ink-dim max-w-[40ch] mb-8">
-        Open any stakeholder, asset, CVE, or case in graph mode to start exploring relationships.
-        Right-click any node to enrich it (Maltego-style transforms).
+        Pick an existing entity to seed exploration, or open an empty canvas and add anything via search.
       </p>
+      <div class="flex items-center gap-3 mb-8">
+        <Button variant="primary" @click="router.replace({ query: { ...route.query, seed: 'empty' } })">Open empty canvas</Button>
+      </div>
       <div v-if="recentStakeholders.length" class="space-y-1 w-full max-w-[360px]">
         <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2 text-left">recent stakeholders</p>
         <button
@@ -186,14 +282,25 @@ onMounted(() => { void plantSeed(); });
       </div>
     </div>
 
-    <!-- Graph with seed -->
+    <!-- Graph with seed OR hunt OR empty-canvas mode -->
     <template v-else>
       <header class="absolute top-4 left-4 right-4 z-20 flex items-baseline justify-between gap-4 pointer-events-none">
         <div class="bg-base/80 backdrop-blur-sm border border-rule-strong rounded-md px-3 py-1.5 pointer-events-auto">
-          <p class="font-mono text-[9px] uppercase tracking-wider text-ink-faint">seed</p>
-          <p class="font-mono text-[12px] text-ink mt-0.5">{{ seedNode?.label ?? seed.id }}</p>
+          <p class="font-mono text-[9px] uppercase tracking-wider text-ink-faint">
+            {{ huntId ? 'hunt' : (isEmptyCanvas ? 'empty canvas' : 'seed') }}
+          </p>
+          <p class="font-mono text-[12px] text-ink mt-0.5">
+            {{ huntId ? (hunt?.name ?? 'loading…') : (seedNode?.label ?? (isEmptyCanvas ? 'fresh start' : (seed?.id ?? '—'))) }}
+          </p>
+          <p v-if="huntId" class="font-mono text-[9px] text-ink-faint mt-0.5">
+            auto-saving · last edit {{ hunt?.updatedAt?.slice(11, 16) ?? '' }}
+          </p>
         </div>
-        <Button variant="ghost" class="pointer-events-auto" @click="graphRef?.relayoutAll()">Re-layout</Button>
+        <div class="flex items-center gap-2 pointer-events-auto">
+          <Button variant="ghost" @click="searchOpen = true">+ Add by search</Button>
+          <Button v-if="!huntId" variant="ghost" @click="saveOpen = true">Save as Hunt…</Button>
+          <Button variant="ghost" @click="graphRef?.relayoutAll()">Re-layout</Button>
+        </div>
       </header>
 
       <p
@@ -203,7 +310,7 @@ onMounted(() => { void plantSeed(); });
 
       <HelyxGraph
         ref="graphRef"
-        :seed-id="seed.id"
+        :seed-id="seed?.id ?? huntId ?? (isEmptyCanvas ? 'empty' : null)"
         :cap="200"
         @context-menu="(p) => (ctxMenu = p)"
         @node-selected="(n) => (selected = n)"
@@ -222,6 +329,67 @@ onMounted(() => { void plantSeed(); });
       />
 
       <NodeDetailDrawer :node="selected" @close="selected = null" />
+
+      <!-- Save as Hunt modal -->
+      <Teleport to="body">
+        <Transition
+          enter-active-class="transition-opacity duration-150"
+          enter-from-class="opacity-0"
+          leave-active-class="transition-opacity duration-150"
+          leave-to-class="opacity-0"
+        >
+          <div v-if="saveOpen" class="fixed inset-0 bg-base/60 backdrop-blur-sm z-40 flex items-center justify-center" @click="saveOpen = false">
+            <div class="w-[420px] bg-base border border-rule-strong rounded-md p-6" @click.stop>
+              <h3 class="text-[16px] text-ink mb-1">Save as Hunt</h3>
+              <p class="text-[12px] text-ink-dim mb-4">
+                Persist this graph state. Edits after save auto-save every 2s.
+              </p>
+              <Input v-model="saveName" label="Hunt name" placeholder="Investigation: Q3 LAN gov scan" required />
+              <div class="flex items-center gap-3 mt-5">
+                <Button variant="primary" :loading="saving" :disabled="!saveName.trim()" @click="onSaveAsHunt">Save</Button>
+                <Button variant="ghost" @click="saveOpen = false">Cancel</Button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <!-- Search-add modal -->
+      <Teleport to="body">
+        <Transition
+          enter-active-class="transition-opacity duration-150"
+          enter-from-class="opacity-0"
+          leave-active-class="transition-opacity duration-150"
+          leave-to-class="opacity-0"
+        >
+          <div v-if="searchOpen" class="fixed inset-0 bg-base/60 backdrop-blur-sm z-40 flex items-start justify-center pt-[120px]" @click="searchOpen = false">
+            <div class="w-[520px] bg-base border border-rule-strong rounded-md overflow-hidden" @click.stop>
+              <input
+                v-model="searchQ"
+                type="search"
+                autofocus
+                placeholder="Search any stakeholder, asset, CVE, case…"
+                class="w-full bg-transparent border-b border-rule-strong px-4 py-3 text-ink placeholder:text-ink-faint focus:outline-none font-mono text-[13px]"
+              />
+              <ul v-if="searchResults.length" class="max-h-[320px] overflow-y-auto py-1">
+                <li v-for="r in searchResults" :key="`${r.type}:${r.id}`">
+                  <button
+                    type="button"
+                    class="w-full text-left px-4 py-2 hover:bg-surface transition flex items-baseline gap-3"
+                    @click="pickSearchResult(r)"
+                  >
+                    <span class="font-mono text-[10px] uppercase tracking-wider text-ink-faint w-[80px] shrink-0">{{ r.type }}</span>
+                    <span class="text-ink truncate flex-1">{{ r.label }}</span>
+                    <span v-if="r.detail" class="font-mono text-[10px] text-ink-faint truncate max-w-[160px]">{{ r.detail }}</span>
+                  </button>
+                </li>
+              </ul>
+              <p v-else-if="searchQ" class="px-4 py-6 text-[12px] text-ink-faint italic">No matches.</p>
+              <p v-else class="px-4 py-6 text-[12px] text-ink-faint italic">Type to search across all entities in this org.</p>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
     </template>
   </div>
 </template>
