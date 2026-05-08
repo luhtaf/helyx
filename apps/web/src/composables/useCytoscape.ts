@@ -12,7 +12,7 @@
 //     `randomize: false` + `quality: 'proof'` for steady incremental.
 //   - We still lock untouched nodes around partial layout. Belt + braces.
 
-import { onBeforeUnmount, ref, watch, type Ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import cytoscape, {
   type Core,
   type ElementDefinition,
@@ -129,11 +129,22 @@ export function useCytoscape(seedKey: () => string | null): UseCytoscapeReturn {
   async function addElements(defs: ElementDefinition[]): Promise<void> {
     if (!cy.value || defs.length === 0) return;
     const existingNodeIds = new Set(cy.value.nodes().map((n: NodeSingular) => n.id()));
+    const wasEmpty = existingNodeIds.size === 0;
 
     // cy.add is idempotent on duplicate id (returns existing element). New
     // ids = strict additions.
     const added = cy.value.add(defs);
     const newNodes = added.filter((el) => el.isNode() && !existingNodeIds.has(el.id()));
+
+    if (wasEmpty && newNodes.length === 1) {
+      // Seed-only render: fcose can't position a single node meaningfully,
+      // and the default (0,0) sits at the top-left corner of the viewport.
+      // Center the camera + give the node a reasonable resting position.
+      const seed = newNodes[0];
+      seed.position({ x: 0, y: 0 });
+      cy.value.center();
+      return;
+    }
 
     // Lock all pre-existing nodes around incremental layout so they don't
     // drift (autoplan finding C1 — fcose doesn't preserve positions of
@@ -142,7 +153,7 @@ export function useCytoscape(seedKey: () => string | null): UseCytoscapeReturn {
     toLock.lock();
     try {
       if (newNodes.length > 0) {
-        await scheduleLayout(INCREMENTAL_LAYOUT_OPTS);
+        await scheduleLayout(wasEmpty ? FULL_LAYOUT_OPTS : INCREMENTAL_LAYOUT_OPTS);
       }
     } finally {
       toLock.unlock();
@@ -160,6 +171,13 @@ export function useCytoscape(seedKey: () => string | null): UseCytoscapeReturn {
   function reset(): void {
     init();
   }
+
+  // Initial mount: container is bound after first render. nextTick gives
+  // Vue a tick to attach the ref before we read containerRef.value.
+  onMounted(async () => {
+    await nextTick();
+    init();
+  });
 
   // Re-init when the seed key changes (route param flips). Vue may reuse
   // the component, so we can't rely on unmount/remount.
