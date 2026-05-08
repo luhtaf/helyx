@@ -337,75 +337,70 @@ export async function updateHuntSnapshot(
 // Cross-entity search for graph search-add. Tenant-scoped; case-insensitive
 // substring match on name/slug/cveId across 4 entity types. Limit per type
 // to avoid one type swamping the result set.
+//
+// Each type query uses its own session. Neo4j Session is single-statement —
+// running 4 parallel session.run() on one session throws "open transaction".
 export async function searchEntities(
   tenantId: string,
   q: string,
   perTypeLimit: number,
 ): Promise<Array<{ type: string; id: string; label: string; detail: string | null }>> {
   if (!q.trim()) return [];
-  const session = getSession();
   const needle = q.toLowerCase().trim();
+  const limit = BigInt(perTypeLimit);
+
+  async function runOne<T>(query: string, params: Record<string, unknown>, mapFn: (rec: { get: (k: string) => unknown }) => T): Promise<T[]> {
+    const s = getSession();
+    try {
+      const r = await s.run(query, params);
+      return r.records.map(mapFn);
+    } finally {
+      await s.close();
+    }
+  }
+
   try {
-    // 4 small queries instead of one giant UNION — easier to maintain, and
-    // each entity has different label/detail mapping.
     const [stake, asset, cve, kase] = await Promise.all([
-      session.run(
+      runOne(
         `MATCH (s:Stakeholder {tenantId: $tenantId})
          WHERE toLower(s.name) CONTAINS $q OR toLower(s.slug) CONTAINS $q
          RETURN s.id AS id, s.name AS label, s.slug AS detail
          LIMIT $limit`,
-        { tenantId, q: needle, limit: BigInt(perTypeLimit) },
+        { tenantId, q: needle, limit },
+        (rec) => ({ id: rec.get('id') as string, label: rec.get('label') as string, detail: (rec.get('detail') as string | null) ?? null }),
       ),
-      session.run(
+      runOne(
         `MATCH (a:Asset {tenantId: $tenantId})
          WHERE toLower(a.name) CONTAINS $q OR toLower(coalesce(a.hostname, '')) CONTAINS $q
          RETURN a.id AS id, a.name AS label, a.hostname AS detail
          LIMIT $limit`,
-        { tenantId, q: needle, limit: BigInt(perTypeLimit) },
+        { tenantId, q: needle, limit },
+        (rec) => ({ id: rec.get('id') as string, label: rec.get('label') as string, detail: (rec.get('detail') as string | null) ?? null }),
       ),
-      session.run(
+      runOne(
         `MATCH (cve:CVE)
          WHERE toUpper(cve.id) CONTAINS toUpper($q)
-         RETURN cve.id AS id, cve.id AS label,
-                cve.cvssV31BaseSeverity AS detail
+         RETURN cve.id AS id, cve.id AS label, cve.cvssV31BaseSeverity AS detail
          LIMIT $limit`,
-        { q: needle, limit: BigInt(perTypeLimit) },
+        { q: needle, limit },
+        (rec) => ({ id: rec.get('id') as string, label: rec.get('label') as string, detail: (rec.get('detail') as string | null) ?? null }),
       ),
-      session.run(
+      runOne(
         `MATCH (c:Case {tenantId: $tenantId})
          WHERE toLower(c.reportNo) CONTAINS $q OR toLower(coalesce(c.title, '')) CONTAINS $q
          RETURN c.id AS id, c.reportNo AS label, c.title AS detail
          LIMIT $limit`,
-        { tenantId, q: needle, limit: BigInt(perTypeLimit) },
+        { tenantId, q: needle, limit },
+        (rec) => ({ id: rec.get('id') as string, label: rec.get('label') as string, detail: (rec.get('detail') as string | null) ?? null }),
       ),
     ]);
     return [
-      ...stake.records.map((r) => ({
-        type: 'Stakeholder',
-        id: r.get('id') as string,
-        label: r.get('label') as string,
-        detail: (r.get('detail') as string | null) ?? null,
-      })),
-      ...asset.records.map((r) => ({
-        type: 'Asset',
-        id: r.get('id') as string,
-        label: r.get('label') as string,
-        detail: (r.get('detail') as string | null) ?? null,
-      })),
-      ...cve.records.map((r) => ({
-        type: 'CVE',
-        id: r.get('id') as string,
-        label: r.get('label') as string,
-        detail: (r.get('detail') as string | null) ?? null,
-      })),
-      ...kase.records.map((r) => ({
-        type: 'Case',
-        id: r.get('id') as string,
-        label: r.get('label') as string,
-        detail: (r.get('detail') as string | null) ?? null,
-      })),
+      ...stake.map((r) => ({ type: 'Stakeholder', ...r })),
+      ...asset.map((r) => ({ type: 'Asset', ...r })),
+      ...cve.map((r) => ({ type: 'CVE', ...r })),
+      ...kase.map((r) => ({ type: 'Case', ...r })),
     ];
-  } finally {
-    await session.close();
+  } catch (err) {
+    throw err;
   }
 }
