@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useQuery } from '@vue/apollo-composable';
-import gql from 'graphql-tag';
 import { useReconciliationInbox, type ReconciliationStatus } from '@/composables/useReconciliationInbox';
 import RawStakeholderRow from '@/components/reconciliation/RawStakeholderRow.vue';
 import CreateStakeholderSlide from '@/components/reconciliation/CreateStakeholderSlide.vue';
@@ -26,22 +24,9 @@ const focused = computed(() => raws.value[focusIdx.value] ?? null);
 
 watch(status, () => { focusIdx.value = 0; });
 
-// FORBIDDEN handler — watch the list query error for access-denied redirect
-const { error: listError } = useQuery(
-  gql`query RawStakeholdersProbe($status: ReconciliationStatus = PENDING) {
-    rawStakeholders(status: $status, first: 1) { id }
-  }`,
-  () => ({ status: status.value }),
-  () => ({ fetchPolicy: 'cache-and-network' }),
-);
-watch(listError, (e) => {
-  if (!e) return;
-  const code = (e as unknown as { graphQLErrors?: { extensions?: { code?: string } }[] }).graphQLErrors?.[0]?.extensions?.code;
-  if (code === 'FORBIDDEN') {
-    showToast('Anda tidak punya izin (ADMIN required)', 'error');
-    router.push({ name: 'dashboard', query: { reason: 'forbidden' } });
-  }
-});
+// FORBIDDEN handling: router guard from T0.5 already redirects VIEWERs before
+// they reach this view. Apollo errorLink in apollo.ts handles 401/REFRESH_EXPIRED
+// globally. No view-level probe query needed (saves a request burst per status change).
 
 async function pickSuggestion(idx: number): Promise<void> {
   const raw = focused.value;

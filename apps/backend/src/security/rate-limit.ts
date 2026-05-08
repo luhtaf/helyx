@@ -9,7 +9,11 @@ import { getRedis } from '../cache/redis.js';
 // Combined into ONE limiter (was 2 stacked before — caused ERR_ERL_DOUBLE_COUNT
 // because both limiters ran on /graphql and double-incremented per request).
 // Numbers tuned for analyst hunt workflows (heavy graph queries are normal).
-const MAX_PER_MIN = 1000;
+// Bumped from 1000 after Phase 1 UI verify — admin views (reconciliation inbox,
+// case detail) fire bursts of cache-and-network refetches + probe queries. 5000
+// gives plenty of headroom while still catching abuse. Per-user (when cookie
+// present), per-IP (otherwise via ipKeyGenerator).
+const MAX_PER_MIN = 5000;
 const WINDOW_MS = 60 * 1000;
 
 function jsonRateLimitHandler(_req: Request, res: Response): void {
