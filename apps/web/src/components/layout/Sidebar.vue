@@ -2,7 +2,7 @@
 import { computed, ref, watchEffect } from 'vue';
 import { useRouter } from 'vue-router';
 import { useApolloClient } from '@vue/apollo-composable';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, type OrgRole } from '@/stores/auth';
 import { useMe } from '@/composables/useAuth';
 
 const auth = useAuthStore();
@@ -17,7 +17,8 @@ const activeOrg = computed(() =>
 
 watchEffect(() => {
   if (organizations.value.length > 0 && !auth.activeOrgId) {
-    auth.setActiveOrg(organizations.value[0]!.id);
+    const first = organizations.value[0]!;
+    auth.setActiveOrg(first.id, first.myRole as OrgRole);
   }
 });
 
@@ -28,7 +29,8 @@ async function logout(): Promise<void> {
 }
 
 function switchOrg(orgId: string): void {
-  auth.setActiveOrg(orgId);
+  const org = organizations.value.find((o) => o.id === orgId);
+  auth.setActiveOrg(orgId, org ? (org.myRole as OrgRole) : null);
   showSwitcher.value = false;
   client.resetStore().catch(() => undefined);
 }
@@ -39,14 +41,27 @@ interface NavItem {
   exact?: boolean;
 }
 
-const navItems: NavItem[] = [
+const baseNavItems: NavItem[] = [
   { to: '/',              label: 'overview', exact: true },
   { to: '/assets',        label: 'inventory' },
   { to: '/cves',          label: 'vulnerabilities' },
+  { to: '/stakeholders',  label: 'stakeholders' },
+  { to: '/cases',         label: 'cases' },
   { to: '/techniques',    label: 'matrix' },
   { to: '/hunts',         label: 'hunt' },
   { to: '/threat-actors', label: 'actors' },
 ];
+
+const isAdminOrOwner = computed(() =>
+  auth.activeOrgRole === 'ADMIN' || auth.activeOrgRole === 'OWNER',
+);
+
+const navItems = computed<NavItem[]>(() => {
+  if (isAdminOrOwner.value) {
+    return [...baseNavItems, { to: '/admin/stakeholders/inbox', label: 'inbox' }];
+  }
+  return baseNavItems;
+});
 
 function isActive(item: NavItem, isActiveRoute: boolean, isExactRoute: boolean): boolean {
   return item.exact ? isExactRoute : isActiveRoute;

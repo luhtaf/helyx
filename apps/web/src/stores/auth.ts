@@ -8,25 +8,29 @@ export interface AuthUser {
   displayName: string;
 }
 
+export type OrgRole = 'OWNER' | 'ADMIN' | 'ANALYST' | 'VIEWER';
+
 interface PersistedAuth {
   user: AuthUser | null;
   activeOrgId: string | null;
+  activeOrgRole: OrgRole | null;
 }
 
 const STORAGE_KEY = 'helyx.auth';
 
 function loadFromStorage(): PersistedAuth {
-  if (typeof localStorage === 'undefined') return { user: null, activeOrgId: null };
+  if (typeof localStorage === 'undefined') return { user: null, activeOrgId: null, activeOrgRole: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { user: null, activeOrgId: null };
+    if (!raw) return { user: null, activeOrgId: null, activeOrgRole: null };
     const parsed = JSON.parse(raw) as Partial<PersistedAuth>;
     return {
       user: parsed.user ?? null,
       activeOrgId: parsed.activeOrgId ?? null,
+      activeOrgRole: parsed.activeOrgRole ?? null,
     };
   } catch {
-    return { user: null, activeOrgId: null };
+    return { user: null, activeOrgId: null, activeOrgRole: null };
   }
 }
 
@@ -39,10 +43,11 @@ export const useAuthStore = defineStore('auth', () => {
   const initial = loadFromStorage();
   const user = ref<AuthUser | null>(initial.user);
   const activeOrgId = ref<string | null>(initial.activeOrgId);
+  const activeOrgRole = ref<OrgRole | null>(initial.activeOrgRole);
 
   watch(
-    [user, activeOrgId],
-    () => persist({ user: user.value, activeOrgId: activeOrgId.value }),
+    [user, activeOrgId, activeOrgRole],
+    () => persist({ user: user.value, activeOrgId: activeOrgId.value, activeOrgRole: activeOrgRole.value }),
     { deep: true },
   );
 
@@ -52,18 +57,20 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = newUser;
   }
 
-  function setActiveOrg(orgId: string | null): void {
+  function setActiveOrg(orgId: string | null, role: OrgRole | null = null): void {
     activeOrgId.value = orgId;
+    activeOrgRole.value = role;
   }
 
   function logout(): void {
     user.value = null;
     activeOrgId.value = null;
+    activeOrgRole.value = null;
     // Clear any legacy token keys from localStorage
     localStorage.removeItem('token');
     localStorage.removeItem('helyx_token');
     localStorage.removeItem(STORAGE_KEY);
   }
 
-  return { user, activeOrgId, isAuthed, setAuth, setActiveOrg, logout };
+  return { user, activeOrgId, activeOrgRole, isAuthed, setAuth, setActiveOrg, logout };
 });

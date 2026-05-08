@@ -69,6 +69,12 @@ function severityRoute(sev: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW') {
 
 <template>
   <div class="px-12 py-10 max-w-[1080px] relative z-10">
+    <div
+      v-if="$route.query.reason === 'forbidden'"
+      class="border border-sev-crit/40 bg-sev-crit/10 px-4 py-2.5 text-[12px] text-sev-crit rounded-md mb-6"
+    >
+      Anda tidak punya izin untuk halaman tersebut.
+    </div>
     <header class="flex items-baseline justify-between border-b border-rule-strong pb-4 mb-12">
       <div class="font-mono text-[11px] uppercase tracking-[0.16em]">
         <span class="text-ink font-medium">{{ activeOrg?.name ?? 'helyx' }}</span>

@@ -67,6 +67,44 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Hunt' },
   },
   {
+    path: '/stakeholders',
+    name: 'stakeholders',
+    component: () => import('@/views/StakeholdersView.vue'),
+    meta: { title: 'Stakeholders' },
+  },
+  {
+    path: '/stakeholders/:id',
+    name: 'stakeholder-detail',
+    component: () => import('@/views/StakeholderDetailView.vue'),
+    props: true,
+    meta: { title: 'Stakeholder' },
+  },
+  {
+    path: '/admin/stakeholders/inbox',
+    name: 'reconciliation-inbox',
+    component: () => import('@/views/ReconciliationInboxView.vue'),
+    meta: { title: 'Reconciliation Inbox', requiresRole: 'ADMIN' },
+  },
+  {
+    path: '/cases',
+    name: 'cases',
+    component: () => import('@/views/CasesView.vue'),
+    meta: { title: 'Cases' },
+  },
+  {
+    path: '/cases/new',
+    name: 'case-new',
+    component: () => import('@/views/CaseCreateView.vue'),
+    meta: { title: 'New Case' },
+  },
+  {
+    path: '/cases/:id',
+    name: 'case-detail',
+    component: () => import('@/views/CaseDetailView.vue'),
+    props: true,
+    meta: { title: 'Case' },
+  },
+  {
     path: '/threat-actors',
     name: 'threat-actors',
     component: () => import('@/views/ThreatActorsView.vue'),
@@ -117,6 +155,8 @@ export const routes: RouteRecordRaw[] = [
 export function createAppRouter() {
   const router = createRouter({ history: createWebHistory(), routes });
 
+  const ROLE_RANK: Record<string, number> = { OWNER: 4, ADMIN: 3, ANALYST: 2, VIEWER: 1 };
+
   router.beforeEach((to: RouteLocationNormalized) => {
     const auth = useAuthStore();
     if (to.meta.public) {
@@ -125,6 +165,13 @@ export function createAppRouter() {
     }
     if (!auth.isAuthed) {
       return { name: 'login', query: { next: to.fullPath } };
+    }
+    const required = to.meta.requiresRole as string | undefined;
+    if (required) {
+      const have = auth.activeOrgRole;
+      if (!have || (ROLE_RANK[have] ?? 0) < (ROLE_RANK[required] ?? 99)) {
+        return { name: 'dashboard', query: { reason: 'forbidden' } };
+      }
     }
     return true;
   });
