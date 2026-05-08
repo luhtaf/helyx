@@ -26,6 +26,22 @@ const city = ref('');
 const sektorId = ref('');
 const notes = ref('');
 
+// rawSektor → sektorId lookup. Spiderfoot ParsedRecord stores Subsektor as
+// human label like "Energi" / "Pemerintah Pusat"; the mapper has already
+// translated it to one of our 17 sektor slugs at ingest time, so by the
+// time we see RawStakeholder.rawSektor it MAY already be either the slug
+// or the original label depending on source. Match either.
+function findSektorIdFromRaw(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const needle = raw.toLowerCase().trim();
+  const hit = sektors.value.find((s) =>
+    s.slug === needle ||
+    s.name.toLowerCase() === needle ||
+    s.slug === needle.replace(/\s+/g, '-'),
+  );
+  return hit?.id ?? '';
+}
+
 // Standalone mode: when slide opens without a raw row, reset everything and let
 // slug auto-fill from name until the user manually edits it (slugTouched).
 watch(() => props.open, (isOpen) => {
@@ -33,16 +49,25 @@ watch(() => props.open, (isOpen) => {
   if (props.raw) {
     name.value = props.raw.rawName;
     slug.value = slugify(props.raw.rawName);
+    sektorId.value = findSektorIdFromRaw(props.raw.rawSektor);
   } else {
     name.value = '';
     slug.value = '';
+    sektorId.value = '';
   }
   slugTouched.value = false;
   aliases.value = '';
   city.value = '';
-  sektorId.value = '';
   notes.value = '';
 }, { immediate: true });
+
+// Sektor list loads after slide mount on first open. When sektors arrive
+// AFTER the watch above already ran, retry the lookup.
+watch(sektors, (list) => {
+  if (props.open && props.raw && !sektorId.value && list.length > 0) {
+    sektorId.value = findSektorIdFromRaw(props.raw.rawSektor);
+  }
+});
 
 watch(name, (n) => {
   if (!slugTouched.value) slug.value = slugify(n);

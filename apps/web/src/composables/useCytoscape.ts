@@ -141,8 +141,10 @@ export function useCytoscape(seedKey: () => string | null): UseCytoscapeReturn {
       // and the default (0,0) sits at the top-left corner of the viewport.
       // Center the camera + give the node a reasonable resting position.
       const seed = newNodes[0];
-      seed.position({ x: 0, y: 0 });
-      cy.value.center();
+      if (seed) {
+        seed.position({ x: 0, y: 0 });
+        cy.value.center();
+      }
       return;
     }
 
