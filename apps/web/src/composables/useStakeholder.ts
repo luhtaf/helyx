@@ -63,8 +63,9 @@ export function useStakeholder(id: () => string): {
   stakeholder: ComputedRef<StakeholderDetail | null>;
   loading: Ref<boolean>;
   error: Ref<Error | null>;
+  refetch: () => void;
 } {
-  const { result, loading, error } = useQuery<{ stakeholder: StakeholderDetail | null }>(
+  const { result, loading, error, refetch } = useQuery<{ stakeholder: StakeholderDetail | null }>(
     STAKEHOLDER,
     () => ({ id: id() }),
     () => ({ enabled: Boolean(id()), fetchPolicy: 'cache-and-network' }),
@@ -73,5 +74,6 @@ export function useStakeholder(id: () => string): {
     stakeholder: computed(() => result.value?.stakeholder ?? null),
     loading,
     error,
+    refetch: () => { refetch(); },
   };
 }

@@ -1,16 +1,42 @@
 <script setup lang="ts">
-import { toRef } from 'vue';
+import { computed, ref, toRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStakeholder } from '@/composables/useStakeholder';
+import { useUpdateStakeholder, type StakeholderUpdateInput } from '@/composables/useStakeholders';
+import { useToast } from '@/composables/useToast';
+import { useAuthStore } from '@/stores/auth';
 import SensorStatusPill from '@/components/stakeholder/SensorStatusPill.vue';
 import SektorBadge from '@/components/stakeholder/SektorBadge.vue';
 import CaseStatusBadge from '@/components/case/CaseStatusBadge.vue';
+import CreateStakeholderSlide from '@/components/reconciliation/CreateStakeholderSlide.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
+import Button from '@/components/ui/Button.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
 const router = useRouter();
-const { stakeholder, loading, error } = useStakeholder(() => idRef.value);
+const auth = useAuthStore();
+const { show: showToast } = useToast();
+const { stakeholder, loading, error, refetch } = useStakeholder(() => idRef.value);
+
+const canEdit = computed(() => auth.hasMinRole('ANALYST'));
+const editOpen = ref(false);
+const { submit: updateStakeholder, loading: updating } = useUpdateStakeholder();
+
+async function onUpdate(stakeholderId: string, input: StakeholderUpdateInput): Promise<void> {
+  try {
+    const updated = await updateStakeholder(stakeholderId, input);
+    if (updated) {
+      showToast(`saved → ${updated.name}`, 'success');
+      editOpen.value = false;
+      refetch();
+    } else {
+      showToast('save failed', 'error');
+    }
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : 'save failed', 'error');
+  }
+}
 
 function severityClass(s: string | null): string {
   switch ((s ?? '').toUpperCase()) {
@@ -42,6 +68,7 @@ function severityClass(s: string | null): string {
         <div class="flex items-center gap-3">
           <SektorBadge :sektor="stakeholder.sektor" :clickable="true" />
           <SensorStatusPill :status="stakeholder.sensor.status" />
+          <Button v-if="canEdit" variant="ghost" @click="editOpen = true">Edit</Button>
           <RouterLink
             :to="{ name: 'graph', query: { seed: `stakeholder:${stakeholder.id}` } }"
             class="font-mono text-[11px] text-signal hover:underline ml-2"
@@ -188,5 +215,14 @@ function severityClass(s: string | null): string {
         created {{ stakeholder.createdAt.slice(0, 10) }} · updated {{ stakeholder.updatedAt.slice(0, 10) }}
       </footer>
     </template>
+
+    <CreateStakeholderSlide
+      :raw="null"
+      :existing="stakeholder"
+      :loading="updating"
+      :open="editOpen"
+      @update="onUpdate"
+      @cancel="editOpen = false"
+    />
   </div>
 </template>
