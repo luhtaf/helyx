@@ -19,21 +19,39 @@ function slugify(s: string): string {
 }
 
 const slug = ref('');
+const slugTouched = ref(false);
 const name = ref('');
 const aliases = ref('');
 const city = ref('');
 const sektorId = ref('');
 const notes = ref('');
 
-watch(() => props.raw, (r) => {
-  if (!r) return;
-  name.value = r.rawName;
-  slug.value = slugify(r.rawName);
+// Standalone mode: when slide opens without a raw row, reset everything and let
+// slug auto-fill from name until the user manually edits it (slugTouched).
+watch(() => props.open, (isOpen) => {
+  if (!isOpen) return;
+  if (props.raw) {
+    name.value = props.raw.rawName;
+    slug.value = slugify(props.raw.rawName);
+  } else {
+    name.value = '';
+    slug.value = '';
+  }
+  slugTouched.value = false;
   aliases.value = '';
   city.value = '';
   sektorId.value = '';
   notes.value = '';
 }, { immediate: true });
+
+watch(name, (n) => {
+  if (!slugTouched.value) slug.value = slugify(n);
+});
+
+function onSlugInput(v: string): void {
+  slug.value = v;
+  slugTouched.value = true;
+}
 
 function onSubmit(): void {
   if (!slug.value || !name.value) return;
@@ -72,17 +90,19 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
       leave-to-class="translate-x-full"
     >
       <aside
-        v-if="open && raw"
+        v-if="open"
         class="fixed top-0 right-0 h-screen w-[480px] bg-base border-l border-rule-strong z-50 overflow-y-auto"
       >
         <div class="p-8">
           <header class="mb-6">
-            <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">create stakeholder from raw</p>
-            <h2 class="text-[18px] text-ink mt-1">{{ raw.rawName }}</h2>
+            <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+              {{ raw ? 'create stakeholder from raw' : 'new stakeholder' }}
+            </p>
+            <h2 class="text-[18px] text-ink mt-1">{{ raw ? raw.rawName : 'Manual entry' }}</h2>
           </header>
           <form class="space-y-4" @submit.prevent="onSubmit">
-            <Input v-model="slug" label="Slug" required placeholder="kementerian-esdm" />
-            <Input v-model="name" label="Display name" required />
+            <Input v-model="name" label="Display name" required placeholder="Kementerian ESDM" />
+            <Input :model-value="slug" label="Slug" required placeholder="kementerian-esdm" @update:model-value="onSlugInput" />
             <Input v-model="aliases" label="Aliases (comma-separated)" placeholder="K-ESDM, Kemen ESDM" />
             <Input v-model="city" label="City" placeholder="Jakarta" />
             <label class="block">
@@ -97,7 +117,9 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
               <textarea v-model="notes" rows="3" class="block w-full rounded-md border border-rule-strong bg-surface p-3 text-sm text-ink placeholder:text-ink-dim focus:outline-none focus:ring-1 focus:ring-signal/30" />
             </label>
             <div class="flex items-center gap-3 pt-4">
-              <Button type="submit" variant="primary" :loading="loading">Create + resolve</Button>
+              <Button type="submit" variant="primary" :loading="loading">
+                {{ raw ? 'Create + resolve' : 'Create stakeholder' }}
+              </Button>
               <Button type="button" variant="ghost" @click="emit('cancel')">Cancel (Esc)</Button>
             </div>
           </form>

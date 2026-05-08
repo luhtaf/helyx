@@ -2,9 +2,15 @@
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
-import { useStakeholders, useSektors, type StakeholdersFilter } from '@/composables/useStakeholders';
+import {
+  useStakeholders, useSektors, useCreateStakeholder,
+  type StakeholdersFilter, type StakeholderInput,
+} from '@/composables/useStakeholders';
 import SensorStatusPill from '@/components/stakeholder/SensorStatusPill.vue';
 import SektorBadge from '@/components/stakeholder/SektorBadge.vue';
+import CreateStakeholderSlide from '@/components/reconciliation/CreateStakeholderSlide.vue';
+import Button from '@/components/ui/Button.vue';
+import { useToast } from '@/composables/useToast';
 
 const route = useRoute();
 const router = useRouter();
@@ -33,7 +39,7 @@ const filter = computed<StakeholdersFilter>(() => ({
   search: search.value.trim() || null,
 }));
 
-const { stakeholders, loading, error } = useStakeholders(() => filter.value);
+const { stakeholders, loading, error, refetch } = useStakeholders(() => filter.value);
 
 const filterActive = computed(() =>
   Boolean(search.value || sektorSlugFilter.value || statusFilter.value !== 'ACTIVE'),
@@ -41,6 +47,25 @@ const filterActive = computed(() =>
 
 function go(s: { id: string }): void {
   router.push({ name: 'stakeholder-detail', params: { id: s.id } });
+}
+
+const { show: showToast } = useToast();
+const { submit: createStakeholder, loading: creating } = useCreateStakeholder();
+const slideOpen = ref(false);
+
+async function onCreateSubmit(input: StakeholderInput): Promise<void> {
+  try {
+    const created = await createStakeholder(input);
+    if (!created) {
+      showToast('create failed', 'error');
+      return;
+    }
+    slideOpen.value = false;
+    showToast(`created → ${created.name}`, 'success');
+    refetch();
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : 'create failed', 'error');
+  }
 }
 </script>
 
@@ -52,9 +77,12 @@ function go(s: { id: string }): void {
           <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">inventory</p>
           <h1 class="text-[22px] font-medium text-ink mt-1">Stakeholders</h1>
         </div>
-        <p class="font-mono text-[11px] text-ink-dim tabular-nums">
-          {{ loading ? '…' : stakeholders.length }} entities
-        </p>
+        <div class="flex items-center gap-5">
+          <p class="font-mono text-[11px] text-ink-dim tabular-nums">
+            {{ loading ? '…' : stakeholders.length }} entities
+          </p>
+          <Button variant="primary" @click="slideOpen = true">+ New Stakeholder</Button>
+        </div>
       </div>
     </header>
 
@@ -130,5 +158,13 @@ function go(s: { id: string }): void {
         </tr>
       </tbody>
     </table>
+
+    <CreateStakeholderSlide
+      :raw="null"
+      :loading="creating"
+      :open="slideOpen"
+      @submit="onCreateSubmit"
+      @cancel="slideOpen = false"
+    />
   </div>
 </template>
