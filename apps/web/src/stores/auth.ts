@@ -10,6 +10,8 @@ export interface AuthUser {
 
 export type OrgRole = 'OWNER' | 'ADMIN' | 'ANALYST' | 'VIEWER';
 
+export const ROLE_RANK: Record<OrgRole, number> = { OWNER: 4, ADMIN: 3, ANALYST: 2, VIEWER: 1 };
+
 interface PersistedAuth {
   user: AuthUser | null;
   activeOrgId: string | null;
@@ -53,6 +55,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthed = computed(() => Boolean(user.value));
 
+  function hasMinRole(required: OrgRole): boolean {
+    const have = activeOrgRole.value;
+    if (!have) return false;
+    return ROLE_RANK[have] >= ROLE_RANK[required];
+  }
+
   function setAuth(newUser: AuthUser): void {
     user.value = newUser;
   }
@@ -72,5 +80,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(STORAGE_KEY);
   }
 
-  return { user, activeOrgId, activeOrgRole, isAuthed, setAuth, setActiveOrg, logout };
+  return { user, activeOrgId, activeOrgRole, isAuthed, hasMinRole, setAuth, setActiveOrg, logout };
 });

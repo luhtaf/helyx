@@ -11,6 +11,7 @@ import SektorBadge from '@/components/stakeholder/SektorBadge.vue';
 import CreateStakeholderSlide from '@/components/reconciliation/CreateStakeholderSlide.vue';
 import Button from '@/components/ui/Button.vue';
 import { useToast } from '@/composables/useToast';
+import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
 const router = useRouter();
@@ -49,6 +50,9 @@ function go(s: { id: string }): void {
   router.push({ name: 'stakeholder-detail', params: { id: s.id } });
 }
 
+const auth = useAuthStore();
+const canCreate = computed(() => auth.hasMinRole('ANALYST'));
+
 const { show: showToast } = useToast();
 const { submit: createStakeholder, loading: creating } = useCreateStakeholder();
 const slideOpen = ref(false);
@@ -81,7 +85,7 @@ async function onCreateSubmit(input: StakeholderInput): Promise<void> {
           <p class="font-mono text-[11px] text-ink-dim tabular-nums">
             {{ loading ? '…' : stakeholders.length }} entities
           </p>
-          <Button variant="primary" @click="slideOpen = true">+ New Stakeholder</Button>
+          <Button v-if="canCreate" variant="primary" @click="slideOpen = true">+ New Stakeholder</Button>
         </div>
       </div>
     </header>
