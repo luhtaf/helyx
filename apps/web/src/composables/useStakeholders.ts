@@ -123,7 +123,10 @@ export function useCreateStakeholder(): {
   const { mutate, loading, error } = useMutation<
     { createStakeholder: Stakeholder },
     { input: StakeholderInput }
-  >(CREATE_STAKEHOLDER);
+  >(CREATE_STAKEHOLDER, () => ({
+    refetchQueries: ['Stakeholders', 'Sektors'],
+    awaitRefetchQueries: true,
+  }));
   async function submit(input: StakeholderInput): Promise<Stakeholder | null> {
     const r = await mutate({ input });
     return r?.data?.createStakeholder ?? null;
