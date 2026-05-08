@@ -35,6 +35,7 @@ const schema = z.object({
   ELK_USERNAME: z.string().optional(),
   ELK_PASSWORD: z.string().optional(),
   ELK_CVE_INDEX: z.string().default('list-cve'),
+  ELK_SPIDERFOOT_INDEX: z.string().default('nasional_cve_new-*'),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 chars'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   REDIS_URL: z.string().default('redis://localhost:6379'),
