@@ -19,7 +19,7 @@ const STAKEHOLDER_RETURN = `
   k.sensorStack AS sensorStack,
   k.sensorStatus AS sensorStatus,
   k.sensorAgentCount AS sensorAgentCount,
-  k.sensorDeployedAt AS sensorDeployedAt,
+  toString(k.sensorDeployedAt) AS sensorDeployedAt,
   k.sensorNotes AS sensorNotes,
   toString(k.createdAt) AS createdAt,
   toString(k.updatedAt) AS updatedAt
