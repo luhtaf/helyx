@@ -268,3 +268,30 @@ export async function listStakeholderAssets(
     await session.close();
   }
 }
+
+// Reverse OWNS lookup. Returns null if asset has no owner (orphan / pre-spiderfoot).
+// Logs WARN if 2+ owners detected (schema doesn't enforce 1:1).
+export async function findOwnerOfAsset(
+  tenantId: string,
+  assetId: string,
+): Promise<{ id: string } | null> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (k:Stakeholder {tenantId: $tenantId})-[:OWNS]->(:Asset {id: $assetId, tenantId: $tenantId})
+       RETURN collect(k.id) AS ownerIds`,
+      { tenantId, assetId },
+    );
+    const ids = (r.records[0]?.get('ownerIds') as string[]) ?? [];
+    if (ids.length === 0) return null;
+    if (ids.length > 1) {
+      // Async log via dynamic import to avoid circular dep with logger
+      import('../logger.js').then(({ logger }) =>
+        logger.warn({ assetId, ownerCount: ids.length, ownerIds: ids }, 'asset has multiple owners — data drift'),
+      );
+    }
+    return { id: ids[0]! };
+  } finally {
+    await session.close();
+  }
+}

@@ -38,6 +38,11 @@ export const assetTypeDefs = /* GraphQL */ `
     componentCount: Int!
     cves(mode: MatchMode = EXACT, limit: Int = 50): [CveMatch!]!
     cveCount(mode: MatchMode = EXACT): Int!
+    # Reverse Stakeholder OWNS lookup. Nullable because asset may be orphan
+    # (no owner) or pre-spiderfoot. If 2+ owners exist (data drift), backend
+    # logs WARN and returns one arbitrarily; future schema bump to plural
+    # is non-breaking via additive [Stakeholder!]! field.
+    stakeholder: Stakeholder
     createdAt: String!
     updatedAt: String!
   }

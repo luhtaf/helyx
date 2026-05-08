@@ -66,6 +66,16 @@ const CREATE_STAKEHOLDER = gql`
   }
 `;
 
+const UPDATE_STAKEHOLDER = gql`
+  mutation UpdateStakeholder($id: ID!, $input: StakeholderUpdateInput!) {
+    updateStakeholder(id: $id, input: $input) {
+      id slug name aliases city coords notes status
+      sektor { id slug name }
+      sensor { stack status }
+    }
+  }
+`;
+
 export function useSektors(): {
   sektors: ComputedRef<Sektor[]>;
   loading: Ref<boolean>;
@@ -115,6 +125,15 @@ export interface StakeholderInput {
   sektorId?: string;
 }
 
+export interface StakeholderUpdateInput {
+  name?: string;
+  aliases?: string[];
+  city?: string;
+  coords?: [number, number];
+  notes?: string;
+  sektorId?: string;
+}
+
 export function useCreateStakeholder(): {
   submit: (input: StakeholderInput) => Promise<Stakeholder | null>;
   loading: Ref<boolean>;
@@ -130,6 +149,25 @@ export function useCreateStakeholder(): {
   async function submit(input: StakeholderInput): Promise<Stakeholder | null> {
     const r = await mutate({ input });
     return r?.data?.createStakeholder ?? null;
+  }
+  return { submit, loading, error };
+}
+
+export function useUpdateStakeholder(): {
+  submit: (id: string, input: StakeholderUpdateInput) => Promise<Stakeholder | null>;
+  loading: Ref<boolean>;
+  error: Ref<Error | null>;
+} {
+  const { mutate, loading, error } = useMutation<
+    { updateStakeholder: Stakeholder },
+    { id: string; input: StakeholderUpdateInput }
+  >(UPDATE_STAKEHOLDER, () => ({
+    refetchQueries: ['Stakeholders', 'Stakeholder', 'Sektors'],
+    awaitRefetchQueries: true,
+  }));
+  async function submit(id: string, input: StakeholderUpdateInput): Promise<Stakeholder | null> {
+    const r = await mutate({ id, input });
+    return r?.data?.updateStakeholder ?? null;
   }
   return { submit, loading, error };
 }

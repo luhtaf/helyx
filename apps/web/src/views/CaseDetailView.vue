@@ -79,6 +79,10 @@ const labelMap: Record<string, string> = {
         <div class="flex items-center gap-3">
           <CaseStatusBadge :status="caseDetail.status" />
           <CaseVerdictBadge :verdict="caseDetail.verdict" />
+          <RouterLink
+            :to="{ name: 'graph', query: { seed: `case:${caseDetail.id}` } }"
+            class="font-mono text-[11px] text-signal hover:underline ml-1"
+          >Open in graph →</RouterLink>
           <Button v-if="caseDetail.status === 'ACTIVE'" variant="primary" @click="closeOpen = true">
             Close case
           </Button>

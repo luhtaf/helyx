@@ -42,6 +42,10 @@ function severityClass(s: string | null): string {
         <div class="flex items-center gap-3">
           <SektorBadge :sektor="stakeholder.sektor" :clickable="true" />
           <SensorStatusPill :status="stakeholder.sensor.status" />
+          <RouterLink
+            :to="{ name: 'graph', query: { seed: `stakeholder:${stakeholder.id}` } }"
+            class="font-mono text-[11px] text-signal hover:underline ml-2"
+          >Open in graph →</RouterLink>
         </div>
       </div>
     </header>

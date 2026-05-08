@@ -7,6 +7,7 @@ import {
   createAsset,
   deleteAsset,
   findAssetById,
+  findOwnerOfAsset,
   findParent,
   listAssets,
   listChildren,
@@ -104,6 +105,14 @@ export const assetResolvers = {
     cveCount: (parent: AssetRecord, args: { mode?: MatchMode }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'VIEWER');
       return ctx.loaders.cveCountByAssetMode.load({ assetId: parent.id, mode: args.mode ?? 'EXACT' });
+    },
+    stakeholder: async (parent: AssetRecord, _a: unknown, ctx: RequestContext) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const owner = await findOwnerOfAsset(ctx.activeOrgId, parent.id);
+      if (!owner) return null;
+      // Resolver returns minimum-shape parent; Stakeholder field resolvers
+      // hydrate the rest from {id} via the existing dataloader/repo path.
+      return { id: owner.id };
     },
   },
 

@@ -1,0 +1,395 @@
+// Transform registry — Maltego-style enrichment actions per NodeType.
+//
+// Each transform owns its query shape via Transform<TResponse> generic.
+// `expand()` is pure — easy to unit test in isolation when test runner
+// lands.
+//
+// File-size discipline (CLAUDE.md): when this exceeds ~250 LoC OR > 15
+// transforms, split per-NodeType into transforms/{stakeholder,asset,cve,
+// case}.ts re-exported from transforms/index.ts.
+
+import gql from 'graphql-tag';
+import type { ExpandResult, GraphNode, Transform } from './graph-types';
+import { edgeId, nodeId } from './graph-types';
+
+// ─── Stakeholder transforms ─────────────────────────────────────────
+
+interface StakeholderAssetsResp {
+  stakeholder: { assets: { id: string; name: string; kind: string; hostname: string | null }[] } | null;
+}
+const STAKEHOLDER_ASSETS = gql`
+  query GraphStakeholderAssets($id: ID!) {
+    stakeholder(id: $id) {
+      assets(limit: 50) { id name kind hostname }
+    }
+  }
+`;
+
+const tStakeholderAssets: Transform<StakeholderAssetsResp> = {
+  id: 'stakeholder.assets',
+  label: 'Show owned assets',
+  description: 'Assets the stakeholder owns (Stakeholder→OWNS→Asset).',
+  appliesTo: 'Stakeholder',
+  cap: 50,
+  query: STAKEHOLDER_ASSETS,
+  expand: (resp, parent) => {
+    const assets = resp.stakeholder?.assets ?? [];
+    return {
+      nodes: assets.map((a) => ({
+        id: nodeId('Asset', a.id),
+        entityId: a.id,
+        type: 'Asset',
+        label: a.name,
+        data: { kind: a.kind, hostname: a.hostname },
+      })),
+      edges: assets.map((a) => ({
+        id: edgeId(parent.id, nodeId('Asset', a.id), 'OWNS'),
+        source: parent.id,
+        target: nodeId('Asset', a.id),
+        edgeType: 'OWNS',
+        label: 'owns',
+      })),
+    };
+  },
+};
+
+interface StakeholderCvesResp {
+  stakeholder: {
+    cves: {
+      total: number;
+      items: { cveId: string; severity: string | null; baseScore: number | null; description: string | null }[];
+    };
+  } | null;
+}
+const STAKEHOLDER_CVES = gql`
+  query GraphStakeholderCves($id: ID!) {
+    stakeholder(id: $id) {
+      cves(perPage: 25, mode: BEAST) {
+        total
+        items { cveId severity baseScore description }
+      }
+    }
+  }
+`;
+
+const tStakeholderCves: Transform<StakeholderCvesResp> = {
+  id: 'stakeholder.cves',
+  label: 'Show CVEs (all paths)',
+  description: 'CVEs via SBOM chain + scanner attribution. UNION of both sources.',
+  appliesTo: 'Stakeholder',
+  cap: 25,
+  query: STAKEHOLDER_CVES,
+  expand: (resp, parent): ExpandResult => {
+    const items = resp.stakeholder?.cves.items ?? [];
+    const total = resp.stakeholder?.cves.total ?? 0;
+    return {
+      nodes: items.map((c) => ({
+        id: nodeId('CVE', c.cveId),
+        entityId: c.cveId,
+        type: 'CVE',
+        label: c.cveId,
+        data: { severity: c.severity ?? 'NONE', baseScore: c.baseScore, description: c.description },
+      })),
+      edges: items.map((c) => ({
+        id: edgeId(parent.id, nodeId('CVE', c.cveId), 'AFFECTED_BY'),
+        source: parent.id,
+        target: nodeId('CVE', c.cveId),
+        edgeType: 'AFFECTED_BY',
+        label: c.severity ?? '',
+      })),
+      totalAvailable: total,
+    };
+  },
+};
+
+interface StakeholderCasesResp {
+  stakeholder: {
+    cases: { id: string; reportNo: string; title: string | null; status: string }[];
+  } | null;
+}
+const STAKEHOLDER_CASES = gql`
+  query GraphStakeholderCases($id: ID!) {
+    stakeholder(id: $id) {
+      cases(first: 20) { id reportNo title status }
+    }
+  }
+`;
+
+const tStakeholderCases: Transform<StakeholderCasesResp> = {
+  id: 'stakeholder.cases',
+  label: 'Show cases',
+  description: 'Cases that target this stakeholder.',
+  appliesTo: 'Stakeholder',
+  cap: 20,
+  query: STAKEHOLDER_CASES,
+  expand: (resp, parent) => {
+    const cases = resp.stakeholder?.cases ?? [];
+    return {
+      nodes: cases.map((c) => ({
+        id: nodeId('Case', c.id),
+        entityId: c.id,
+        type: 'Case',
+        label: c.reportNo,
+        data: { title: c.title, status: c.status },
+      })),
+      edges: cases.map((c) => ({
+        id: edgeId(nodeId('Case', c.id), parent.id, 'TARGETED_BY'),
+        source: nodeId('Case', c.id),
+        target: parent.id,
+        edgeType: 'TARGETED_BY',
+      })),
+    };
+  },
+};
+
+interface StakeholderSektorResp {
+  stakeholder: { sektor: { id: string; slug: string; name: string } | null } | null;
+}
+const STAKEHOLDER_SEKTOR = gql`
+  query GraphStakeholderSektor($id: ID!) {
+    stakeholder(id: $id) { sektor { id slug name } }
+  }
+`;
+
+const tStakeholderSektor: Transform<StakeholderSektorResp> = {
+  id: 'stakeholder.sektor',
+  label: 'Show sektor',
+  description: 'Sektor classification.',
+  appliesTo: 'Stakeholder',
+  cap: 1,
+  query: STAKEHOLDER_SEKTOR,
+  expand: (resp, parent) => {
+    const s = resp.stakeholder?.sektor;
+    if (!s) return { nodes: [], edges: [] };
+    const sektorNode = nodeId('Sektor', s.id);
+    return {
+      nodes: [{ id: sektorNode, entityId: s.id, type: 'Sektor', label: s.name, data: { slug: s.slug } }],
+      edges: [{
+        id: edgeId(parent.id, sektorNode, 'IN_SEKTOR'),
+        source: parent.id,
+        target: sektorNode,
+        edgeType: 'IN_SEKTOR',
+      }],
+    };
+  },
+};
+
+// ─── Asset transforms ──────────────────────────────────────────────
+
+interface AssetStakeholderResp {
+  asset: { stakeholder: { id: string; slug: string; name: string } | null } | null;
+}
+const ASSET_STAKEHOLDER = gql`
+  query GraphAssetStakeholder($id: ID!) {
+    asset(id: $id) { stakeholder { id slug name } }
+  }
+`;
+
+const tAssetStakeholder: Transform<AssetStakeholderResp> = {
+  id: 'asset.stakeholder',
+  label: 'Show parent stakeholder',
+  description: 'Stakeholder that owns this asset.',
+  appliesTo: 'Asset',
+  cap: 1,
+  query: ASSET_STAKEHOLDER,
+  expand: (resp, parent) => {
+    const s = resp.asset?.stakeholder;
+    if (!s) return { nodes: [], edges: [] };
+    const stakeNode = nodeId('Stakeholder', s.id);
+    return {
+      nodes: [{ id: stakeNode, entityId: s.id, type: 'Stakeholder', label: s.name, data: { slug: s.slug } }],
+      edges: [{
+        id: edgeId(stakeNode, parent.id, 'OWNS'),
+        source: stakeNode,
+        target: parent.id,
+        edgeType: 'OWNS',
+      }],
+    };
+  },
+};
+
+interface AssetCvesResp {
+  asset: {
+    cveCount: number;
+    cves: { cveId: string; severity: string | null; baseScore: number | null }[];
+  } | null;
+}
+const ASSET_CVES = gql`
+  query GraphAssetCves($id: ID!) {
+    asset(id: $id) {
+      cveCount(mode: BEAST)
+      cves(mode: BEAST, limit: 25) { cveId severity baseScore }
+    }
+  }
+`;
+
+const tAssetCves: Transform<AssetCvesResp> = {
+  id: 'asset.cves',
+  label: 'Show CVEs (this asset)',
+  description: 'CVEs matched via SBOM chain. ATTRIBUTED_CVE not yet exposed at Asset level (use Stakeholder for full coverage).',
+  appliesTo: 'Asset',
+  cap: 25,
+  query: ASSET_CVES,
+  expand: (resp, parent): ExpandResult => {
+    const items = resp.asset?.cves ?? [];
+    const total = resp.asset?.cveCount ?? items.length;
+    return {
+      nodes: items.map((c) => ({
+        id: nodeId('CVE', c.cveId),
+        entityId: c.cveId,
+        type: 'CVE',
+        label: c.cveId,
+        data: { severity: c.severity ?? 'NONE', baseScore: c.baseScore },
+      })),
+      edges: items.map((c) => ({
+        id: edgeId(parent.id, nodeId('CVE', c.cveId), 'AFFECTED_BY'),
+        source: parent.id,
+        target: nodeId('CVE', c.cveId),
+        edgeType: 'AFFECTED_BY',
+        label: c.severity ?? '',
+      })),
+      totalAvailable: total,
+    };
+  },
+};
+
+// ─── CVE transforms ─────────────────────────────────────────────────
+
+interface CveAffectedAssetsResp {
+  cve: {
+    affectedAssets: {
+      total: number;
+      items: { asset: { id: string; name: string; kind: string; hostname: string | null } }[];
+    };
+  } | null;
+}
+const CVE_AFFECTED_ASSETS = gql`
+  query GraphCveAffectedAssets($id: ID!) {
+    cve(id: $id) {
+      affectedAssets(perPage: 25) {
+        total
+        items { asset { id name kind hostname } }
+      }
+    }
+  }
+`;
+
+const tCveAffectedAssets: Transform<CveAffectedAssetsResp> = {
+  id: 'cve.affectedAssets',
+  label: 'Show other affected assets',
+  description: 'Assets in your tenant that match this CVE.',
+  appliesTo: 'CVE',
+  cap: 25,
+  query: CVE_AFFECTED_ASSETS,
+  expand: (resp, parent): ExpandResult => {
+    const items = resp.cve?.affectedAssets.items ?? [];
+    const total = resp.cve?.affectedAssets.total ?? items.length;
+    return {
+      nodes: items.map(({ asset: a }) => ({
+        id: nodeId('Asset', a.id),
+        entityId: a.id,
+        type: 'Asset',
+        label: a.name,
+        data: { kind: a.kind, hostname: a.hostname },
+      })),
+      edges: items.map(({ asset: a }) => ({
+        id: edgeId(nodeId('Asset', a.id), parent.id, 'AFFECTED_BY'),
+        source: nodeId('Asset', a.id),
+        target: parent.id,
+        edgeType: 'AFFECTED_BY',
+      })),
+      totalAvailable: total,
+    };
+  },
+};
+
+interface CveWeaknessesResp {
+  cve: { weaknesses: { id: string; name: string | null }[] } | null;
+}
+const CVE_WEAKNESSES = gql`
+  query GraphCveWeaknesses($id: ID!) {
+    cve(id: $id) { weaknesses { id name } }
+  }
+`;
+
+const tCveWeaknesses: Transform<CveWeaknessesResp> = {
+  id: 'cve.weaknesses',
+  label: 'Show weaknesses (CWE)',
+  description: 'CWE classifications attached to this CVE.',
+  appliesTo: 'CVE',
+  cap: 5,
+  query: CVE_WEAKNESSES,
+  expand: (resp, parent) => {
+    const weaks = resp.cve?.weaknesses ?? [];
+    return {
+      nodes: weaks.map((w) => ({
+        id: nodeId('CWE', w.id),
+        entityId: w.id,
+        type: 'CWE',
+        label: w.id,
+        data: { name: w.name },
+      })),
+      edges: weaks.map((w) => ({
+        id: edgeId(parent.id, nodeId('CWE', w.id), 'WEAKNESS'),
+        source: parent.id,
+        target: nodeId('CWE', w.id),
+        edgeType: 'WEAKNESS',
+      })),
+    };
+  },
+};
+
+// ─── Case transforms ───────────────────────────────────────────────
+
+interface CaseStakeholderResp {
+  case: { stakeholder: { id: string; slug: string; name: string } } | null;
+}
+const CASE_STAKEHOLDER = gql`
+  query GraphCaseStakeholder($id: ID!) {
+    case(id: $id) {
+      stakeholder { id slug name }
+    }
+  }
+`;
+
+const tCaseStakeholder: Transform<CaseStakeholderResp> = {
+  id: 'case.stakeholder',
+  label: 'Show targeted stakeholder',
+  description: 'Stakeholder this case targets.',
+  appliesTo: 'Case',
+  cap: 1,
+  query: CASE_STAKEHOLDER,
+  expand: (resp, parent) => {
+    const s = resp.case?.stakeholder;
+    if (!s) return { nodes: [], edges: [] };
+    const stakeNode = nodeId('Stakeholder', s.id);
+    return {
+      nodes: [{ id: stakeNode, entityId: s.id, type: 'Stakeholder', label: s.name, data: { slug: s.slug } }],
+      edges: [{
+        id: edgeId(parent.id, stakeNode, 'TARGETED_BY'),
+        source: parent.id,
+        target: stakeNode,
+        edgeType: 'TARGETED_BY',
+      }],
+    };
+  },
+};
+
+// ─── Registry ──────────────────────────────────────────────────────
+
+export const TRANSFORMS: Transform[] = [
+  tStakeholderAssets as Transform,
+  tStakeholderCves as Transform,
+  tStakeholderCases as Transform,
+  tStakeholderSektor as Transform,
+  tAssetStakeholder as Transform,
+  tAssetCves as Transform,
+  tCveAffectedAssets as Transform,
+  tCveWeaknesses as Transform,
+  tCaseStakeholder as Transform,
+];
+
+/** Find the transforms applicable to a given node type. */
+export function transformsFor(type: GraphNode['type']): Transform[] {
+  return TRANSFORMS.filter((t) => t.appliesTo === type);
+}
