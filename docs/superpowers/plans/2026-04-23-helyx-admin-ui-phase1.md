@@ -1,3 +1,4 @@
+<!-- /autoplan restore point: /Users/fathulikhsan/.gstack/projects/luhtaf-helyx/main-autoplan-restore-20260508-105657.md -->
 # Helyx Admin UI Phase 1 — Stakeholder + Reconciliation + Case Management
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -92,6 +93,84 @@ Fresh AI session resume protocol:
 
 ---
 
+## Task 0.5: Auth store role state + router role guard (gating CRITICAL)
+
+**Why FIRST:** /admin/stakeholders/inbox needs ADMIN-only. Current router only checks `auth.isAuthed`; auth store has no role state. Without this, VIEWERs can navigate to admin route → backend rejects but UI silent-loads. Caught by /autoplan CEO #1 + Eng #31 (cross-phase Theme 1).
+
+**Files:**
+- Modify: `apps/web/src/stores/auth.ts` — add `activeOrgRole` field
+- Modify: `apps/web/src/composables/useAuth.ts` — populate role from `me` query (`organizations { myRole }`)
+- Modify: `apps/web/src/router/index.ts` — extend `beforeEach` for `requiresRole` meta
+
+- [ ] **Step 1: Add role to auth store**
+
+In `stores/auth.ts`, add `activeOrgRole` ref + persist it. Define type:
+
+```typescript
+export type OrgRole = 'OWNER' | 'ADMIN' | 'ANALYST' | 'VIEWER';
+
+const activeOrgRole = ref<OrgRole | null>(null);
+
+function setActiveOrg(orgId: string, role: OrgRole | null = null): void {
+  activeOrgId.value = orgId;
+  activeOrgRole.value = role;
+  persist();
+}
+// Modify persist() to include activeOrgRole
+// Modify hydrate to read activeOrgRole
+// Export activeOrgRole + setActiveOrg
+```
+
+- [ ] **Step 2: Populate role from useMe**
+
+In `composables/useAuth.ts` `useMe` query, ensure `me { organizations { id name myRole } }` is selected. When the active org is chosen (or first one auto-picked), call `auth.setActiveOrg(orgId, myRole)`.
+
+If existing code calls `setActiveOrg(orgId)` without role, change all call sites to pass role.
+
+- [ ] **Step 3: Router guard**
+
+In `router/index.ts` `beforeEach`:
+
+```typescript
+const ROLE_RANK: Record<string, number> = { OWNER: 4, ADMIN: 3, ANALYST: 2, VIEWER: 1 };
+
+router.beforeEach((to) => {
+  const auth = useAuthStore();
+  if (to.meta.public) {
+    if (auth.isAuthed && to.name === 'login') return { name: 'dashboard' };
+    return true;
+  }
+  if (!auth.isAuthed) return { name: 'login', query: { next: to.fullPath } };
+  const required = to.meta.requiresRole as string | undefined;
+  if (required) {
+    const have = auth.activeOrgRole;
+    if (!have || (ROLE_RANK[have] ?? 0) < (ROLE_RANK[required] ?? 99)) {
+      return { name: 'dashboard', query: { reason: 'forbidden' } };
+    }
+  }
+  return true;
+});
+```
+
+- [ ] **Step 4: DashboardView banner for forbidden redirect**
+
+Add to dashboard view (or root):
+```vue
+<div v-if="$route.query.reason === 'forbidden'" class="border border-sev-crit/40 bg-sev-crit/10 px-3 py-2 text-xs text-sev-crit rounded-md mb-4">
+  Anda tidak punya izin untuk halaman tersebut.
+</div>
+```
+
+- [ ] **Step 5: Verify + commit**
+
+```bash
+pnpm --filter @helyx/web exec vue-tsc --noEmit
+git add apps/web/src/stores/auth.ts apps/web/src/composables/useAuth.ts apps/web/src/router/index.ts apps/web/src/views/DashboardView.vue
+git commit -m "feat(web): auth store activeOrgRole + router requiresRole guard"
+```
+
+---
+
 ## Task 1: Routes + Sidebar nav additions
 
 **Files:**
@@ -120,7 +199,7 @@ In `apps/web/src/router/index.ts`, find the routes array. Add these 5 entries (p
   path: '/admin/stakeholders/inbox',
   name: 'reconciliation-inbox',
   component: () => import('@/views/ReconciliationInboxView.vue'),
-  meta: { title: 'Reconciliation Inbox' },
+  meta: { title: 'Reconciliation Inbox', requiresRole: 'ADMIN' },
 },
 {
   path: '/cases',
@@ -2062,3 +2141,378 @@ Plan complete and saved to `docs/superpowers/plans/2026-04-23-helyx-admin-ui-pha
 **2. Inline Execution** — Faster but heavier on this session's context.
 
 **Which approach?** And: do you want me to run `/autoplan` on this plan first (CEO/Eng/DX review with Copilot+Gemini dual voice — Codex still 402)?
+
+---
+
+<!-- AUTONOMOUS DECISION LOG -->
+## /autoplan Review — Decision Audit Trail (subagent-only mode)
+
+### Phase 1: CEO Review
+
+| # | Phase | Finding | Severity | Decision |
+|---|-------|---------|----------|----------|
+| 1 | CEO | No auth guard on /admin/stakeholders/inbox route meta | **CRITICAL** | **AUTO-FIX** Task 1: add `meta: { requiresRole: 'ADMIN' }`; check existing router auth gate pattern |
+| 2 | CEO | "Coming soon" buttons in case detail Artifacts tab = broken-button anti-pattern | **CRITICAL** | **AUTO-FIX** Task 12: REMOVE 3 buttons entirely until forms ship in v2. Replace with single "0 artifacts" empty state copy |
+| 3 | CEO | 3-step wizard wrong — confirm step adds zero value for ADMIN data shape | HIGH | **AUTO-FIX** Task 11: collapse to single-page form, no confirm step |
+| 4 | CEO | Error handling missing on mutation wrappers in useReconciliationInbox | HIGH | **AUTO-FIX** Task 3: wrap each mutate() call with try/catch, return { ok, error } shape; surface error via toast in view |
+| 5 | CEO | closeCase verdict UI missing — operators can't progress lifecycle without Playground | HIGH | **AUTO-ADD** new Task 12b: closeCase modal in CaseDetailView header (ACTIVE → CLOSED + verdict picker) |
+| 6 | CEO | 11 empty artifact tabs look broken (Findings + Timeline placeholder also) | HIGH | **AUTO-FIX** Task 12: SHOW 2 TABS ONLY (Summary + Artifacts). Drop Timeline placeholder. Artifacts tab = single "0 artifacts" empty state, not 11-grid |
+| 7 | CEO | Wizard stakeholder picker has no loading state | HIGH | **AUTO-FIX** Task 11: loading row inside `<ul>` while query in-flight |
+| 8 | CEO | Toast logic copy-pasted 2x — violates CLAUDE.md "no copy-paste" + "shared components" | MEDIUM | **AUTO-FIX** new Task 5b: extract `useToast()` composable + Toast.vue component, wire into both views |
+| 9 | CEO | B/M keyboard hints lie (toast "coming v2") — pollutes keyboard-first differentiator | MEDIUM | **AUTO-FIX** Task 8: REMOVE B + M from kbd hint footer until features ship |
+| 10 | CEO | CasesView empty state doesn't differentiate "no data" vs "no match" | MEDIUM | **AUTO-FIX** Task 10: branch empty state on filter active vs not |
+| 11 | CEO | useStakeholders pagination hardcoded first:100 — silent truncation when >100 | MEDIUM | **AUTO-DOC** Out of scope section: flag pagination as v2 task |
+| 12 | CEO | StakeholderDetailView Assets/Cases skeleton sections undefined | MEDIUM | **AUTO-FIX** Task 7: spec the placeholder shape (e.g., "0 assets · backend resolver pending — see TODOS") |
+| 13 | CEO | bg-base CSS var name wrong (not in documented design tokens) | LOW | **AUTO-FIX** Task 9 CreateStakeholderSlide: change `bg-base` → `bg-[var(--bg)]` or use existing tailwind token (verify what `bg-base` actually maps to in tailwind config first) |
+| 14 | CEO | deployedAt input type=text, no date picker, silent Invalid Date if malformed | LOW | **AUTO-FIX** Task 11: change input type=date + validate ISO before submit |
+
+
+### Phase 2: Design Review
+
+| # | Phase | Finding | Severity | Decision |
+|---|-------|---------|----------|----------|
+| 15 | Design | useStakeholders no `error` ref → network failure = silent empty table | **CRITICAL** | **AUTO-FIX** Task 2: expose error ref from composable; Task 6 surface it as banner |
+| 16 | Design | B/M keys at `text-signal` but toast "v2" — UX trust trap | **CRITICAL** | DUP of CEO #9. Confirm fix: hide B/M from kbd hint footer entirely, NOT show as ink-faint either |
+| 17 | Design | Mutation loading not applied to focused row visually — double-key risk | HIGH | **AUTO-FIX** Task 9: apply `opacity-50 pointer-events-none` to focused row when loadingMutation true |
+| 18 | Design | No backdrop-click-close on CreateStakeholderSlide | HIGH | **AUTO-FIX** Task 9: add backdrop overlay; click outside closes; ESC closes |
+| 19 | Design | leadUserId missing from CaseCreateView step 2 form | HIGH | **AUTO-FIX** Task 11: add lead user selector. Backend doesn't yet expose `users` query — use freeform text input + TODO comment, OR defer with explicit "leads can be set via update later" note |
+| 20 | Design | `ACTIVE` case badge uses `sev-high` (orange) — semantic mismatch with operational state | HIGH | **AUTO-FIX** Task 5 CaseStatusBadge: ACTIVE → `bg-signal/15 text-signal border-signal/30` (signal = active focus, not severity) |
+| 21 | Design | Add Artifact button only visible after clicking Artifacts tab — primary action below fold | HIGH | **AUTO-FIX** Task 12: surface primary "Add Artifact" in CaseDetailView header (with closeCase button if status=ACTIVE per CEO #5) |
+| 22 | Design | All 3 views missing FORBIDDEN/network error boundaries | HIGH | **AUTO-FIX** Task 13 verify: confirm Apollo errorLink already routes 401/403 globally — verify; if not, add per-view error display |
+| 23 | Design | Confidence % at text-[10px] not glanceable for 5sec/row sprint | MEDIUM | **AUTO-FIX** Task 8 SuggestionList: add 4px confidence bar (bg-signal/30 fill over bg-rule track), width = confidence% |
+| 24 | Design | CreateStakeholderSlide no CSS transition — hard-cut | MEDIUM | **AUTO-FIX** Task 9: wrap in `<Transition>` with translate-x animation |
+| 25 | Design | Signal color overuse on all 6 kbd boxes dilutes attention role | MEDIUM | **AUTO-FIX** Task 8 RawStakeholderRow: signal only on 1/2/3 + N (primary actions); ink-dim on S/X (escape actions); hide B/M entirely |
+| 26 | Design | 11 zero-count artifact cards visual noise on new case | MEDIUM | **AUTO-FIX** Task 12 (combined with CEO #6): collapse to "0 artifacts — add the first one" empty state when sum(counts)==0; show non-zero types only |
+| 27 | Design | StakeholdersView column order slug-first obscures name/where | MEDIUM | **AUTO-FIX** Task 6: reorder cols → name → sektor → city → sensor → slug → aliases. Slug becomes meta col with `text-ink-faint` |
+| 28 | Design | StakeholdersView empty state doesn't differentiate filtered vs no-data | MEDIUM | **AUTO-FIX** Task 6 (combined with CEO #10 for cases): differentiate empty states |
+| 29 | Design | Tab count refetch on artifact mutation not specified — implementer will miss | MEDIUM | **AUTO-DOC** Add comment in useCase.ts: "consumers MUST call refetch after artifact mutations until subscriptions land" |
+| 30 | Design | Breadcrumb shows raw UUID before data loads | LOW | **AUTO-FIX** Task 7 + 12: replace `id` fallback with `'Loading…'` skeleton |
+
+
+### Phase 3: Eng Review
+
+| # | Phase | Finding | Severity | Decision |
+|---|-------|---------|----------|----------|
+| 31 | Eng | Router `beforeEach` only checks `auth.isAuthed` — auth store has no `activeOrgRole` field at all | **CRITICAL** | **AUTO-FIX** Task 1 expanded: add `activeOrgRole` to auth store + populate on login (from useMe query), persist; extend `beforeEach` to read role from store + redirect on requiresRole mismatch |
+| 32 | Eng | Rapid-keypress race in inbox: 1 then 2 fires 2 concurrent resolves on same row | **CRITICAL** | **AUTO-FIX** Task 9: add `if (loadingMutation.value) return;` at top of onKeyDown BEFORE switch |
+| 33 | Eng | useMutation calls missing generic type params — silent runtime type unsafety | HIGH | **AUTO-FIX** Task 3 useReconciliationInbox: add explicit `useMutation<ResultType, VarsType>` to all 5 calls; remove `as` casts |
+| 34 | Eng | useCases doesn't send `$offset` arg → pagination silently broken | HIGH | **AUTO-FIX** Task 4: add offset to CASES query + composable signature; Task 10 CasesView pass page state |
+| 35 | Eng | No debounce on search inputs — every keystroke = network request | HIGH | **AUTO-FIX** Tasks 6, 11: install `@vueuse/core` if not present, wrap search refs with `useDebounceFn(300)` before passing to filter |
+| 36 | Eng | No stale-cache recovery after 30+ min idle — stale rawId on keypress | HIGH | **AUTO-FIX** Task 9: add `document.addEventListener('visibilitychange')` → call `refetch()` on visible-again |
+| 37 | Eng | VIEWER gets silent empty-loading on FORBIDDEN, not redirect | HIGH | **AUTO-FIX** Task 9 + maybe Apollo errorLink: surface FORBIDDEN as toast + redirect / |
+| 38 | Eng | bg-base flagged in CEO #13 is actually CORRECT (Tailwind config has theme.extend.colors.base = var(--bg)) | INVALID | **RETRACT** CEO #13 — bg-base is a valid Tailwind class. No fix needed. |
+| 39 | Eng | useStakeholders exposes no `error` ref | MEDIUM | DUP Design #15. Confirm: expose error ref. |
+| 40 | Eng | deployedAt UTC midnight is intentional but should be commented (Indonesian timezone trap awareness) | LOW | **AUTO-FIX** Task 11: add `// Stored as UTC midnight per project convention; displayed as date-only` comment |
+
+### Phase 3.5 (DX): SKIPPED
+
+Plan is admin UI for human security analysts, not a developer-facing API/SDK/CLI product. The 48 DX matches in scope detection are incidental references to existing pnpm CLI commands in verify steps, not first-class DX surface. DX review N/A.
+
+### Cross-phase themes
+
+**Theme 1 (CRITICAL) — Auth/role enforcement gap.** CEO #1 + Eng #31 both caught: ADMIN-only route has no frontend guard AND auth store lacks role state. Real security exposure: VIEWER can see admin UI, attempt mutations (backend rejects but UX broken).
+
+**Theme 2 (CRITICAL) — Broken-button anti-pattern.** CEO #2 + Design #16 both caught: "Coming soon" toasts on primary action buttons train operators to distrust the product. CRITICAL because BSSN/TNI demo target.
+
+**Theme 3 (HIGH) — Missing error surfacing.** CEO #4 + Design #15+22 + Eng #37+39 all caught: composables don't expose error refs, views don't render errors, mutations fail silently. Affects every feature.
+
+**Theme 4 (HIGH) — UX trust traps.** CEO #9 + Design #16+25 + Eng (kbd display) all caught: showing actions/keys that don't work (B/M, "coming soon") undermines the keyboard-first differentiator.
+
+**Theme 5 (MEDIUM) — Code duplication.** CEO #8 caught: toast logic duplicated 2x violates CLAUDE.md "no copy-paste" rule. Should extract useToast() composable.
+
+
+---
+
+## Pre-Execute Revision Delta (READ BEFORE EACH TASK)
+
+`/autoplan` review found 4 CRITICAL + 18 HIGH + 13 MEDIUM issues. Two new gating tasks added (T0.5 above + T5b below + T12b below). For tasks 1-13, the delta below ENRICHES the original task body — read both. Apply the delta during execution.
+
+### Task 1 deltas (Routes + Sidebar)
+- **CRITICAL:** Add `meta: { requiresRole: 'ADMIN' }` to `/admin/stakeholders/inbox` route — DONE in plan body above ✓
+- Sidebar nav: when rendering "Reconciliation Inbox" link, hide it via `v-if="auth.activeOrgRole === 'ADMIN' || auth.activeOrgRole === 'OWNER'"` so VIEWERs don't see the link
+
+### Task 2 deltas (useStakeholders + useStakeholder)
+- **CRITICAL #15:** Expose `error` ref from both composables. Pattern: `return { stakeholders, loading, error, refetch };` where `error` comes from `useQuery`'s 4th destructured value
+- **HIGH #4:** Same for useStakeholder
+
+### Task 3 deltas (useReconciliationInbox)
+- **HIGH #33:** Add explicit generics to all 5 `useMutation<ResultShape, VarsShape>(GQL)`. Drop the `as` casts in mutate wrappers — use the typed `r.data` directly
+- **HIGH #4:** Each mutation wrapper returns `{ ok: boolean, error: string | null, data: T | null }` shape. Caller-safe error surfacing instead of throwing
+- Example for resolve:
+  ```typescript
+  resolve: async (rawId, stakeholderId): Promise<{ ok: boolean; error: string | null }> => {
+    try {
+      const r = await resolveM.mutate({ rawId, stakeholderId });
+      refetchAll();
+      return { ok: true, error: null };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  },
+  ```
+
+### Task 4 deltas (useCases + useCase)
+- **HIGH #34:** Add `offset?: number` to CasesFilter + send `$offset: Int = 0` in CASES query → enables pagination
+- **MEDIUM #29:** Add JSDoc comment to `useCase`: "Consumers MUST call `refetch()` after artifact mutations until subscriptions land — tab counts otherwise stale"
+
+### Task 5 deltas (badges)
+- **HIGH #20:** `CaseStatusBadge` ACTIVE color → `'bg-signal/15 text-signal border-signal/30'` (NOT sev-high). ACTIVE is operational state, not severity. Sev-high reserved for verdict.
+
+### Task 5b NEW: useToast composable + Toast.vue (CLAUDE.md DRY compliance)
+
+**Why:** Toast logic duplicated in 2 views violates "no copy-paste" rule. CEO #8.
+
+**Files:**
+- Create: `apps/web/src/composables/useToast.ts`
+- Create: `apps/web/src/components/ui/Toast.vue`
+
+```typescript
+// composables/useToast.ts
+import { ref, readonly } from 'vue';
+
+export type ToastVariant = 'info' | 'success' | 'error';
+
+const message = ref<string | null>(null);
+const variant = ref<ToastVariant>('info');
+let timer: ReturnType<typeof setTimeout> | null = null;
+
+export function useToast() {
+  function show(msg: string, v: ToastVariant = 'info', durationMs = 2500): void {
+    message.value = msg;
+    variant.value = v;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { message.value = null; }, durationMs);
+  }
+  function clear(): void {
+    if (timer) clearTimeout(timer);
+    message.value = null;
+  }
+  return { message: readonly(message), variant: readonly(variant), show, clear };
+}
+```
+
+```vue
+<!-- components/ui/Toast.vue -->
+<script setup lang="ts">
+import { useToast } from '@/composables/useToast';
+const { message, variant } = useToast();
+
+const variantClass: Record<string, string> = {
+  info: 'border-rule-strong text-ink',
+  success: 'border-sev-low/40 text-sev-low',
+  error: 'border-sev-crit/40 text-sev-crit',
+};
+</script>
+
+<template>
+  <Transition>
+    <div
+      v-if="message"
+      :class="['fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-md bg-surface border font-mono text-[12px] z-50', variantClass[variant]]"
+    >
+      {{ message }}
+    </div>
+  </Transition>
+</template>
+```
+
+Mount `<Toast />` once in `App.vue` (root) so any component calling `useToast().show(...)` triggers it. Tasks 9, 11, 12 use `useToast` instead of inline.
+
+Verify: `pnpm --filter @helyx/web exec vue-tsc --noEmit`. Commit: `feat(web): useToast composable + Toast.vue (DRY toast pattern)`
+
+### Task 6 deltas (StakeholdersView)
+- **MEDIUM #27:** Reorder `<thead>` columns: name → sektor → city → sensor → slug → aliases. Slug uses `text-ink-faint` (metadata), name uses `text-ink` (primary)
+- **MEDIUM #28:** Empty state branches:
+  - `!loading && stakeholders.length === 0 && !filterActive` → "No stakeholders yet — run reconciliation inbox to populate"
+  - `!loading && stakeholders.length === 0 && filterActive` → "No stakeholders match your filter — clear filters"
+  - Where `filterActive = Boolean(search.value || sektorSlugFilter.value || statusFilter.value !== 'ACTIVE')`
+- **HIGH #35:** Debounce search via VueUse `useDebounceFn(300)` before passing to filter computed. Install if needed: `pnpm --filter @helyx/web add @vueuse/core`
+- **CRITICAL #15:** Surface error from useStakeholders as banner above table
+
+### Task 7 deltas (StakeholderDetailView)
+- **MEDIUM #12:** Define Assets/Cases skeleton sections — even though backend resolvers don't expose `stakeholder.assets` or `stakeholder.cases` yet, render placeholder sections:
+  ```vue
+  <section class="mb-8 border-t border-rule pt-6">
+    <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">linked assets</p>
+    <p class="text-[12px] text-ink-faint italic">Backend resolver pending — see TODOS Phase 2.5</p>
+  </section>
+  <section class="mb-8 border-t border-rule pt-6">
+    <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">cases</p>
+    <p class="text-[12px] text-ink-faint italic">Backend resolver pending — see TODOS Phase 2.5</p>
+  </section>
+  ```
+- **LOW #30:** Breadcrumb fallback: replace `id` with `'Loading…'` while data unloaded
+
+### Task 8 deltas (SuggestionList + RawStakeholderRow)
+- **CRITICAL #16:** REMOVE B and M `<kbd>` from RawStakeholderRow footer entirely. Don't show actions that don't work
+- **MEDIUM #25:** Signal color only on 1/2/3/N kbd (primary actions). S/X use `text-ink-dim border-rule-strong`
+- **MEDIUM #23:** SuggestionList — add 4px-tall confidence bar above each row's confidence text:
+  ```vue
+  <div class="h-1 bg-rule rounded-[1px] overflow-hidden mt-0.5 w-16">
+    <div class="h-full bg-signal/50" :style="{ width: (s.confidence * 100) + '%' }" />
+  </div>
+  ```
+  Glanceable at sprint speed.
+
+### Task 9 deltas (ReconciliationInboxView) — heavy update
+- **CRITICAL #32:** First line of `onKeyDown`: `if (loadingMutation.value) return;` BEFORE the switch. Race-fix.
+- **HIGH #17:** Apply `:class="['...', loadingMutation && i === focusIdx ? 'opacity-50 pointer-events-none' : '']"` to the focused row container
+- **HIGH #18:** CreateStakeholderSlide → add backdrop overlay `<div @click="$emit('cancel')" class="fixed inset-0 bg-base/40 backdrop-blur-sm z-40" />`. Also handle ESC key to close.
+- **MEDIUM #24:** Slide enters with `<Transition enter-active-class="transition-transform duration-200" enter-from-class="translate-x-full" leave-active-class="transition-transform duration-200" leave-to-class="translate-x-full">` for slide animation
+- **HIGH #36:** Add `document.addEventListener('visibilitychange', () => { if (!document.hidden) refetch(); })` in onMounted; remove on unmount. Stale-cache recovery.
+- **HIGH #37:** When `listQ.error` fires (FORBIDDEN or network), use `useToast().show(error.message, 'error')` + redirect to / if FORBIDDEN
+- **CRITICAL #4:** Use `useToast()` for all toast calls (replace local `toast` ref)
+- Replace local `toast` ref + `showToast()` with `const { show: showToast } = useToast()`. Mutation wrappers return error → `showToast(result.error, 'error')` if not ok
+
+### Task 10 deltas (CasesView)
+- **MEDIUM #10:** Empty state branch — same pattern as Task 6 delta
+- **HIGH #35:** Debounce search via useDebounceFn(300)
+- **HIGH #34:** Add `offset` state + Prev/Next pagination buttons (basic, no virtual scroll)
+
+### Task 11 deltas (CaseCreateView) — significant update
+- **HIGH #3 + Premise B:** **DROP STEP 3 entirely.** Wizard becomes 2 steps: pick stakeholder → fill metadata + submit. Remove `step.value === 3` branch + Confirm UI + extra Next button
+- **HIGH #19:** Add `leadUserId` field to step 2. Backend doesn't expose `users(orgId)` query yet — use freeform text input:
+  ```vue
+  <Input v-model="leadUserId" label="Lead User ID (optional, paste UUID)" placeholder="leave empty if no lead yet" />
+  ```
+  Add `// TODO: replace with user picker when users(orgId) query lands` comment.
+- **HIGH #7:** Stakeholder picker `<ul>` — add loading row inside while query fetching:
+  ```vue
+  <li v-if="loading" class="px-3 py-2 text-ink-dim text-[13px] italic">searching…</li>
+  ```
+- **HIGH #35:** Debounce stakeholderSearch
+- **LOW #14:** Change `<Input v-model="deployedAt" type="text" />` to `type="date"`. Validate before submit: `if (!/^\d{4}-\d{2}-\d{2}$/.test(deployedAt.value)) { error = 'Invalid date'; return; }`
+- **LOW #40:** Add comment near deployedAt conversion: `// Stored as UTC midnight per project convention; displayed as date-only`
+
+### Task 12 deltas (CaseDetailView) — CRITICAL changes
+- **CRITICAL #2:** **REMOVE the 3 "coming soon" buttons entirely** (Add Artifact / Bulk paste / Import Wazuh). Will be added in UI v2 when forms land. Hide is always better than placeholder.
+- **HIGH #6:** Show only **2 tabs** — Summary and Artifacts (drop Timeline placeholder). Re-add Timeline tab in v2 when content exists.
+- **HIGH + MEDIUM #26:** Artifacts tab content — collapse 11-grid:
+  - If `caseDetail.artifactCount === 0`: render single empty state "No artifacts yet — artifact form lands in UI v2"
+  - If > 0: render only NON-ZERO type cards (filter `Object.entries(counts).filter(([_, n]) => n > 0)`). Zero types stay hidden.
+- **HIGH #5 + Design #21:** Surface "Close case" button in header IF `status === 'ACTIVE'`. Wire to closeCase modal (Task 12b below)
+- **LOW #30:** Breadcrumb fallback: `id` → `'Loading…'` while data unloaded
+- Replace local toast with `useToast()` (DRY)
+
+### Task 12b NEW: closeCase verdict modal
+
+**Why:** Operators need UI path to progress ACTIVE → CLOSED with verdict. Without this they'd resort to GraphQL Playground for the most important CA workflow transition. CEO #5.
+
+**Files:**
+- Create: `apps/web/src/components/case/CloseCaseModal.vue`
+- Modify: `apps/web/src/composables/useCase.ts` — add `useCloseCase` mutation hook
+- Modify: `apps/web/src/views/CaseDetailView.vue` — wire button + modal
+
+```typescript
+// In useCase.ts, append:
+const CLOSE_CASE = gql`
+  mutation CloseCase($id: ID!, $verdict: CaseVerdict!) {
+    closeCase(id: $id, verdict: $verdict) {
+      id status verdict closedAt
+    }
+  }
+`;
+export function useCloseCase() {
+  const { mutate, loading, error } = useMutation<
+    { closeCase: Pick<CaseDetail, 'id' | 'status' | 'verdict' | 'closedAt'> },
+    { id: string; verdict: 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN' }
+  >(CLOSE_CASE);
+  async function submit(id: string, verdict: 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN') {
+    try {
+      const r = await mutate({ id, verdict });
+      return { ok: true, data: r?.data?.closeCase ?? null, error: null };
+    } catch (e) { return { ok: false, data: null, error: (e as Error).message }; }
+  }
+  return { submit, loading, error };
+}
+```
+
+```vue
+<!-- components/case/CloseCaseModal.vue -->
+<script setup lang="ts">
+import { ref } from 'vue';
+import Button from '@/components/ui/Button.vue';
+
+const props = defineProps<{ open: boolean; loading: boolean }>();
+const emit = defineEmits<{
+  (e: 'submit', verdict: 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN'): void;
+  (e: 'cancel'): void;
+}>();
+
+const verdict = ref<'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN'>('CONFIRMED');
+
+const verdictMeta: Record<string, { label: string; color: string; help: string }> = {
+  CONFIRMED: { label: 'Confirmed compromise', color: 'text-sev-crit', help: 'Evidence of active compromise found' },
+  INCONCLUSIVE: { label: 'Inconclusive', color: 'text-sev-med', help: 'Evidence insufficient — neither confirms nor rules out' },
+  CLEAN: { label: 'Clean', color: 'text-sev-low', help: 'No evidence of compromise' },
+};
+</script>
+
+<template>
+  <Teleport to="body">
+    <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="fixed inset-0 bg-base/60 backdrop-blur-sm" @click="emit('cancel')" />
+      <div class="relative bg-surface border border-rule-strong rounded-md p-8 w-[420px] z-10">
+        <header class="mb-6">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">close case</p>
+          <h2 class="text-[18px] text-ink mt-1">Pick verdict</h2>
+        </header>
+
+        <div class="space-y-2 mb-6">
+          <label
+            v-for="v in (['CONFIRMED', 'INCONCLUSIVE', 'CLEAN'] as const)"
+            :key="v"
+            :class="[
+              'flex items-start gap-3 px-3 py-3 rounded-md border cursor-pointer transition',
+              verdict === v ? 'border-signal bg-base' : 'border-rule hover:border-rule-strong',
+            ]"
+          >
+            <input v-model="verdict" type="radio" :value="v" class="mt-1" />
+            <div>
+              <p :class="['font-medium text-[13px]', verdictMeta[v].color]">{{ verdictMeta[v].label }}</p>
+              <p class="text-[11px] text-ink-dim mt-0.5">{{ verdictMeta[v].help }}</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <Button type="button" variant="primary" :loading="loading" @click="emit('submit', verdict)">
+            Close case as {{ verdict.toLowerCase() }}
+          </Button>
+          <Button type="button" variant="ghost" @click="emit('cancel')">Cancel</Button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</template>
+```
+
+In CaseDetailView.vue header (when `caseDetail.status === 'ACTIVE'`):
+```vue
+<Button v-if="caseDetail.status === 'ACTIVE'" variant="primary" @click="closeOpen = true">Close case</Button>
+<CloseCaseModal :open="closeOpen" :loading="closeLoading" @submit="onClose" @cancel="closeOpen = false" />
+```
+
+Wire `onClose` to `useCloseCase().submit()` + refetch + toast success/error.
+
+Verify + commit: `feat(web): closeCase modal — verdict picker + lifecycle transition UI`
+
+### Task 13 deltas (e2e verify)
+- Add verify steps: VIEWER user navigates /admin/stakeholders/inbox → expects redirect to / with banner
+- Verify CloseCase modal: ACTIVE case → close button visible → click → pick verdict → submit → status badge updates
+
+---
+
+## Revision summary table (40 findings → 32 actionable, 1 retracted, 7 deferred)
+
+| Severity | Count | Status |
+|---|---|---|
+| CRITICAL | 4 | All baked into plan body or NEW tasks (T0.5, T5b, T12b) ✓ |
+| HIGH | 18 | All baked via deltas above ✓ |
+| MEDIUM | 13 | Most baked via deltas; pagination + tab subscription noted as v2 |
+| LOW | 2 | Both fixed via deltas (LOW #14 deployedAt, LOW #30 breadcrumb) |
+| INVALID | 1 | CEO #13 (bg-base) RETRACTED per Eng #38 verification |
+| DEFERRED | 7 | Pagination >100, virtual scroll, full users() query, full subscription tab updates, full Findings/Timeline content, full bulk paste, Wazuh import — all explicit v2 |
+
+**Total tasks: 16** (was 13: +T0.5 auth+guard, +T5b useToast, +T12b closeCase). Estimated execution: 1-2 sesi with subagent-driven parallelism.
+
