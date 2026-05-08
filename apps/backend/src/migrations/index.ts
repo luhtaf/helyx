@@ -13,6 +13,7 @@ import { m011_master_data_schema } from './m011_master_data_schema.js';
 import { m012_seed_sektor } from './m012_seed_sektor.js';
 import { m013_ca_case_schema } from './m013_ca_case_schema.js';
 import { m014_audit_schema } from './m014_audit_schema.js';
+import { m015_stakeholder_asset_link } from './m015_stakeholder_asset_link.js';
 
 export const migrations: Migration[] = [
   m001_initial_schema,
@@ -29,4 +30,5 @@ export const migrations: Migration[] = [
   m012_seed_sektor,
   m013_ca_case_schema,
   m014_audit_schema,
+  m015_stakeholder_asset_link,
 ];
