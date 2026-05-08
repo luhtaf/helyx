@@ -26,7 +26,6 @@
     "express": "^4.22.1",
     "express-rate-limit": "^8.5.0",
     "graphql": "^16.9.0",
-    "graphql-cost-analysis": "^1.0.3",
     "graphql-depth-limit": "^1.1.0",
     "ioredis": "^5.10.1",
     "jose": "^5.9.6",
