@@ -234,3 +234,37 @@ export async function deleteAsset(
     await session.close();
   }
 }
+
+// Stakeholder→OWNS→Asset listing for the detail page.
+export async function listStakeholderAssets(
+  tenantId: string,
+  stakeholderId: string,
+  limit: number,
+): Promise<AssetRecord[]> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (k:Stakeholder {id: $stakeholderId, tenantId: $tenantId})-[:OWNS]->(a:Asset {tenantId: $tenantId})
+       RETURN a.id AS id, a.tenantId AS tenantId, a.kind AS kind, a.name AS name,
+              a.hostname AS hostname, coalesce(a.ipAddresses, []) AS ipAddresses,
+              toString(a.createdAt) AS createdAt, toString(a.updatedAt) AS updatedAt,
+              size([(a)-[:CONTAINS]->(child) | child]) AS childCount
+       ORDER BY a.updatedAt DESC
+       LIMIT $limit`,
+      { tenantId, stakeholderId, limit: BigInt(limit) },
+    );
+    return r.records.map((rec) => ({
+      id: rec.get('id') as string,
+      tenantId: rec.get('tenantId') as string,
+      kind: rec.get('kind') as AssetKind,
+      name: rec.get('name') as string,
+      hostname: (rec.get('hostname') as string | null) ?? null,
+      ipAddresses: (rec.get('ipAddresses') as string[]) ?? [],
+      createdAt: rec.get('createdAt') as string,
+      updatedAt: rec.get('updatedAt') as string,
+      childCount: Number(rec.get('childCount') ?? 0),
+    }));
+  } finally {
+    await session.close();
+  }
+}

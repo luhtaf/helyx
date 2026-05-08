@@ -81,5 +81,7 @@ export const cveTypeDefs = /* GraphQL */ `
     cveCount(mode: MatchMode = EXACT): Int!
     cves(mode: MatchMode = EXACT, severity: String, search: String, page: Int = 1, perPage: Int = 25): TenantCvePage!
     assetCount: Int!
+    assets(limit: Int = 50): [Asset!]!
+    cases(status: [CaseStatus!], first: Int = 50): [Case!]!
   }
 `;

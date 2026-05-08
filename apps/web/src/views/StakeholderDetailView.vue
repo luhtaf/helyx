@@ -1,13 +1,26 @@
 <script setup lang="ts">
 import { toRef } from 'vue';
+import { useRouter } from 'vue-router';
 import { useStakeholder } from '@/composables/useStakeholder';
 import SensorStatusPill from '@/components/stakeholder/SensorStatusPill.vue';
 import SektorBadge from '@/components/stakeholder/SektorBadge.vue';
+import CaseStatusBadge from '@/components/case/CaseStatusBadge.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
+const router = useRouter();
 const { stakeholder, loading, error } = useStakeholder(() => idRef.value);
+
+function severityClass(s: string | null): string {
+  switch ((s ?? '').toUpperCase()) {
+    case 'CRITICAL': return 'text-sev-crit';
+    case 'HIGH':     return 'text-sev-high';
+    case 'MEDIUM':   return 'text-sev-med';
+    case 'LOW':      return 'text-sev-low';
+    default:         return 'text-ink-faint';
+  }
+}
 </script>
 
 <template>
@@ -90,22 +103,74 @@ const { stakeholder, loading, error } = useStakeholder(() => idRef.value);
         </p>
       </section>
 
-      <!-- Linked assets (skeleton) -->
+      <!-- Vulnerabilities -->
       <section class="mb-8 border-t border-rule pt-6">
-        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">linked assets</p>
-        <p class="text-[12px] text-ink-faint italic">Backend resolver pending — see TODOS Phase 2.5</p>
+        <div class="flex items-baseline justify-between mb-3">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+            vulnerabilities <span class="text-ink-dim">·</span>
+            <span class="text-ink tabular-nums">{{ stakeholder.cves.total }}</span>
+          </p>
+          <p class="font-mono text-[10px] text-ink-faint">via Asset→ATTRIBUTED_CVE + chain</p>
+        </div>
+        <p v-if="stakeholder.cves.items.length === 0" class="text-[12px] text-ink-faint italic">
+          No CVEs attributed yet. Run <code class="font-mono">pnpm sf:sync</code> to ingest from Spiderfoot.
+        </p>
+        <ul v-else class="divide-y divide-rule text-[13px]">
+          <li v-for="cve in stakeholder.cves.items" :key="cve.cveId" class="py-2 flex items-baseline gap-4">
+            <span class="font-mono text-ink shrink-0 w-[140px]">{{ cve.cveId }}</span>
+            <span :class="['font-mono text-[10px] uppercase tracking-wider shrink-0 w-[70px]', severityClass(cve.severity)]">
+              {{ cve.severity ?? '—' }}
+            </span>
+            <span class="font-mono text-[12px] text-ink-dim tabular-nums shrink-0 w-[40px] text-right">
+              {{ cve.baseScore?.toFixed(1) ?? '—' }}
+            </span>
+            <span class="text-ink-dim text-[12px] truncate">{{ cve.description ?? '' }}</span>
+          </li>
+        </ul>
       </section>
 
-      <!-- Cases (skeleton) -->
+      <!-- Linked assets -->
       <section class="mb-8 border-t border-rule pt-6">
-        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">cases</p>
-        <p class="text-[12px] text-ink-faint italic">Backend resolver pending — see TODOS Phase 2.5</p>
+        <div class="flex items-baseline justify-between mb-3">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+            linked assets <span class="text-ink-dim">·</span>
+            <span class="text-ink tabular-nums">{{ stakeholder.assetCount }}</span>
+          </p>
+        </div>
+        <p v-if="stakeholder.assets.length === 0" class="text-[12px] text-ink-faint italic">
+          No assets owned. Spiderfoot ingest creates Asset nodes per scan target.
+        </p>
+        <ul v-else class="divide-y divide-rule text-[13px]">
+          <li v-for="a in stakeholder.assets" :key="a.id" class="py-2 flex items-baseline gap-4">
+            <span class="font-mono text-[10px] uppercase tracking-wider text-ink-faint shrink-0 w-[80px]">{{ a.kind }}</span>
+            <span class="text-ink shrink-0 w-[280px] truncate">{{ a.name }}</span>
+            <span class="font-mono text-[11px] text-ink-dim truncate">{{ a.hostname ?? '—' }}</span>
+          </li>
+        </ul>
       </section>
 
-      <!-- Reconciliation history (skeleton) -->
+      <!-- Cases -->
       <section class="mb-8 border-t border-rule pt-6">
-        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">reconciliation history</p>
-        <p class="text-[12px] text-ink-faint italic">Backend resolver pending — see TODOS Phase 2.5</p>
+        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-3">
+          cases <span class="text-ink-dim">·</span>
+          <span class="text-ink tabular-nums">{{ stakeholder.cases.length }}</span>
+        </p>
+        <p v-if="stakeholder.cases.length === 0" class="text-[12px] text-ink-faint italic">
+          No cases targeting this stakeholder.
+        </p>
+        <ul v-else class="divide-y divide-rule text-[13px]">
+          <li
+            v-for="c in stakeholder.cases"
+            :key="c.id"
+            class="py-2 flex items-baseline gap-4 cursor-pointer hover:bg-surface/40 transition px-1 -mx-1 rounded-sm"
+            @click="router.push({ name: 'case-detail', params: { id: c.id } })"
+          >
+            <span class="font-mono text-ink shrink-0 w-[180px]">{{ c.reportNo }}</span>
+            <CaseStatusBadge :status="c.status" />
+            <span class="text-ink-dim text-[12px] truncate">{{ c.title ?? '' }}</span>
+            <span class="ml-auto font-mono text-[11px] text-ink-faint shrink-0">{{ c.deployedAt.slice(0, 10) }}</span>
+          </li>
+        </ul>
       </section>
 
       <!-- Notes -->

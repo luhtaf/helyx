@@ -1,7 +1,8 @@
 import type { RequestContext } from '../auth/context.js';
 import { assertOrgRole } from '../auth/middleware.js';
-import { findAssetById } from '../assets/assets.repo.js';
+import { findAssetById, listStakeholderAssets } from '../assets/assets.repo.js';
 import type { MatchMode } from '../assets/types.js';
+import { listCases } from '../cases/repo.js';
 import {
   countAffectedAssets,
   countStakeholderAssets,
@@ -122,6 +123,27 @@ export const cveResolvers = {
     assetCount: async (parent: { id: string }, _args: unknown, ctx: RequestContext) => {
       assertOrgRole(ctx, 'VIEWER');
       return countStakeholderAssets(ctx.activeOrgId, parent.id);
+    },
+
+    assets: async (parent: { id: string }, args: { limit?: number }, ctx: RequestContext) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const limit = clampPerPage(args.limit, 50, 200);
+      return listStakeholderAssets(ctx.activeOrgId, parent.id, limit);
+    },
+
+    cases: async (
+      parent: { id: string },
+      args: { status?: string[]; first?: number },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const first = clampPerPage(args.first, 50, 200);
+      return listCases(ctx.activeOrgId, {
+        stakeholderId: parent.id,
+        status: args.status,
+        first,
+        offset: 0,
+      });
     },
   },
 };
