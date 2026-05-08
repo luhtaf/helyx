@@ -1,6 +1,5 @@
 import DataLoader from 'dataloader';
 import { getSession } from '../db/neo4j.js';
-import { TENANT_CVE_BASE } from '../cves/cypher.js';
 import type { MatchMode } from '../assets/types.js';
 
 export interface CveCountKey {
@@ -12,24 +11,54 @@ export interface AppLoaders {
   cveCountByAssetMode: DataLoader<CveCountKey, number>;
 }
 
+// Per-asset CVE count, batched via UNWIND. UNIONs the SBOM chain (mode-
+// filtered) with the ATTRIBUTED_CVE direct path so the count matches what
+// Asset.cves(mode) returns. Mirrors the structure of match.repo.ts.
+function chainModeFilter(mode: MatchMode): string {
+  switch (mode) {
+    case 'EXACT':
+      return 'WHERE c.version IS NOT NULL AND cpe.version = c.version';
+    case 'MAJOR_MINOR':
+      return `WHERE c.version IS NOT NULL
+              AND size(split(c.version, '.')) >= 2
+              AND (cpe.version STARTS WITH (split(c.version, '.')[0] + '.' + split(c.version, '.')[1] + '.')
+                   OR cpe.version = (split(c.version, '.')[0] + '.' + split(c.version, '.')[1]))`;
+    case 'MAJOR':
+      return `WHERE c.version IS NOT NULL
+              AND size(split(c.version, '.')) >= 1
+              AND (cpe.version STARTS WITH (split(c.version, '.')[0] + '.')
+                   OR cpe.version = split(c.version, '.')[0])`;
+    case 'BEAST':
+      return '';
+  }
+}
+
+function buildCountQuery(mode: MatchMode): string {
+  return `
+    UNWIND $assetIds AS aid
+    MATCH (a:Asset {id: aid, tenantId: $tenantId})
+    CALL {
+      WITH a
+      MATCH (a)-[:HAS_COMPONENT]->(c:SoftwareComponent)
+            -[:OF_PRODUCT]->(p:Product)-[:HAS_CPE]->(cpe:CPE)<-[:AFFECTS]-(cve:CVE)
+      ${chainModeFilter(mode)}
+      RETURN cve
+      UNION
+      WITH a
+      MATCH (a)-[:ATTRIBUTED_CVE]->(cve:CVE)
+      RETURN cve
+    }
+    WITH a, cve
+    RETURN a.id AS assetId, count(DISTINCT cve) AS n
+  `;
+}
+
 const BATCHED_CVE_COUNT: Record<MatchMode, string> = {
   EXACT: buildCountQuery('EXACT'),
   MAJOR_MINOR: buildCountQuery('MAJOR_MINOR'),
   MAJOR: buildCountQuery('MAJOR'),
   BEAST: buildCountQuery('BEAST'),
 };
-
-function buildCountQuery(mode: MatchMode): string {
-  return TENANT_CVE_BASE[mode].replace(
-    'MATCH (a:Asset {tenantId: $tenantId})-[:HAS_COMPONENT]->(c:SoftwareComponent)',
-    `UNWIND $assetIds AS aid
-     MATCH (a:Asset {tenantId: $tenantId})
-     WHERE a.id = aid
-     MATCH (a)-[:HAS_COMPONENT]->(c:SoftwareComponent)`,
-  ) + `
-    RETURN a.id AS assetId, count(DISTINCT cve) AS n
-  `;
-}
 
 async function loadCveCounts(
   tenantId: string,
