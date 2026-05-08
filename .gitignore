@@ -26,3 +26,4 @@ landing-page
 # Local credentials — NEVER commit
 cred.txt
 *.cred
+.gstack/
