@@ -105,6 +105,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Case' },
   },
   {
+    path: '/sensors',
+    name: 'sensors',
+    component: () => import('@/views/SensorsView.vue'),
+    meta: { title: 'Sensors' },
+  },
+  {
     path: '/graph',
     name: 'graph',
     component: () => import('@/views/GraphView.vue'),

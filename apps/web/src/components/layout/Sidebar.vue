@@ -47,6 +47,7 @@ const baseNavItems: NavItem[] = [
   { to: '/cves',          label: 'vulnerabilities' },
   { to: '/stakeholders',  label: 'stakeholders' },
   { to: '/cases',         label: 'cases' },
+  { to: '/sensors',       label: 'sensors' },
   { to: '/graph',         label: 'graph' },
   { to: '/techniques',    label: 'matrix' },
   { to: '/hunts',         label: 'hunt' },
