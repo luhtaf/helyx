@@ -2,7 +2,8 @@
 import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
-import { useCases, type CaseStatus, type CasesFilter } from '@/composables/useCases';
+import { useCases, type CasesFilter } from '@/composables/useCases';
+import { CASE_STATUSES, type CaseStatus } from '@/composables/case-kinds';
 import CaseStatusBadge from '@/components/case/CaseStatusBadge.vue';
 import CaseVerdictBadge from '@/components/case/CaseVerdictBadge.vue';
 import Button from '@/components/ui/Button.vue';
@@ -45,7 +46,7 @@ function go(c: { id: string }): void {
   router.push({ name: 'case-detail', params: { id: c.id } });
 }
 
-const ALL_STATUSES: CaseStatus[] = ['DRAFT', 'ACTIVE', 'CLOSED', 'ARCHIVED'];
+const ALL_STATUSES = CASE_STATUSES;
 function toggleStatus(s: CaseStatus): void {
   const i = statusFilter.value.indexOf(s);
   if (i >= 0) statusFilter.value.splice(i, 1);

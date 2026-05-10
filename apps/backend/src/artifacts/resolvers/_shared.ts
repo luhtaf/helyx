@@ -1,34 +1,8 @@
 import { GraphQLError } from 'graphql';
 import type { ArtifactType, ArtifactBaseRow } from '../types.js';
 import type { CreateArtifactBase } from '../repo.js';
-
-export const TYPE_TO_LABEL: Record<ArtifactType, string> = {
-  IOC: 'Ioc',
-  FILE: 'File',
-  PROCESS: 'Process',
-  NETWORK: 'Network',
-  REGISTRY: 'Registry',
-  PERSISTENCE: 'Persistence',
-  ACCOUNT: 'Account',
-  LOG_FINDING: 'LogFinding',
-  MEMORY: 'Memory',
-  DETECTION_HIT: 'DetectionHit',
-  NOTE: 'Note',
-};
-
-export const LABEL_TO_GQL_TYPE: Record<string, string> = {
-  Ioc: 'IocArtifact',
-  File: 'FileArtifact',
-  Process: 'ProcessArtifact',
-  Network: 'NetworkArtifact',
-  Registry: 'RegistryArtifact',
-  Persistence: 'PersistenceArtifact',
-  Account: 'AccountArtifact',
-  LogFinding: 'LogFindingArtifact',
-  Memory: 'MemoryArtifact',
-  DetectionHit: 'DetectionHitArtifact',
-  Note: 'NoteArtifact',
-};
+export { TYPE_TO_LABEL, LABEL_TO_GQL_TYPE } from '../kinds.js';
+import { LABEL_TO_GQL_TYPE } from '../kinds.js';
 
 export function pickArtifactGqlType(labels: string[]): string {
   for (const l of labels) {

@@ -1,4 +1,5 @@
-export type ReconciliationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'NEEDS_REVIEW';
+export { type ReconciliationStatus, type MatchReason } from './kinds.js';
+import type { ReconciliationStatus, MatchReason } from './kinds.js';
 
 export interface RawStakeholderRow {
   id: string;
@@ -19,5 +20,5 @@ export interface RawStakeholderRow {
 export interface SuggestionRow {
   stakeholderId: string;
   confidence: number;
-  reason: 'alias-match' | 'levenshtein' | 'domain-match' | 'acronym-match' | 'pattern-match';
+  reason: MatchReason;
 }

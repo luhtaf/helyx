@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { GraphNode } from './graph-types';
+import { severityClass } from '@/utils/severity';
 
 const props = defineProps<{ node: GraphNode | null }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
@@ -40,16 +41,6 @@ const fields = computed<KV[]>(() => {
   }
   return out;
 });
-
-function severityClass(s: string | undefined): string {
-  switch ((s ?? '').toUpperCase()) {
-    case 'CRITICAL': return 'text-sev-crit';
-    case 'HIGH':     return 'text-sev-high';
-    case 'MEDIUM':   return 'text-sev-med';
-    case 'LOW':      return 'text-sev-low';
-    default:         return 'text-ink';
-  }
-}
 
 function detailHref(): string | null {
   if (!props.node) return null;

@@ -2,6 +2,8 @@
 import { computed, type ComputedRef, type Ref } from 'vue';
 import { useQuery, useMutation } from '@vue/apollo-composable';
 import gql from 'graphql-tag';
+export { type SensorStack, type SensorStatus, type StakeholderStatus } from './stakeholder-kinds';
+import type { SensorStack, SensorStatus, StakeholderStatus } from './stakeholder-kinds';
 
 export interface Sektor {
   id: string;
@@ -12,8 +14,8 @@ export interface Sektor {
 }
 
 export interface SensorSummary {
-  stack: 'WAZUH_FULL' | 'ELK_FULL' | 'WAZUH_AGENT' | 'MIXED' | null;
-  status: 'ONLINE' | 'DEGRADED' | 'OFFLINE' | null;
+  stack: SensorStack | null;
+  status: SensorStatus | null;
   agentCount: number | null;
   deployedAt: string | null;
   notes: string | null;
@@ -27,7 +29,7 @@ export interface Stakeholder {
   city: string | null;
   coords: [number, number] | null;
   notes: string | null;
-  status: 'ACTIVE' | 'ARCHIVED';
+  status: StakeholderStatus;
   sektor: Sektor | null;
   sensor: SensorSummary;
   createdAt: string;
@@ -36,7 +38,7 @@ export interface Stakeholder {
 
 export interface StakeholdersFilter {
   sektorId?: string | null;
-  status?: 'ACTIVE' | 'ARCHIVED' | null;
+  status?: StakeholderStatus | null;
   search?: string | null;
 }
 

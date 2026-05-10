@@ -2,7 +2,9 @@
 import { computed, ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useMe } from '@/composables/useAuth';
-import { useTenantStats, severityCount, type MatchMode } from '@/composables/useDashboard';
+import { useTenantStats, severityCount } from '@/composables/useDashboard';
+import { MATCH_MODES, MATCH_MODE_LABELS, type MatchMode } from '@/composables/asset-kinds';
+import { severityBorderVar, type Severity } from '@/utils/severity';
 import { useHealth } from '@/composables/useHealth';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityBar from '@/components/ui/SeverityBar.vue';
@@ -30,13 +32,8 @@ const syncedAt = computed(() => {
   return t.slice(11, 16);
 });
 
-const modes: MatchMode[] = ['EXACT', 'MAJOR_MINOR', 'MAJOR', 'BEAST'];
-const modeLabel: Record<MatchMode, string> = {
-  EXACT: 'exact',
-  MAJOR_MINOR: 'maj.min',
-  MAJOR: 'maj',
-  BEAST: 'beast',
-};
+const modes = MATCH_MODES;
+const modeLabel = MATCH_MODE_LABELS;
 
 const counts = computed(() => ({
   critical: severityCount(stats.value?.cveCountsBySeverity, 'CRITICAL'),
@@ -52,17 +49,9 @@ const maxKindCount = computed(() =>
   Math.max(1, ...(stats.value?.assetsByKind ?? []).map((r) => r.count)),
 );
 
-function severityBorderColor(severity: string | null | undefined): string {
-  switch ((severity ?? '').toUpperCase()) {
-    case 'CRITICAL': return 'var(--sev-crit)';
-    case 'HIGH':     return 'var(--sev-high)';
-    case 'MEDIUM':   return 'var(--sev-med)';
-    case 'LOW':      return 'var(--sev-low)';
-    default:         return 'var(--sev-none)';
-  }
-}
+const severityBorderColor = severityBorderVar;
 
-function severityRoute(sev: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW') {
+function severityRoute(sev: Severity) {
   return { path: '/cves', query: { severity: sev, mode: mode.value } };
 }
 </script>

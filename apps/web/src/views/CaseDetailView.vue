@@ -2,6 +2,7 @@
 import { ref, toRef, computed } from 'vue';
 import { useCase, useCloseCase } from '@/composables/useCase';
 import { useToast } from '@/composables/useToast';
+import type { CloseVerdict } from '@/composables/case-kinds';
 import CaseStatusBadge from '@/components/case/CaseStatusBadge.vue';
 import CaseVerdictBadge from '@/components/case/CaseVerdictBadge.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
@@ -16,7 +17,7 @@ const closeOpen = ref(false);
 const { submit: submitClose, loading: closeLoading } = useCloseCase();
 const { show: showToast } = useToast();
 
-async function onCloseCase(verdict: 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN'): Promise<void> {
+async function onCloseCase(verdict: CloseVerdict): Promise<void> {
   if (!caseDetail.value) return;
   const r = await submitClose(caseDetail.value.id, verdict);
   if (r.ok) {

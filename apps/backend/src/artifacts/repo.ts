@@ -2,29 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { GraphQLError } from 'graphql';
 import { getSession } from '../db/neo4j.js';
 import type { ArtifactBaseRow, ArtifactType, Severity } from './types.js';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const SEVERITY_RANK: Record<Severity, number> = {
-  INFO: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4,
-};
-
-// Maps ArtifactType enum value → multi-label name applied alongside :Artifact
-const TYPE_TO_LABEL: Record<ArtifactType, string> = {
-  IOC: 'Ioc',
-  FILE: 'File',
-  PROCESS: 'Process',
-  NETWORK: 'Network',
-  REGISTRY: 'Registry',
-  PERSISTENCE: 'Persistence',
-  ACCOUNT: 'Account',
-  LOG_FINDING: 'LogFinding',
-  MEMORY: 'Memory',
-  DETECTION_HIT: 'DetectionHit',
-  NOTE: 'Note',
-};
+import { SEVERITY_RANK, TYPE_TO_LABEL } from './kinds.js';
 
 // ---------------------------------------------------------------------------
 // Return fragment

@@ -1,21 +1,14 @@
 <script setup lang="ts">
 import { toRef } from 'vue';
-import { useRule, type RuleKind } from '@/composables/useRules';
+import { useRule } from '@/composables/useRules';
+import { KIND_CLASSES, type RuleKind } from '@/composables/rule-kinds';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
 const { rule, loading, error } = useRule(() => idRef.value);
 
-function kindClass(k: RuleKind): string {
-  switch (k) {
-    case 'YARA':     return 'text-sev-high';
-    case 'SURICATA': return 'text-sev-med';
-    case 'SIGMA':    return 'text-sev-low';
-    case 'OWASP':    return 'text-signal';
-    case 'CUSTOM':   return 'text-ink-dim';
-  }
-}
+const kindClass = (k: RuleKind): string => KIND_CLASSES[k];
 </script>
 
 <template>

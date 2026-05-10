@@ -1,10 +1,8 @@
 import { computed, type ComputedRef, type Ref } from 'vue';
 import { useMutation, useQuery } from '@vue/apollo-composable';
 import gql from 'graphql-tag';
-
-export type RuleKind = 'YARA' | 'SURICATA' | 'SIGMA' | 'OWASP' | 'CUSTOM';
-export type RuleStatus = 'DRAFT' | 'ACTIVE' | 'DEPRECATED';
-export type RuleSource = 'manual' | 'sigma_community' | 'otx' | 'helyx_generated' | 'imported_stix' | 'imported_openioc';
+export { type RuleKind, type RuleStatus, type RuleSource } from './rule-kinds';
+import type { RuleKind, RuleStatus, RuleSource } from './rule-kinds';
 
 export interface DetectionRule {
   id: string;

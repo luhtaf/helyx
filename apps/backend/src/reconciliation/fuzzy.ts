@@ -42,7 +42,7 @@ export function rankSuggestions(
   for (const c of candidates) {
     // 1. exact alias match
     if (c.aliases.some((a) => normalizeKey(a) === raw.rawNormalizedKey)) {
-      out.push({ stakeholderId: c.id, confidence: 1.0, reason: 'alias-match' });
+      out.push({ stakeholderId: c.id, confidence: 1.0, reason: 'ALIAS_MATCH' });
       continue;
     }
 
@@ -53,7 +53,7 @@ export function rankSuggestions(
     );
     if (lvBest <= lvThreshold) {
       const conf = Math.max(0, 1 - lvBest / Math.max(raw.rawName.length, 8));
-      out.push({ stakeholderId: c.id, confidence: conf, reason: 'levenshtein' });
+      out.push({ stakeholderId: c.id, confidence: conf, reason: 'LEVENSHTEIN' });
       continue;
     }
 
@@ -61,7 +61,7 @@ export function rankSuggestions(
     const rawAcronym = acronym(raw.rawName);
     const candAcronym = acronym(c.name);
     if (rawAcronym.length >= 2 && rawAcronym === candAcronym) {
-      out.push({ stakeholderId: c.id, confidence: 0.7, reason: 'acronym-match' });
+      out.push({ stakeholderId: c.id, confidence: 0.7, reason: 'ACRONYM_MATCH' });
       continue;
     }
   }

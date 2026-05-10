@@ -10,36 +10,24 @@ import {
   listRules,
   updateRule,
 } from './repo.js';
-import type { RuleFilter, RuleKind, RuleSource, RuleStatus } from './types.js';
-
-// `RuleSource` enum in GraphQL uses underscore (sigma_community) but JS-side
-// is hyphenated (sigma-community). Translate at the boundary.
-function decodeSource(s: RuleSource | string | undefined | null): RuleSource | null {
-  if (!s) return null;
-  const map: Record<string, RuleSource> = {
-    manual: 'manual',
-    sigma_community: 'sigma-community',
-    otx: 'otx',
-    helyx_generated: 'helyx-generated',
-    imported_stix: 'imported-stix',
-    imported_openioc: 'imported-openioc',
-  };
-  return map[s] ?? (s as RuleSource);
-}
-
-// Mirror enum for the resolver-encoded field — Helyx stores 'sigma-community'
-// in Neo4j but GraphQL exposes 'sigma_community' (enum names can't have '-').
-function encodeSource(s: RuleSource): string {
-  return s.replace(/-/g, '_');
-}
+import {
+  RULE_KINDS,
+  RULE_STATUSES,
+  decodeSource,
+  encodeSource,
+  type RuleKind,
+  type RuleSource,
+  type RuleStatus,
+} from './kinds.js';
+import type { RuleFilter } from './types.js';
 
 const CreateRuleSchema = z.object({
-  kind: z.enum(['YARA', 'SURICATA', 'SIGMA', 'OWASP', 'CUSTOM']),
+  kind: z.enum(RULE_KINDS),
   name: z.string().trim().min(1).max(200),
   description: z.string().max(2000).nullable().optional(),
   content: z.string().min(1).max(64 * 1024),
   tags: z.array(z.string()).default([]),
-  status: z.enum(['DRAFT', 'ACTIVE', 'DEPRECATED']).optional(),
+  status: z.enum(RULE_STATUSES).optional(),
   derivedFromArtifactIds: z.array(z.string()).default([]),
   detectsTechniqueIds: z.array(z.string()).default([]),
 });
@@ -49,7 +37,7 @@ const UpdateRuleSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   content: z.string().min(1).max(64 * 1024).optional(),
   tags: z.array(z.string()).optional(),
-  status: z.enum(['DRAFT', 'ACTIVE', 'DEPRECATED']).optional(),
+  status: z.enum(RULE_STATUSES).optional(),
 });
 
 function clampPage(raw: number | undefined): number {

@@ -1,7 +1,9 @@
+import { SENSOR_STACKS, SENSOR_STATUSES, STAKEHOLDER_STATUSES } from './kinds.js';
+
 export const stakeholderTypeDefs = /* GraphQL */ `
-  enum SensorStack { WAZUH_FULL ELK_FULL WAZUH_AGENT MIXED }
-  enum SensorStatus { ONLINE DEGRADED OFFLINE }
-  enum StakeholderStatus { ACTIVE ARCHIVED }
+  enum SensorStack       { ${SENSOR_STACKS.join(' ')} }
+  enum SensorStatus      { ${SENSOR_STATUSES.join(' ')} }
+  enum StakeholderStatus { ${STAKEHOLDER_STATUSES.join(' ')} }
 
   type Sektor {
     id: ID!

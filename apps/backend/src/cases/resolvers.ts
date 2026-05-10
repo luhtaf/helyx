@@ -13,6 +13,7 @@ import {
   updateCase,
 } from './repo.js';
 import type { CaseRow, CaseInput, CaseUpdateInput } from './types.js';
+import type { CloseVerdict } from './kinds.js';
 import { listFindings, listTimeline, listArtifactsByCase } from '../artifacts/repo.js';
 import { logAudit } from '../audits/log.js';
 
@@ -66,7 +67,7 @@ export const caseResolvers = {
 
     closeCase: (
       _p: unknown,
-      args: { id: string; verdict: 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN' },
+      args: { id: string; verdict: CloseVerdict },
       ctx: RequestContext,
     ) => {
       assertOrgRole(ctx, 'ANALYST');

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, toRef } from 'vue';
 import { useAssetDetail } from '@/composables/useAssets';
-import type { MatchMode } from '@/composables/useDashboard';
+import { MATCH_MODES, MATCH_MODE_LABELS, type MatchMode } from '@/composables/asset-kinds';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityWord from '@/components/ui/SeverityWord.vue';
 import EntityGraph, { type GraphNode, type GraphEdge } from '@/components/graph/EntityGraph.vue';
@@ -18,10 +18,8 @@ const mode = ref<MatchMode>('EXACT');
 const showSbomDialog = ref(false);
 const { asset, loading, error, refetch } = useAssetDetail(() => idRef.value, () => mode.value);
 
-const modes: MatchMode[] = ['EXACT', 'MAJOR_MINOR', 'MAJOR', 'BEAST'];
-const modeLabel: Record<MatchMode, string> = {
-  EXACT: 'exact', MAJOR_MINOR: 'maj.min', MAJOR: 'maj', BEAST: 'beast',
-};
+const modes = MATCH_MODES;
+const modeLabel = MATCH_MODE_LABELS;
 
 function fmtKind(k: string): string {
   return k.toLowerCase().replace('_', ' ');

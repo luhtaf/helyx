@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useTenantCves } from '@/composables/useCves';
-import type { MatchMode } from '@/composables/useDashboard';
+import { MATCH_MODES, MATCH_MODE_LABELS, type MatchMode } from '@/composables/asset-kinds';
+import { SEVERITIES, severityBorderVar } from '@/utils/severity';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityWord from '@/components/ui/SeverityWord.vue';
 import Pagination from '@/components/ui/Pagination.vue';
@@ -12,11 +13,8 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
-const MODES: MatchMode[] = ['EXACT', 'MAJOR_MINOR', 'MAJOR', 'BEAST'];
-const MODE_LABEL: Record<MatchMode, string> = {
-  EXACT: 'exact', MAJOR_MINOR: 'maj.min', MAJOR: 'maj', BEAST: 'beast',
-};
+const MODES = MATCH_MODES;
+const MODE_LABEL = MATCH_MODE_LABELS;
 
 const severity = computed(() => (route.query.severity as string) || null);
 const search = ref((route.query.q as string) || '');
@@ -59,15 +57,7 @@ watch(search, () => {
   searchTimer = setTimeout(() => setQuery({ q: search.value.trim() || null, page: '1' }), 300);
 });
 
-function severityBorderColor(s: string | null | undefined): string {
-  switch ((s ?? '').toUpperCase()) {
-    case 'CRITICAL': return 'var(--sev-crit)';
-    case 'HIGH':     return 'var(--sev-high)';
-    case 'MEDIUM':   return 'var(--sev-med)';
-    case 'LOW':      return 'var(--sev-low)';
-    default:         return 'var(--sev-none)';
-  }
-}
+const severityBorderColor = severityBorderVar;
 </script>
 
 <template>

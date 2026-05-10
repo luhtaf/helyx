@@ -21,7 +21,8 @@ const TENANT_STATS = gql`
   }
 `;
 
-export type MatchMode = 'EXACT' | 'MAJOR_MINOR' | 'MAJOR' | 'BEAST';
+export { type MatchMode } from './asset-kinds';
+import type { MatchMode } from './asset-kinds';
 
 interface Stats {
   assetCount: number;
@@ -48,11 +49,11 @@ export function useTenantStats(mode: () => MatchMode, enabled: () => boolean) {
   return { stats, loading, error, refetch };
 }
 
-const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
+import { type Severity } from '@/utils/severity';
 
 export function severityCount(
   rows: { severity: string | null; count: number }[] | undefined | null,
-  severity: (typeof SEVERITY_ORDER)[number],
+  severity: Severity,
 ): number {
   return rows?.find((r) => r.severity === severity)?.count ?? 0;
 }

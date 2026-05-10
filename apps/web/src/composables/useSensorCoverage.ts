@@ -18,8 +18,8 @@ const SENSOR_COVERAGE = gql`
   }
 `;
 
-export type SensorStatusFilter = 'ALL' | 'ONLINE' | 'DEGRADED' | 'OFFLINE' | 'NO_SENSOR';
-export type SensorStackFilter = 'ALL' | 'WAZUH_FULL' | 'ELK_FULL' | 'WAZUH_AGENT' | 'MIXED' | 'NONE';
+export { type SensorStatusFilter, type SensorStackFilter } from './stakeholder-kinds';
+import type { SensorStatusFilter, SensorStackFilter } from './stakeholder-kinds';
 
 export interface SensorCounts {
   total: number;

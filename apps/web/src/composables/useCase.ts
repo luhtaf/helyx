@@ -51,7 +51,8 @@ const CLOSE_CASE = gql`
   }
 `;
 
-type CaseVerdict = 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN';
+import type { CloseVerdict } from './case-kinds';
+type CaseVerdict = CloseVerdict;
 
 interface CloseCaseResult {
   id: string;

@@ -1,14 +1,12 @@
+import { RULE_KINDS, RULE_STATUSES, RULE_SOURCES, encodeSource } from './kinds.js';
+
 export const ruleTypeDefs = /* GraphQL */ `
-  enum RuleKind { YARA SURICATA SIGMA OWASP CUSTOM }
-  enum RuleStatus { DRAFT ACTIVE DEPRECATED }
-  enum RuleSource {
-    manual
-    sigma_community
-    otx
-    helyx_generated
-    imported_stix
-    imported_openioc
-  }
+  """Detection engine syntax — what FORMAT the rule is in. NOT a taxonomy
+  of what the rule detects (those are :DETECTS edges to MITRE / OWASP /
+  CWE nodes or tag prefixes like 'owasp.a01-…')."""
+  enum RuleKind { ${RULE_KINDS.join(' ')} }
+  enum RuleStatus { ${RULE_STATUSES.join(' ')} }
+  enum RuleSource { ${RULE_SOURCES.map(encodeSource).join(' ')} }
 
   type DetectionRule {
     id: ID!

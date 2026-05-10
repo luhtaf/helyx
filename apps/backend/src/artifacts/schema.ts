@@ -1,16 +1,34 @@
+import {
+  ACCOUNT_ACTIONS,
+  ARTIFACT_TYPES,
+  CONFIDENCES,
+  DETECTION_ENGINES,
+  DIRECTIONS,
+  IOC_TYPES,
+  MEMORY_FINDINGS,
+  NET_PROTOCOLS,
+  PERSISTENCE_MECHANISMS,
+  REGISTRY_ACTIONS,
+  REGISTRY_HIVES,
+  SEVERITIES,
+} from './kinds.js';
+
 export const artifactTypeDefs = /* GraphQL */ `
-  enum ArtifactType { IOC FILE PROCESS NETWORK REGISTRY PERSISTENCE ACCOUNT LOG_FINDING MEMORY DETECTION_HIT NOTE }
-  enum Severity { INFO LOW MEDIUM HIGH CRITICAL }
-  enum Confidence { LOW MEDIUM HIGH }
-  enum IocType { IP DOMAIN URL EMAIL HASH }
-  enum Direction { INBOUND OUTBOUND BOTH LATERAL }
-  enum NetProtocol { TCP UDP ICMP HTTP DNS }
-  enum RegistryHive { HKLM HKCU HKCR HKU HKCC }
-  enum RegistryAction { CREATED MODIFIED DELETED }
-  enum PersistenceMechanism { SCHEDULED_TASK SERVICE STARTUP_FOLDER RUN_KEY WMI CRON SYSTEMD LAUNCHD OTHER }
-  enum AccountAction { CREATED PRIVILEGE_ESCALATED DISABLED PASSWORD_CHANGED LOGIN_ANOMALY }
-  enum MemoryFinding { PROCESS_INJECTION HOLLOWING SHELLCODE UNBACKED_MEMORY STRINGS_MATCH OTHER }
-  enum RuleSource { SIGMA YARA WAZUH ELASTIC CUSTOM }
+  enum ArtifactType         { ${ARTIFACT_TYPES.join(' ')} }
+  enum Severity             { ${SEVERITIES.join(' ')} }
+  enum Confidence           { ${CONFIDENCES.join(' ')} }
+  enum IocType              { ${IOC_TYPES.join(' ')} }
+  enum Direction            { ${DIRECTIONS.join(' ')} }
+  enum NetProtocol          { ${NET_PROTOCOLS.join(' ')} }
+  enum RegistryHive         { ${REGISTRY_HIVES.join(' ')} }
+  enum RegistryAction       { ${REGISTRY_ACTIONS.join(' ')} }
+  enum PersistenceMechanism { ${PERSISTENCE_MECHANISMS.join(' ')} }
+  enum AccountAction        { ${ACCOUNT_ACTIONS.join(' ')} }
+  enum MemoryFinding        { ${MEMORY_FINDINGS.join(' ')} }
+  """Detection engine that fired the rule. Renamed from RuleSource to
+  disambiguate from the DetectionRule feature's RuleSource (which describes
+  rule provenance: manual / sigma_community / otx / etc)."""
+  enum DetectionEngine      { ${DETECTION_ENGINES.join(' ')} }
 
   interface Artifact {
     id: ID!
@@ -129,7 +147,7 @@ export const artifactTypeDefs = /* GraphQL */ `
   type DetectionHitArtifact implements Artifact {
     id: ID! caseId: ID! type: ArtifactType! observedAt: String! host: Asset
     severity: Severity! confidence: Confidence! notes: String tags: [String!]! addedAt: String!
-    ruleSource: RuleSource!
+    ruleSource: DetectionEngine!
     ruleId: String!
     ruleName: String!
     firedAt: String!
@@ -163,7 +181,7 @@ export const artifactTypeDefs = /* GraphQL */ `
   input AccountArtifactInput { base: ArtifactBaseInput!, username: String!, domain: String, action: AccountAction!, privileges: [String!], sourceIp: String }
   input LogFindingArtifactInput { base: ArtifactBaseInput!, logSource: String!, eventId: String, timestamp: String!, rawLine: String, observation: String! }
   input MemoryArtifactInput { base: ArtifactBaseInput!, processName: String!, pid: Int, finding: MemoryFinding!, evidence: String, toolUsed: String }
-  input DetectionHitArtifactInput { base: ArtifactBaseInput!, ruleSource: RuleSource!, ruleId: String!, ruleName: String!, firedAt: String!, count: Int }
+  input DetectionHitArtifactInput { base: ArtifactBaseInput!, ruleSource: DetectionEngine!, ruleId: String!, ruleName: String!, firedAt: String!, count: Int }
   input NoteArtifactInput { base: ArtifactBaseInput!, title: String, body: String!, author: ID! }
 
   extend type Mutation {

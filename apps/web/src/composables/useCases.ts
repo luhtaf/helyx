@@ -2,9 +2,8 @@ import { computed, type ComputedRef, type Ref } from 'vue';
 import { useQuery, useMutation } from '@vue/apollo-composable';
 import gql from 'graphql-tag';
 import type { Stakeholder } from './useStakeholders';
-
-export type CaseStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
-export type CaseVerdict = 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN' | 'PENDING';
+export { type CaseStatus, type CaseVerdict } from './case-kinds';
+import type { CaseStatus, CaseVerdict } from './case-kinds';
 
 export interface CaseSummary {
   id: string;

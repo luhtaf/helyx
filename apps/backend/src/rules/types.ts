@@ -1,6 +1,7 @@
-export type RuleKind = 'YARA' | 'SURICATA' | 'SIGMA' | 'OWASP' | 'CUSTOM';
-export type RuleStatus = 'DRAFT' | 'ACTIVE' | 'DEPRECATED';
-export type RuleSource = 'manual' | 'sigma-community' | 'otx' | 'helyx-generated' | 'imported-stix' | 'imported-openioc';
+// Re-export from kinds.ts (the single source of truth). Adding a new kind /
+// status / source = edit kinds.ts ONLY; everything below derives.
+export { type RuleKind, type RuleStatus, type RuleSource } from './kinds.js';
+import type { RuleKind, RuleStatus, RuleSource } from './kinds.js';
 
 export interface DetectionRuleRow {
   id: string;

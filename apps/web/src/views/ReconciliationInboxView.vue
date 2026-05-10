@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useReconciliationInbox, type ReconciliationStatus } from '@/composables/useReconciliationInbox';
+import { useReconciliationInbox } from '@/composables/useReconciliationInbox';
+import { RECONCILIATION_STATUSES, type ReconciliationStatus } from '@/composables/reconciliation-kinds';
 import RawStakeholderRow from '@/components/reconciliation/RawStakeholderRow.vue';
 import CreateStakeholderSlide from '@/components/reconciliation/CreateStakeholderSlide.vue';
 import { useToast } from '@/composables/useToast';
@@ -166,7 +167,7 @@ onUnmounted(() => {
 
     <div class="flex items-center gap-4 mb-6 font-mono text-[11px]">
       <button
-        v-for="s in (['PENDING', 'APPROVED', 'REJECTED', 'NEEDS_REVIEW'] as const)"
+        v-for="s in RECONCILIATION_STATUSES"
         :key="s"
         type="button"
         :class="['px-2 py-1 transition', status === s ? 'text-ink' : 'text-ink-faint hover:text-ink-dim']"

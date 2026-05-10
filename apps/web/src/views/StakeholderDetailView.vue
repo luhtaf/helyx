@@ -5,6 +5,7 @@ import { useStakeholder } from '@/composables/useStakeholder';
 import { useUpdateStakeholder, type StakeholderUpdateInput } from '@/composables/useStakeholders';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
+import { severityClass } from '@/utils/severity';
 import SensorStatusPill from '@/components/stakeholder/SensorStatusPill.vue';
 import SektorBadge from '@/components/stakeholder/SektorBadge.vue';
 import CaseStatusBadge from '@/components/case/CaseStatusBadge.vue';
@@ -38,15 +39,6 @@ async function onUpdate(stakeholderId: string, input: StakeholderUpdateInput): P
   }
 }
 
-function severityClass(s: string | null): string {
-  switch ((s ?? '').toUpperCase()) {
-    case 'CRITICAL': return 'text-sev-crit';
-    case 'HIGH':     return 'text-sev-high';
-    case 'MEDIUM':   return 'text-sev-med';
-    case 'LOW':      return 'text-sev-low';
-    default:         return 'text-ink-faint';
-  }
-}
 </script>
 
 <template>

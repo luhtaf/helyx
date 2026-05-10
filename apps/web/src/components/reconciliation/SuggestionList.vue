@@ -1,15 +1,8 @@
 <script setup lang="ts">
 import type { StakeholderSuggestion } from '@/composables/useReconciliationInbox';
+import { MATCH_REASON_LABELS } from '@/composables/reconciliation-kinds';
 
 defineProps<{ suggestions: StakeholderSuggestion[] }>();
-
-const reasonLabel: Record<string, string> = {
-  'alias-match': 'alias',
-  'levenshtein': 'fuzzy',
-  'acronym-match': 'acronym',
-  'domain-match': 'domain',
-  'pattern-match': 'pattern',
-};
 </script>
 
 <template>
@@ -29,7 +22,7 @@ const reasonLabel: Record<string, string> = {
         </div>
         <span class="font-mono text-[10px] text-ink-dim tabular-nums">{{ Math.round(s.confidence * 100) }}%</span>
         <span class="font-mono text-[9px] uppercase tracking-wider text-ink-faint border border-rule-strong px-1.5 py-0.5 rounded-sm">
-          {{ reasonLabel[s.reason] ?? s.reason }}
+          {{ MATCH_REASON_LABELS[s.reason] }}
         </span>
       </div>
     </li>

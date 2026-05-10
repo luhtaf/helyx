@@ -2,7 +2,18 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
-import { useRules, type RuleFilter, type RuleKind, type RuleStatus, type RuleSource } from '@/composables/useRules';
+import { useRules, type RuleFilter } from '@/composables/useRules';
+import {
+  KIND_CLASSES,
+  RULE_KINDS,
+  RULE_SOURCES,
+  RULE_STATUSES,
+  STATUS_CLASSES,
+  sourceLabel,
+  type RuleKind,
+  type RuleSource,
+  type RuleStatus,
+} from '@/composables/rule-kinds';
 
 const route = useRoute();
 const router = useRouter();
@@ -46,29 +57,12 @@ function go(r: { id: string }): void {
   router.push({ name: 'rule-detail', params: { id: r.id } });
 }
 
-function kindClass(k: RuleKind): string {
-  switch (k) {
-    case 'YARA':     return 'text-sev-high';
-    case 'SURICATA': return 'text-sev-med';
-    case 'SIGMA':    return 'text-sev-low';
-    case 'OWASP':    return 'text-signal';
-    case 'CUSTOM':   return 'text-ink-dim';
-  }
-}
-function statusClass(s: RuleStatus): string {
-  switch (s) {
-    case 'ACTIVE':     return 'text-sev-low';
-    case 'DRAFT':      return 'text-ink-dim';
-    case 'DEPRECATED': return 'text-ink-faint';
-  }
-}
-function sourceLabel(s: RuleSource): string {
-  return s.replace(/_/g, ' ');
-}
+const kindClass = (k: RuleKind): string => KIND_CLASSES[k];
+const statusClass = (s: RuleStatus): string => STATUS_CLASSES[s];
 
-const KIND_OPTIONS: RuleKind[] = ['YARA', 'SURICATA', 'SIGMA', 'OWASP', 'CUSTOM'];
-const STATUS_OPTIONS: RuleStatus[] = ['ACTIVE', 'DRAFT', 'DEPRECATED'];
-const SOURCE_OPTIONS: RuleSource[] = ['manual', 'sigma_community', 'otx', 'helyx_generated', 'imported_stix', 'imported_openioc'];
+const KIND_OPTIONS = RULE_KINDS;
+const STATUS_OPTIONS = RULE_STATUSES;
+const SOURCE_OPTIONS = RULE_SOURCES;
 </script>
 
 <template>

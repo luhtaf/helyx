@@ -1,8 +1,38 @@
-export type Severity = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type Confidence = 'LOW' | 'MEDIUM' | 'HIGH';
-export type ArtifactType =
-  | 'IOC' | 'FILE' | 'PROCESS' | 'NETWORK' | 'REGISTRY' | 'PERSISTENCE'
-  | 'ACCOUNT' | 'LOG_FINDING' | 'MEMORY' | 'DETECTION_HIT' | 'NOTE';
+// Re-export ALL enum types from kinds.ts (the single source of truth).
+// This file owns only the per-type field-shape interfaces, which compose
+// the imported enum types.
+
+export {
+  type ArtifactType,
+  type Severity,
+  type Confidence,
+  type IocType,
+  type IocDirection,
+  type NetworkDirection,
+  type NetProtocol,
+  type RegistryHive,
+  type RegistryAction,
+  type PersistenceMechanism,
+  type AccountAction,
+  type MemoryFinding,
+  type DetectionEngine,
+} from './kinds.js';
+
+import type {
+  ArtifactType,
+  Severity,
+  Confidence,
+  IocType,
+  IocDirection,
+  NetworkDirection,
+  NetProtocol,
+  RegistryHive,
+  RegistryAction,
+  PersistenceMechanism,
+  AccountAction,
+  MemoryFinding,
+  DetectionEngine,
+} from './kinds.js';
 
 export interface ArtifactBaseRow {
   id: string;
@@ -23,9 +53,9 @@ export interface ArtifactBaseRow {
 // ---------------------------------------------------------------------------
 
 export interface IocFields {
-  iocType: 'IP' | 'DOMAIN' | 'URL' | 'EMAIL' | 'HASH';
+  iocType: IocType;
   value: string;
-  direction: 'INBOUND' | 'OUTBOUND' | 'BOTH' | null;
+  direction: IocDirection | null;
   firstSeen: string | null;
   lastSeen: string | null;
   source: string | null;
@@ -55,26 +85,26 @@ export interface ProcessFields {
 }
 
 export interface NetworkFields {
-  protocol: 'TCP' | 'UDP' | 'ICMP' | 'HTTP' | 'DNS';
+  protocol: NetProtocol;
   srcIp: string;
   srcPort: number | null;
   dstIp: string;
   dstPort: number | null;
-  direction: 'INBOUND' | 'OUTBOUND' | 'LATERAL' | null;
+  direction: NetworkDirection | null;
   bytes: number | null;
   connectionStartedAt: string | null;
 }
 
 export interface RegistryFields {
-  hive: 'HKLM' | 'HKCU' | 'HKCR' | 'HKU' | 'HKCC';
+  hive: RegistryHive;
   keyPath: string;
   valueName: string | null;
   valueData: string | null;
-  action: 'CREATED' | 'MODIFIED' | 'DELETED';
+  action: RegistryAction;
 }
 
 export interface PersistenceFields {
-  mechanism: 'SCHEDULED_TASK' | 'SERVICE' | 'STARTUP_FOLDER' | 'RUN_KEY' | 'WMI' | 'CRON' | 'SYSTEMD' | 'LAUNCHD' | 'OTHER';
+  mechanism: PersistenceMechanism;
   name: string;
   target: string | null;
   user: string | null;
@@ -84,7 +114,7 @@ export interface PersistenceFields {
 export interface AccountFields {
   username: string;
   domain: string | null;
-  action: 'CREATED' | 'PRIVILEGE_ESCALATED' | 'DISABLED' | 'PASSWORD_CHANGED' | 'LOGIN_ANOMALY';
+  action: AccountAction;
   privileges: string[];
   sourceIp: string | null;
 }
@@ -100,13 +130,13 @@ export interface LogFindingFields {
 export interface MemoryFields {
   processName: string;
   pid: number | null;
-  finding: 'PROCESS_INJECTION' | 'HOLLOWING' | 'SHELLCODE' | 'UNBACKED_MEMORY' | 'STRINGS_MATCH' | 'OTHER';
+  finding: MemoryFinding;
   evidence: string | null;
   toolUsed: string | null;
 }
 
 export interface DetectionHitFields {
-  ruleSource: 'SIGMA' | 'YARA' | 'WAZUH' | 'ELASTIC' | 'CUSTOM';
+  ruleSource: DetectionEngine;
   ruleId: string;
   ruleName: string;
   firedAt: string;

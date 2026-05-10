@@ -1,5 +1,5 @@
-export type CaseStatus = 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
-export type CaseVerdict = 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN' | 'PENDING';
+export { type CaseStatus, type CaseVerdict } from './kinds.js';
+import type { CaseStatus, CaseVerdict } from './kinds.js';
 
 export interface CaseRow {
   id: string;

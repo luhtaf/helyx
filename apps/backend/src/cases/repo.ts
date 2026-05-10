@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { GraphQLError } from 'graphql';
 import { getSession } from '../db/neo4j.js';
 import type { CaseRow, CaseInput, CaseUpdateInput, ArtifactCounts } from './types.js';
+import type { CloseVerdict } from './kinds.js';
 
 // ---------------------------------------------------------------------------
 // Return fragment
@@ -269,7 +270,7 @@ export async function updateCase(
 export async function closeCase(
   tenantId: string,
   id: string,
-  verdict: 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN',
+  verdict: CloseVerdict,
 ): Promise<CaseRow> {
   const session = getSession();
   try {

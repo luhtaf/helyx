@@ -2,7 +2,16 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
-import { useSensorCoverage, type SensorStatusFilter, type SensorStackFilter } from '@/composables/useSensorCoverage';
+import { useSensorCoverage } from '@/composables/useSensorCoverage';
+import {
+  SENSOR_STACKS,
+  SENSOR_STACK_LABELS,
+  SENSOR_STATUSES,
+  SENSOR_STATUS_LABELS,
+  SENSOR_STATUS_TONE,
+  type SensorStackFilter,
+  type SensorStatusFilter,
+} from '@/composables/stakeholder-kinds';
 import SensorStatusPill from '@/components/stakeholder/SensorStatusPill.vue';
 import SektorBadge from '@/components/stakeholder/SektorBadge.vue';
 
@@ -38,20 +47,18 @@ function clearFilters(): void {
   search.value = '';
 }
 
-const STATUS_OPTIONS: { value: SensorStatusFilter; label: string; tone?: string }[] = [
+type StatusOpt = { value: SensorStatusFilter; label: string; tone?: string };
+type StackOpt  = { value: SensorStackFilter;  label: string };
+
+const STATUS_OPTIONS: StatusOpt[] = [
   { value: 'ALL', label: 'all' },
-  { value: 'ONLINE', label: 'online', tone: 'sev-low' },
-  { value: 'DEGRADED', label: 'degraded', tone: 'sev-med' },
-  { value: 'OFFLINE', label: 'offline', tone: 'sev-crit' },
+  ...SENSOR_STATUSES.map((v): StatusOpt => ({ value: v, label: SENSOR_STATUS_LABELS[v], tone: SENSOR_STATUS_TONE[v] })),
   { value: 'NO_SENSOR', label: 'no sensor' },
 ];
 
-const STACK_OPTIONS: { value: SensorStackFilter; label: string }[] = [
+const STACK_OPTIONS: StackOpt[] = [
   { value: 'ALL', label: 'all stacks' },
-  { value: 'WAZUH_FULL', label: 'Wazuh full' },
-  { value: 'WAZUH_AGENT', label: 'Wazuh agent' },
-  { value: 'ELK_FULL', label: 'ELK full' },
-  { value: 'MIXED', label: 'mixed' },
+  ...SENSOR_STACKS.map((v): StackOpt => ({ value: v, label: SENSOR_STACK_LABELS[v] })),
   { value: 'NONE', label: 'no stack' },
 ];
 </script>

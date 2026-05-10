@@ -1,6 +1,8 @@
+import { CASE_STATUSES, CASE_VERDICTS } from './kinds.js';
+
 export const caseTypeDefs = /* GraphQL */ `
-  enum CaseStatus  { DRAFT ACTIVE CLOSED ARCHIVED }
-  enum CaseVerdict { CONFIRMED INCONCLUSIVE CLEAN PENDING }
+  enum CaseStatus  { ${CASE_STATUSES.join(' ')} }
+  enum CaseVerdict { ${CASE_VERDICTS.join(' ')} }
 
   type Case {
     id: ID!

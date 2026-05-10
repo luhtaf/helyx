@@ -1,15 +1,7 @@
+import { ASSET_KINDS, MATCH_MODES } from './types.js';
+
 export const assetTypeDefs = /* GraphQL */ `
-  enum AssetKind {
-    HOST
-    HYPERVISOR
-    VM
-    CONTAINER
-    K8S_CLUSTER
-    K8S_NODE
-    K8S_POD
-    IMAGE
-    APPLICATION
-  }
+  enum AssetKind { ${ASSET_KINDS.join(' ')} }
 
   """
   CVE-to-asset matching strategy. Wider modes catch more CVEs (incl. false positives).
@@ -18,12 +10,7 @@ export const assetTypeDefs = /* GraphQL */ `
   MAJOR       — same vendor+product, version a.*.*  (matches all minors)
   BEAST       — same vendor+product, any version    (matches *.*.*)
   """
-  enum MatchMode {
-    EXACT
-    MAJOR_MINOR
-    MAJOR
-    BEAST
-  }
+  enum MatchMode { ${MATCH_MODES.join(' ')} }
 
   type Asset {
     id: ID!

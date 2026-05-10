@@ -5,13 +5,13 @@ import gql from 'graphql-tag';
 import type { Stakeholder, StakeholderInput } from './useStakeholders';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-export type ReconciliationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'NEEDS_REVIEW';
+export { type ReconciliationStatus, type MatchReason } from './reconciliation-kinds';
+import type { ReconciliationStatus, MatchReason } from './reconciliation-kinds';
 
 export interface StakeholderSuggestion {
   stakeholder: Stakeholder;
   confidence: number;
-  reason: string;
+  reason: MatchReason;
 }
 
 export interface RawStakeholder {

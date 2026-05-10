@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import Button from '@/components/ui/Button.vue';
+import { CLOSE_VERDICTS, type CloseVerdict } from '@/composables/case-kinds';
 
 defineProps<{ open: boolean; loading: boolean }>();
 const emit = defineEmits<{
-  (e: 'submit', verdict: 'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN'): void;
+  (e: 'submit', verdict: CloseVerdict): void;
   (e: 'cancel'): void;
 }>();
 
-const verdict = ref<'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN'>('CONFIRMED');
+const verdict = ref<CloseVerdict>('CONFIRMED');
 
-const verdictMeta: Record<'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN', { label: string; color: string; help: string }> = {
+const verdictMeta: Record<CloseVerdict, { label: string; color: string; help: string }> = {
   CONFIRMED: {
     label: 'Confirmed compromise',
     color: 'text-sev-crit',
@@ -47,7 +48,7 @@ const verdictMeta: Record<'CONFIRMED' | 'INCONCLUSIVE' | 'CLEAN', { label: strin
 
           <div class="space-y-2 mb-6">
             <label
-              v-for="v in (['CONFIRMED', 'INCONCLUSIVE', 'CLEAN'] as const)"
+              v-for="v in CLOSE_VERDICTS"
               :key="v"
               :class="[
                 'flex items-start gap-3 px-3 py-3 rounded-md border cursor-pointer transition',

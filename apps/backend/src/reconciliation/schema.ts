@@ -1,5 +1,10 @@
+import { MATCH_REASONS, RECONCILIATION_STATUSES } from './kinds.js';
+
 export const reconciliationTypeDefs = /* GraphQL */ `
-  enum ReconciliationStatus { PENDING APPROVED REJECTED NEEDS_REVIEW }
+  enum ReconciliationStatus { ${RECONCILIATION_STATUSES.join(' ')} }
+  """Why the fuzzy matcher chose this stakeholder. Each value corresponds
+  to a distinct matcher rule in fuzzy.ts."""
+  enum MatchReason { ${MATCH_REASONS.join(' ')} }
 
   type RawStakeholder {
     id: ID!
@@ -19,7 +24,7 @@ export const reconciliationTypeDefs = /* GraphQL */ `
   type StakeholderSuggestion {
     stakeholder: Stakeholder!
     confidence: Float!
-    reason: String!
+    reason: MatchReason!
   }
 
   type RawStakeholderCounts {
