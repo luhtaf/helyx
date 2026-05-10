@@ -211,6 +211,35 @@ export function useSearchEntities() {
   };
 }
 
+const GENERATE_RULES_FROM_HUNT = gql`
+  mutation GenerateRulesFromHunt($huntId: ID!) {
+    generateRulesFromHunt(huntId: $huntId) {
+      yaraCount suricataCount sigmaCount
+      skipped { reason count }
+    }
+  }
+`;
+
+export interface GenerateRulesResult {
+  yaraCount: number;
+  suricataCount: number;
+  sigmaCount: number;
+  skipped: { reason: string; count: number }[];
+}
+
+export function useGenerateRulesFromHunt() {
+  const { mutate, loading, error } = useMutation<
+    { generateRulesFromHunt: GenerateRulesResult },
+    { huntId: string }
+  >(GENERATE_RULES_FROM_HUNT, () => ({
+    refetchQueries: ['DetectionRules'],
+  }));
+  return {
+    submit: async (huntId: string) => (await mutate({ huntId }))?.data?.generateRulesFromHunt ?? null,
+    loading, error,
+  };
+}
+
 // Hunt detail extended w/ snapshot fields for graph-kind hunts.
 const HUNT_GRAPH_DETAIL = gql`
   query HuntGraphDetail($id: ID!) {

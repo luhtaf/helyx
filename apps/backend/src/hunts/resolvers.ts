@@ -18,6 +18,7 @@ import {
   searchEntities,
   updateHuntSnapshot,
 } from './repo.js';
+import { generateRulesFromHunt } from '../exporters/index.js';
 import type { HuntRecord } from './types.js';
 
 const CreateHuntSchema = z.object({
@@ -145,6 +146,22 @@ export const huntResolvers = {
       const updated = await updateHuntSnapshot(ctx.activeOrgId, input.id, input.snapshot);
       if (!updated) throw notFound('graph hunt not found');
       return updated;
+    },
+
+    generateRulesFromHunt: async (
+      _p: unknown,
+      args: { huntId: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      const hunt = await findHuntById(ctx.activeOrgId, args.huntId);
+      if (!hunt) throw notFound('hunt not found');
+      const { stats } = await generateRulesFromHunt(ctx.activeOrgId, ctx.user.id, {
+        id: hunt.id,
+        name: hunt.name,
+        graphSnapshot: hunt.graphSnapshot,
+      });
+      return stats;
     },
   },
 

@@ -18,7 +18,7 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt } from '@/composables/useHunts';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 
@@ -96,6 +96,26 @@ const { hunt, loading: huntLoading } = useHuntGraph(() => huntId.value);
 const { submit: saveHunt } = useSaveGraphAsHunt();
 const { submit: updateSnapshot } = useUpdateHuntSnapshot();
 const { search: searchEntities } = useSearchEntities();
+const { submit: generateRules, loading: generatingRules } = useGenerateRulesFromHunt();
+
+async function onGenerateRules(): Promise<void> {
+  if (!huntId.value) return;
+  const stats = await generateRules(huntId.value);
+  if (!stats) {
+    showToast('Generate failed', 'error');
+    return;
+  }
+  const total = stats.yaraCount + stats.suricataCount + stats.sigmaCount;
+  if (total === 0) {
+    const reason = stats.skipped[0]?.reason ?? 'no IOCs/TTPs in hunt';
+    showToast(`No rules generated — ${reason}`, 'info');
+    return;
+  }
+  showToast(
+    `${total} rules generated (${stats.yaraCount} YARA + ${stats.suricataCount} Suricata + ${stats.sigmaCount} Sigma) → /rules`,
+    'success',
+  );
+}
 
 // ─── Graph state ───────────────────────────────────────────────────
 const graphRef = useTemplateRef<InstanceType<typeof HelyxGraph>>('graphRef');
@@ -298,6 +318,9 @@ onMounted(() => { void plantSeed(); });
         </div>
         <div class="flex items-center gap-2 pointer-events-auto">
           <Button variant="ghost" @click="searchOpen = true">+ Add by search</Button>
+          <Button v-if="huntId" variant="ghost" :loading="generatingRules" @click="onGenerateRules">
+            Generate rules
+          </Button>
           <Button v-if="!huntId" variant="ghost" @click="saveOpen = true">Save as Hunt…</Button>
           <Button variant="ghost" @click="graphRef?.relayoutAll()">Re-layout</Button>
         </div>

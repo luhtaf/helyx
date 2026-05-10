@@ -108,5 +108,21 @@ export const huntTypeDefs = /* GraphQL */ `
     saveGraphAsHunt(input: SaveGraphAsHuntInput!): Hunt!
     """Update an existing GRAPH-kind Hunt's snapshot (auto-save path)."""
     updateHuntSnapshot(id: ID!, snapshot: String!): Hunt!
+    """Walk a Hunt's nodes (Case → Artifact + AttackPattern), categorize
+    IOCs/TTPs, run YARA/Suricata/Sigma generators, persist as
+    :DetectionRule kind=GENERATED. Returns counters for what was created."""
+    generateRulesFromHunt(huntId: ID!): GenerateRulesResult!
+  }
+
+  type GenerateRulesResult {
+    yaraCount: Int!
+    suricataCount: Int!
+    sigmaCount: Int!
+    skipped: [GenerateSkippedReason!]!
+  }
+
+  type GenerateSkippedReason {
+    reason: String!
+    count: Int!
   }
 `;
