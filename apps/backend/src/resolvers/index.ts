@@ -16,6 +16,7 @@ import { stakeholderResolvers } from '../stakeholders/resolvers.js';
 import { reconciliationResolvers } from '../reconciliation/resolvers.js';
 import { caseResolvers } from '../cases/resolvers.js';
 import { artifactResolvers } from '../artifacts/resolvers/index.js';
+import { ruleResolvers } from '../rules/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -47,6 +48,7 @@ export const resolvers = {
     ...stakeholderResolvers.Query,
     ...reconciliationResolvers.Query,
     ...caseResolvers.Query,
+    ...ruleResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -58,6 +60,7 @@ export const resolvers = {
     ...reconciliationResolvers.Mutation,
     ...caseResolvers.Mutation,
     ...artifactResolvers.Mutation,
+    ...ruleResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,

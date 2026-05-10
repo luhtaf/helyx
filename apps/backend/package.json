@@ -15,7 +15,8 @@
     "elk:sync": "tsx src/sources/elk/cli.ts",
     "mitre:sync": "tsx src/sources/mitre/cli.ts",
     "bootstrap:stakeholders": "tsx src/sources/elk/cli-bootstrap-stakeholders.ts",
-    "sf:sync": "tsx src/sources/spiderfoot/cli.ts"
+    "sf:sync": "tsx src/sources/spiderfoot/cli.ts",
+    "rules:seed-sigma": "tsx src/rules/cli-seed-sigma.ts"
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",

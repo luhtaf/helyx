@@ -111,6 +111,19 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Sensors' },
   },
   {
+    path: '/rules',
+    name: 'rules',
+    component: () => import('@/views/RulesView.vue'),
+    meta: { title: 'Rules' },
+  },
+  {
+    path: '/rules/:id',
+    name: 'rule-detail',
+    component: () => import('@/views/RuleDetailView.vue'),
+    props: true,
+    meta: { title: 'Rule' },
+  },
+  {
     path: '/graph',
     name: 'graph',
     component: () => import('@/views/GraphView.vue'),

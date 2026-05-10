@@ -11,6 +11,7 @@ import { stakeholderTypeDefs } from '../stakeholders/schema.js';
 import { reconciliationTypeDefs } from '../reconciliation/schema.js';
 import { artifactTypeDefs } from '../artifacts/schema.js';
 import { caseTypeDefs } from '../cases/schema.js';
+import { ruleTypeDefs } from '../rules/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -40,4 +41,5 @@ export const typeDefs = [
   reconciliationTypeDefs,
   artifactTypeDefs,
   caseTypeDefs,
+  ruleTypeDefs,
 ];

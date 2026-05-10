@@ -1,0 +1,306 @@
+import { getSession } from '../db/neo4j.js';
+import { newId } from '../utils/uuid.js';
+import type {
+  CreateRuleInput,
+  DetectionRuleRow,
+  RuleFilter,
+  RuleKind,
+  RuleSource,
+  RuleStatus,
+  UpdateRuleInput,
+} from './types.js';
+
+const RULE_RETURN = `
+  r.id AS id, r.tenantId AS tenantId, r.kind AS kind,
+  r.name AS name, r.description AS description, r.content AS content,
+  coalesce(r.tags, []) AS tags,
+  r.source AS source, r.sourceRef AS sourceRef, r.status AS status,
+  head([(u:User)-[:CREATED]->(r) | u.id]) AS createdByUserId,
+  toString(r.createdAt) AS createdAt, toString(r.updatedAt) AS updatedAt,
+  size([(r)-[:DERIVED_FROM]->() | 1]) AS derivedFromArtifactCount,
+  size([(r)-[:DETECTS]->() | 1]) AS detectsTechniqueCount,
+  size([(:Hunt)-[:GENERATED]->(r) | 1]) AS generatedByHuntCount
+`;
+
+function rowToRule(rec: { get: (k: string) => unknown }): DetectionRuleRow {
+  return {
+    id: rec.get('id') as string,
+    tenantId: rec.get('tenantId') as string,
+    kind: rec.get('kind') as RuleKind,
+    name: rec.get('name') as string,
+    description: (rec.get('description') as string | null) ?? null,
+    content: rec.get('content') as string,
+    tags: (rec.get('tags') as string[]) ?? [],
+    source: rec.get('source') as RuleSource,
+    sourceRef: (rec.get('sourceRef') as string | null) ?? null,
+    status: rec.get('status') as RuleStatus,
+    createdByUserId: (rec.get('createdByUserId') as string | null) ?? null,
+    createdAt: rec.get('createdAt') as string,
+    updatedAt: rec.get('updatedAt') as string,
+    derivedFromArtifactCount: Number(rec.get('derivedFromArtifactCount') ?? 0),
+    detectsTechniqueCount: Number(rec.get('detectsTechniqueCount') ?? 0),
+    generatedByHuntCount: Number(rec.get('generatedByHuntCount') ?? 0),
+  };
+}
+
+export async function createRule(
+  tenantId: string,
+  userId: string,
+  input: CreateRuleInput,
+): Promise<DetectionRuleRow> {
+  const id = newId();
+  const session = getSession();
+  try {
+    return await session.executeWrite(async (tx) => {
+      await tx.run(
+        `MATCH (u:User {id: $userId})
+         CREATE (r:DetectionRule {
+           id: $id, tenantId: $tenantId, kind: $kind, name: $name,
+           description: $description, content: $content,
+           tags: $tags, source: $source, sourceRef: $sourceRef,
+           status: $status, createdAt: datetime(), updatedAt: datetime()
+         })
+         CREATE (u)-[:CREATED]->(r)`,
+        {
+          id,
+          tenantId,
+          userId,
+          kind: input.kind,
+          name: input.name,
+          description: input.description ?? null,
+          content: input.content,
+          tags: input.tags ?? [],
+          source: input.source ?? 'manual',
+          sourceRef: input.sourceRef ?? null,
+          status: input.status ?? 'DRAFT',
+        },
+      );
+
+      // Derived-from artifact provenance — rule "indicator" semantic.
+      if (input.derivedFromArtifactIds?.length) {
+        await tx.run(
+          `MATCH (r:DetectionRule {id: $id, tenantId: $tenantId})
+           UNWIND $aIds AS aId
+           MATCH (a:Artifact {id: aId, tenantId: $tenantId})
+           MERGE (r)-[:DERIVED_FROM]->(a)`,
+          { id, tenantId, aIds: input.derivedFromArtifactIds },
+        );
+      }
+
+      // MITRE technique coverage.
+      if (input.detectsTechniqueIds?.length) {
+        await tx.run(
+          `MATCH (r:DetectionRule {id: $id, tenantId: $tenantId})
+           UNWIND $tIds AS tId
+           MATCH (ap:AttackPattern {id: tId})
+           MERGE (r)-[:DETECTS]->(ap)`,
+          { id, tenantId, tIds: input.detectsTechniqueIds },
+        );
+      }
+
+      const r = await tx.run(
+        `MATCH (r:DetectionRule {id: $id}) RETURN ${RULE_RETURN}`,
+        { id },
+      );
+      return rowToRule(r.records[0]!);
+    });
+  } finally {
+    await session.close();
+  }
+}
+
+export async function findRuleById(
+  tenantId: string,
+  id: string,
+): Promise<DetectionRuleRow | null> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (r:DetectionRule {id: $id, tenantId: $tenantId}) RETURN ${RULE_RETURN}`,
+      { id, tenantId },
+    );
+    const rec = r.records[0];
+    return rec ? rowToRule(rec) : null;
+  } finally {
+    await session.close();
+  }
+}
+
+export async function listRules(
+  tenantId: string,
+  filter: RuleFilter,
+  page: number,
+  perPage: number,
+): Promise<DetectionRuleRow[]> {
+  const session = getSession();
+  try {
+    const conditions: string[] = ['r.tenantId = $tenantId'];
+    const params: Record<string, unknown> = {
+      tenantId,
+      skip: BigInt(Math.max(0, (page - 1) * perPage)),
+      limit: BigInt(perPage),
+    };
+    if (filter.kind) { conditions.push('r.kind = $kind'); params.kind = filter.kind; }
+    if (filter.status) { conditions.push('r.status = $status'); params.status = filter.status; }
+    if (filter.source) { conditions.push('r.source = $source'); params.source = filter.source; }
+    if (filter.tag) { conditions.push('$tag IN coalesce(r.tags, [])'); params.tag = filter.tag; }
+
+    let cypher: string;
+    if (filter.search) {
+      params.search = filter.search;
+      // Fulltext search via index, then filter by tenant + others.
+      cypher = `
+        CALL db.index.fulltext.queryNodes('detection_rule_search', $search) YIELD node AS r, score
+        WHERE ${conditions.join(' AND ')}
+        RETURN ${RULE_RETURN}
+        ORDER BY score DESC
+        SKIP $skip LIMIT $limit
+      `;
+    } else {
+      cypher = `
+        MATCH (r:DetectionRule)
+        WHERE ${conditions.join(' AND ')}
+        RETURN ${RULE_RETURN}
+        ORDER BY r.updatedAt DESC
+        SKIP $skip LIMIT $limit
+      `;
+    }
+    const r = await session.run(cypher, params);
+    return r.records.map(rowToRule);
+  } finally {
+    await session.close();
+  }
+}
+
+export async function countRules(tenantId: string, filter: RuleFilter): Promise<number> {
+  const session = getSession();
+  try {
+    const conditions: string[] = ['r.tenantId = $tenantId'];
+    const params: Record<string, unknown> = { tenantId };
+    if (filter.kind) { conditions.push('r.kind = $kind'); params.kind = filter.kind; }
+    if (filter.status) { conditions.push('r.status = $status'); params.status = filter.status; }
+    if (filter.source) { conditions.push('r.source = $source'); params.source = filter.source; }
+    if (filter.tag) { conditions.push('$tag IN coalesce(r.tags, [])'); params.tag = filter.tag; }
+
+    let cypher: string;
+    if (filter.search) {
+      params.search = filter.search;
+      cypher = `
+        CALL db.index.fulltext.queryNodes('detection_rule_search', $search) YIELD node AS r
+        WHERE ${conditions.join(' AND ')}
+        RETURN count(r) AS n
+      `;
+    } else {
+      cypher = `MATCH (r:DetectionRule) WHERE ${conditions.join(' AND ')} RETURN count(r) AS n`;
+    }
+    const r = await session.run(cypher, params);
+    return Number(r.records[0]?.get('n') ?? 0);
+  } finally {
+    await session.close();
+  }
+}
+
+export async function updateRule(
+  tenantId: string,
+  id: string,
+  input: UpdateRuleInput,
+): Promise<DetectionRuleRow | null> {
+  const session = getSession();
+  try {
+    const sets: string[] = ['r.updatedAt = datetime()'];
+    const params: Record<string, unknown> = { id, tenantId };
+    if (input.name !== undefined) { sets.push('r.name = $name'); params.name = input.name; }
+    if (input.description !== undefined) { sets.push('r.description = $description'); params.description = input.description; }
+    if (input.content !== undefined) { sets.push('r.content = $content'); params.content = input.content; }
+    if (input.tags !== undefined) { sets.push('r.tags = $tags'); params.tags = input.tags; }
+    if (input.status !== undefined) { sets.push('r.status = $status'); params.status = input.status; }
+
+    const r = await session.run(
+      `MATCH (r:DetectionRule {id: $id, tenantId: $tenantId})
+       SET ${sets.join(', ')}
+       RETURN ${RULE_RETURN}`,
+      params,
+    );
+    const rec = r.records[0];
+    return rec ? rowToRule(rec) : null;
+  } finally {
+    await session.close();
+  }
+}
+
+export async function deleteRule(tenantId: string, id: string): Promise<boolean> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (r:DetectionRule {id: $id, tenantId: $tenantId})
+       DETACH DELETE r
+       RETURN count(r) AS deleted`,
+      { id, tenantId },
+    );
+    return Number(r.records[0]?.get('deleted') ?? 0) > 0;
+  } finally {
+    await session.close();
+  }
+}
+
+// Bulk upsert — used by Sigma library import + future STIX importer.
+// Idempotent on (tenantId, sourceRef) for a given source. Returns count.
+export async function upsertRulesBulk(
+  tenantId: string,
+  rules: Array<{
+    kind: RuleKind;
+    name: string;
+    description: string | null;
+    content: string;
+    tags: string[];
+    source: RuleSource;
+    sourceRef: string;
+    detectsTechniqueIds?: string[];
+  }>,
+): Promise<number> {
+  if (rules.length === 0) return 0;
+  const session = getSession();
+  try {
+    return await session.executeWrite(async (tx) => {
+      const rows = rules.map((r) => ({ ...r, id: newId() }));
+      const result = await tx.run(
+        `UNWIND $rows AS row
+         MERGE (r:DetectionRule {tenantId: $tenantId, source: row.source, sourceRef: row.sourceRef})
+         ON CREATE SET
+           r.id = row.id, r.kind = row.kind, r.name = row.name,
+           r.description = row.description, r.content = row.content,
+           r.tags = row.tags, r.status = 'ACTIVE',
+           r.createdAt = datetime(), r.updatedAt = datetime()
+         ON MATCH SET
+           r.name = row.name, r.description = row.description,
+           r.content = row.content, r.tags = row.tags,
+           r.updatedAt = datetime()
+         RETURN count(r) AS n`,
+        { tenantId, rows },
+      );
+
+      // Best-effort technique linking — silently skip techniques not in catalog.
+      const withTech = rules.filter((r) => r.detectsTechniqueIds?.length);
+      if (withTech.length) {
+        const techRows = withTech.flatMap((r) =>
+          (r.detectsTechniqueIds ?? []).map((tId) => ({
+            sourceRef: r.sourceRef,
+            source: r.source,
+            tId,
+          })),
+        );
+        await tx.run(
+          `UNWIND $rows AS row
+           MATCH (rule:DetectionRule {tenantId: $tenantId, source: row.source, sourceRef: row.sourceRef})
+           MATCH (ap:AttackPattern {externalId: row.tId})
+           MERGE (rule)-[:DETECTS]->(ap)`,
+          { tenantId, rows: techRows },
+        );
+      }
+
+      return Number(result.records[0]?.get('n') ?? 0);
+    });
+  } finally {
+    await session.close();
+  }
+}
