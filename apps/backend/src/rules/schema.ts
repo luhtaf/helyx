@@ -25,6 +25,11 @@ export const ruleTypeDefs = /* GraphQL */ `
     status: RuleStatus!
     """F1 — release tier (defaults to 'internal' for legacy rules)."""
     releaseTier: ReleaseTier!
+    """F2 — approval state. Null = unapproved. Stale = approvedAt set
+    but approvalContentHash != sha256(current content)."""
+    approvedByUserId: ID
+    approvedAt: String
+    approvalContentHash: String
     createdAt: String!
     updatedAt: String!
     """Number of artifacts (IOCs) this rule was derived from. >0 means
@@ -81,5 +86,11 @@ export const ruleTypeDefs = /* GraphQL */ `
     """F1 — set release tier on a rule. Audit-logged via
     :ReleaseTierChange chain + AuditEvent. No-op on same-tier."""
     setRuleReleaseTier(id: ID!, tier: ReleaseTier!): DetectionRule!
+    """F2 — approve a rule for release. Captures sha256(content) at
+    approval time so post-approval edits surface as 'stale'. Re-approving
+    is allowed (overwrites old hash + audit chain)."""
+    approveRule(id: ID!): DetectionRule!
+    """F2 — revoke approval. Clears all 3 approval fields."""
+    unapproveRule(id: ID!): DetectionRule!
   }
 `;

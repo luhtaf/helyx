@@ -27,6 +27,11 @@ export interface DetectionRule {
   sourceRef: string | null;
   status: RuleStatus;
   releaseTier: ReleaseTier;
+  // F2 approval state. approvedAt/approvedByUserId set when approved.
+  // Stale = approvedAt set but approvalContentHash != sha256(content).
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  approvalContentHash: string | null;
   createdAt: string;
   updatedAt: string;
   derivedFromArtifactCount: number;
@@ -55,6 +60,7 @@ const RULES_LIST = gql`
       total page perPage
       items {
         id kind name description tags source sourceRef status releaseTier
+        approvedAt
         createdAt updatedAt
         derivedFromArtifactCount detectsTechniqueCount generatedByHuntCount
       }
@@ -66,6 +72,7 @@ const RULE_DETAIL = gql`
   query DetectionRule($id: ID!) {
     detectionRule(id: $id) {
       id kind name description content tags source sourceRef status releaseTier
+      approvedByUserId approvedAt approvalContentHash
       createdAt updatedAt
       derivedFromArtifactCount detectsTechniqueCount generatedByHuntCount
     }
@@ -93,6 +100,58 @@ export function useSetRuleReleaseTier() {
       (await mutate({ id, tier }))?.data?.setRuleReleaseTier ?? null,
     loading, error,
   };
+}
+
+const APPROVE_RULE = gql`
+  mutation ApproveRule($id: ID!) {
+    approveRule(id: $id) { id approvedByUserId approvedAt approvalContentHash updatedAt }
+  }
+`;
+
+const UNAPPROVE_RULE = gql`
+  mutation UnapproveRule($id: ID!) {
+    unapproveRule(id: $id) { id approvedByUserId approvedAt approvalContentHash updatedAt }
+  }
+`;
+
+export function useApproveRule() {
+  const { mutate, loading, error } = useMutation<
+    { approveRule: DetectionRule },
+    { id: string }
+  >(APPROVE_RULE, () => ({
+    refetchQueries: ['DetectionRule', 'DetectionRules'],
+    awaitRefetchQueries: true,
+  }));
+  return {
+    submit: async (id: string) => (await mutate({ id }))?.data?.approveRule ?? null,
+    loading, error,
+  };
+}
+
+export function useUnapproveRule() {
+  const { mutate, loading, error } = useMutation<
+    { unapproveRule: DetectionRule },
+    { id: string }
+  >(UNAPPROVE_RULE, () => ({
+    refetchQueries: ['DetectionRule', 'DetectionRules'],
+    awaitRefetchQueries: true,
+  }));
+  return {
+    submit: async (id: string) => (await mutate({ id }))?.data?.unapproveRule ?? null,
+    loading, error,
+  };
+}
+
+// Stale-approval detector — runs in browser to flag content edits that
+// invalidate prior approvals. Pure function; mirrors backend sha256.
+// Browser SubtleCrypto is async, so caller awaits.
+export async function isApprovalStale(rule: Pick<DetectionRule, 'content' | 'approvalContentHash'>): Promise<boolean> {
+  if (!rule.approvalContentHash) return false;
+  if (typeof crypto === 'undefined' || !crypto.subtle) return false;
+  const bytes = new TextEncoder().encode(rule.content);
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  const hex = Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  return hex !== rule.approvalContentHash;
 }
 
 const CREATE_RULE = gql`

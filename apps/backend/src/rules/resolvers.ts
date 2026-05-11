@@ -3,12 +3,14 @@ import type { RequestContext } from '../auth/context.js';
 import { notFound } from '../auth/errors.js';
 import { assertOrgRole } from '../auth/middleware.js';
 import {
+  approveRule,
   countRules,
   createRule,
   deleteRule,
   findRuleById,
   listRules,
   setRuleReleaseTier,
+  unapproveRule,
   updateRule,
 } from './repo.js';
 import {
@@ -128,6 +130,16 @@ export const ruleResolvers = {
       }
       const updated = await setRuleReleaseTier(ctx.activeOrgId, ctx.user.id, args.id, decoded);
       return encodeRow(updated);
+    },
+
+    approveRule: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {
+      assertOrgRole(ctx, 'ANALYST');
+      return encodeRow(await approveRule(ctx.activeOrgId, ctx.user.id, args.id));
+    },
+
+    unapproveRule: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {
+      assertOrgRole(ctx, 'ANALYST');
+      return encodeRow(await unapproveRule(ctx.activeOrgId, ctx.user.id, args.id));
     },
   },
 };

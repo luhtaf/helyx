@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, toRef, watch } from 'vue';
-import { useRule, useSetRuleReleaseTier, RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
+import { ref, toRef, watch, watchEffect } from 'vue';
+import { useRule, useSetRuleReleaseTier, useApproveRule, useUnapproveRule, isApprovalStale, RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import { KIND_CLASSES, type RuleKind } from '@/composables/rule-kinds';
 import { useToast } from '@/composables/useToast';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
+import Button from '@/components/ui/Button.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
@@ -35,6 +36,37 @@ async function onChangeTier(next: ReleaseTier): Promise<void> {
   } catch (e) {
     pendingTier.value = null;
     showToast(`Tier change failed: ${(e as Error).message}`, 'error');
+  }
+}
+
+// F2 — approval state. Stale check runs client-side via SubtleCrypto
+// SHA-256 — instant feedback when content was edited post-approval.
+const { submit: approve, loading: approving } = useApproveRule();
+const { submit: unapprove, loading: unapproving } = useUnapproveRule();
+const approvalStale = ref(false);
+
+watchEffect(async () => {
+  if (rule.value) approvalStale.value = await isApprovalStale(rule.value);
+});
+
+async function onApprove(): Promise<void> {
+  if (!rule.value) return;
+  try {
+    await approve(rule.value.id);
+    showToast(approvalStale.value ? 'Re-approved (content hash refreshed)' : 'Rule approved for release', 'success');
+  } catch (e) {
+    showToast(`Approve failed: ${(e as Error).message}`, 'error');
+  }
+}
+
+async function onUnapprove(): Promise<void> {
+  if (!rule.value) return;
+  if (!confirm('Revoke approval? Push paths will reject this rule until re-approved.')) return;
+  try {
+    await unapprove(rule.value.id);
+    showToast('Approval revoked', 'success');
+  } catch (e) {
+    showToast(`Unapprove failed: ${(e as Error).message}`, 'error');
   }
 }
 </script>
@@ -113,6 +145,45 @@ async function onChangeTier(next: ReleaseTier): Promise<void> {
       <section v-if="rule.sourceRef" class="mb-8">
         <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">source ref</p>
         <p class="font-mono text-[12px] text-ink-dim">{{ rule.sourceRef }}</p>
+      </section>
+
+      <!-- F2 — approval state (sha256 content hash freshness check) -->
+      <section class="mb-8">
+        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">approval</p>
+        <p class="text-[12px] text-ink-dim mb-3 max-w-[68ch]">
+          Captures sha256 of rule.content at approval time. Editing the
+          rule body after approval makes the approval <em>stale</em> —
+          re-approval required before push.
+        </p>
+        <div class="flex items-center gap-3">
+          <span
+            v-if="rule.approvedAt && !approvalStale"
+            class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-sev-low/15 text-sev-low border-sev-low/30 font-mono text-[10px] uppercase tracking-wider"
+            :title="`Approved ${rule.approvedAt.slice(0, 19).replace('T', ' ')} by ${rule.approvedByUserId?.slice(0, 8) ?? '—'}`"
+          >approved</span>
+          <span
+            v-else-if="rule.approvedAt && approvalStale"
+            class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-sev-med/15 text-sev-med border-sev-med/30 font-mono text-[10px] uppercase tracking-wider"
+            title="Content was edited after approval — re-approve required"
+          >stale (content edited)</span>
+          <span
+            v-else
+            class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-ink-faint/10 text-ink-dim border-ink-faint/30 font-mono text-[10px] uppercase tracking-wider"
+          >unapproved</span>
+
+          <Button
+            v-if="!rule.approvedAt || approvalStale"
+            variant="primary" size="sm"
+            :loading="approving"
+            @click="onApprove"
+          >{{ approvalStale ? 'Re-approve' : 'Approve for release' }}</Button>
+          <Button
+            v-if="rule.approvedAt"
+            variant="ghost" size="sm"
+            :loading="unapproving"
+            @click="onUnapprove"
+          >Revoke</Button>
+        </div>
       </section>
 
       <!-- F1 — release tier picker (4-tier need-to-know enforcement) -->

@@ -1,5 +1,6 @@
 import { getSession } from '../db/neo4j.js';
 import { newId } from '../utils/uuid.js';
+import { createHash, randomUUID } from 'node:crypto';
 import { GraphQLError } from 'graphql';
 import type {
   CreateRuleInput,
@@ -13,12 +14,20 @@ import type {
 } from './types.js';
 import { logAudit } from '../audits/log.js';
 
+// F2 — sha256 of rule.content at approval time. Stable hex hash.
+function sha256(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex');
+}
+
 const RULE_RETURN = `
   r.id AS id, r.tenantId AS tenantId, r.kind AS kind,
   r.name AS name, r.description AS description, r.content AS content,
   coalesce(r.tags, []) AS tags,
   r.source AS source, r.sourceRef AS sourceRef, r.status AS status,
   coalesce(r.releaseTier, 'internal') AS releaseTier,
+  r.approvedByUserId AS approvedByUserId,
+  toString(r.approvedAt) AS approvedAt,
+  r.approvalContentHash AS approvalContentHash,
   head([(u:User)-[:CREATED]->(r) | u.id]) AS createdByUserId,
   toString(r.createdAt) AS createdAt, toString(r.updatedAt) AS updatedAt,
   size([(r)-[:DERIVED_FROM]->() | 1]) AS derivedFromArtifactCount,
@@ -39,6 +48,9 @@ function rowToRule(rec: { get: (k: string) => unknown }): DetectionRuleRow {
     sourceRef: (rec.get('sourceRef') as string | null) ?? null,
     status: rec.get('status') as RuleStatus,
     releaseTier: rec.get('releaseTier') as ReleaseTier,
+    approvedByUserId: (rec.get('approvedByUserId') as string | null) ?? null,
+    approvedAt: (rec.get('approvedAt') as string | null) ?? null,
+    approvalContentHash: (rec.get('approvalContentHash') as string | null) ?? null,
     createdByUserId: (rec.get('createdByUserId') as string | null) ?? null,
     createdAt: rec.get('createdAt') as string,
     updatedAt: rec.get('updatedAt') as string,
@@ -46,6 +58,105 @@ function rowToRule(rec: { get: (k: string) => unknown }): DetectionRuleRow {
     detectsTechniqueCount: Number(rec.get('detectsTechniqueCount') ?? 0),
     generatedByHuntCount: Number(rec.get('generatedByHuntCount') ?? 0),
   };
+}
+
+// F2 — Approve a rule for release. Captures sha256(content) so we can
+// detect post-approval edits ("stale approval"). Per the Copilot
+// finding, edits after approval drop the approval — re-approval needed.
+// Audit chain via :RuleApproval node (m018) + AuditEvent.
+export async function approveRule(
+  tenantId: string,
+  userId: string,
+  ruleId: string,
+): Promise<DetectionRuleRow> {
+  const session = getSession();
+  try {
+    const result = await session.executeWrite(async (tx) => {
+      // Fetch content first to compute hash atomically with approval.
+      const cur = await tx.run(
+        `MATCH (r:DetectionRule {id: $ruleId, tenantId: $tenantId})
+         RETURN r.content AS content,
+                r.approvedByUserId AS approvedByUserId,
+                toString(r.approvedAt) AS approvedAt`,
+        { ruleId, tenantId },
+      );
+      const rec = cur.records[0];
+      if (!rec) throw new GraphQLError('rule not found', { extensions: { code: 'NOT_FOUND' } });
+      const beforeApproved = (rec.get('approvedByUserId') as string | null) ?? null;
+      const contentHash = sha256(rec.get('content') as string);
+
+      const upd = await tx.run(
+        `MATCH (r:DetectionRule {id: $ruleId, tenantId: $tenantId})
+         SET r.approvedByUserId = $userId,
+             r.approvedAt = datetime(),
+             r.approvalContentHash = $hash,
+             r.updatedAt = datetime()
+         CREATE (a:RuleApproval {
+           id: randomUUID(), tenantId: $tenantId, ruleId: $ruleId,
+           action: 'approve', actorUserId: $userId,
+           contentHash: $hash, ts: datetime()
+         })
+         RETURN ${RULE_RETURN}`,
+        { ruleId, tenantId, userId, hash: contentHash },
+      );
+      return { row: rowToRule(upd.records[0]!), wasReApprove: beforeApproved !== null };
+    });
+    await logAudit(
+      tenantId, userId, 'rule.approve',
+      { type: 'DetectionRule', id: ruleId },
+      result.wasReApprove ? { previouslyApproved: true } : null,
+      { approvedByUserId: userId, approvalContentHash: result.row.approvalContentHash },
+    );
+    return result.row;
+  } finally {
+    await session.close();
+  }
+}
+
+// F2 — Revoke approval. Clears the 3 approval fields.
+export async function unapproveRule(
+  tenantId: string,
+  userId: string,
+  ruleId: string,
+): Promise<DetectionRuleRow> {
+  const session = getSession();
+  try {
+    const result = await session.executeWrite(async (tx) => {
+      const cur = await tx.run(
+        `MATCH (r:DetectionRule {id: $ruleId, tenantId: $tenantId})
+         RETURN r.approvedByUserId AS approvedByUserId,
+                r.approvalContentHash AS approvalContentHash`,
+        { ruleId, tenantId },
+      );
+      const rec = cur.records[0];
+      if (!rec) throw new GraphQLError('rule not found', { extensions: { code: 'NOT_FOUND' } });
+      const before = {
+        approvedByUserId: (rec.get('approvedByUserId') as string | null) ?? null,
+        approvalContentHash: (rec.get('approvalContentHash') as string | null) ?? null,
+      };
+      const upd = await tx.run(
+        `MATCH (r:DetectionRule {id: $ruleId, tenantId: $tenantId})
+         REMOVE r.approvedByUserId, r.approvedAt, r.approvalContentHash
+         SET r.updatedAt = datetime()
+         CREATE (a:RuleApproval {
+           id: randomUUID(), tenantId: $tenantId, ruleId: $ruleId,
+           action: 'unapprove', actorUserId: $userId, ts: datetime()
+         })
+         RETURN ${RULE_RETURN}`,
+        { ruleId, tenantId, userId },
+      );
+      return { row: rowToRule(upd.records[0]!), before };
+    });
+    await logAudit(
+      tenantId, userId, 'rule.unapprove',
+      { type: 'DetectionRule', id: ruleId },
+      result.before,
+      { approvedByUserId: null, approvalContentHash: null },
+    );
+    return result.row;
+  } finally {
+    await session.close();
+  }
 }
 
 // F1 — Set the release tier on a DetectionRule. Logs audit chain via

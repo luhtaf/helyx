@@ -20,6 +20,14 @@ export interface DetectionRuleRow {
   sourceRef: string | null;
   status: RuleStatus;
   releaseTier: ReleaseTier;  // F1
+  // F2 — approval state machine. approvedByUserId/approvedAt set when
+  // an analyst approves the rule for release; approvalContentHash is
+  // SHA-256(content) at approval time. If content changes after approval,
+  // approval becomes stale (re-approval required). Stale = approvedAt
+  // present but approvalContentHash != sha256(currentContent).
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  approvalContentHash: string | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
