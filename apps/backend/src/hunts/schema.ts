@@ -105,6 +105,39 @@ export const huntTypeDefs = /* GraphQL */ `
     Export history panel on /graph?hunt=<id>. Signature is truncated
     to 16 chars; full signature lives on the persisted record."""
     recentStixExports(huntId: ID!, limit: Int = 10): [StixExportRow!]!
+    """F1c+ — Per-rule × per-target-tier push readiness for every rule
+    in a hunt. One round-trip; FE renders summary + expandable matrix."""
+    huntPushReadiness(huntId: ID!): HuntPushReadinessResult!
+  }
+
+  type HuntPushReadinessSummary {
+    totalRules: Int!
+    approvedCount: Int!
+    staleCount: Int!
+    unapprovedCount: Int!
+    shipCountPublic: Int!
+    shipCountCrossAgency: Int!
+    shipCountSectoral: Int!
+    shipCountInternal: Int!
+  }
+
+  type HuntRulePushReadinessRow {
+    ruleId: ID!
+    ruleName: String!
+    ruleKind: RuleKind!
+    ruleTier: ReleaseTier!
+    """approved | stale | unapproved — already collapsed from the guard."""
+    approvalState: String!
+    """4 readinesses: public/cross_agency/sectoral/internal."""
+    public: PushReadiness!
+    crossAgency: PushReadiness!
+    sectoral: PushReadiness!
+    internal: PushReadiness!
+  }
+
+  type HuntPushReadinessResult {
+    summary: HuntPushReadinessSummary!
+    rows: [HuntRulePushReadinessRow!]!
   }
 
   type StixExportRow {

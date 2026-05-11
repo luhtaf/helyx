@@ -21,6 +21,8 @@ import {
 import { generateRulesFromHunt } from '../exporters/index.js';
 import { packHuntRulesAsZip } from '../exporters/zip.js';
 import { buildHuntStixBundle, persistStixExport, listStixExportsForHunt } from '../exporters/stix.js';
+import { computeHuntPushReadiness } from '../cti/release/guards.js';
+import { getSession } from '../db/neo4j.js';
 import { materializeTtpHunt } from './materialize.repo.js';
 import { setHuntReleaseTier } from './repo.js';
 import { RELEASE_TIERS, type ReleaseTier } from '../cti/kinds.js';
@@ -99,6 +101,71 @@ export const huntResolvers = {
     ) => {
       assertOrgRole(ctx, 'VIEWER');
       return listStixExportsForHunt(ctx.activeOrgId, args.huntId, clampLimit(args.limit, 10, 50));
+    },
+
+    huntPushReadiness: async (
+      _p: unknown,
+      args: { huntId: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      // Fetch all GENERATED rules for the hunt with the fields the guard needs.
+      const session = getSession();
+      let rows: Array<{
+        id: string; name: string; kind: string;
+        releaseTier: ReleaseTier;
+        approvedAt: string | null;
+        approvalContentHash: string | null;
+        content: string;
+      }>;
+      try {
+        const r = await session.run(
+          `MATCH (h:Hunt {id: $huntId, tenantId: $tenantId})-[:GENERATED]->(r:DetectionRule)
+           RETURN r.id AS id, r.name AS name, r.kind AS kind,
+                  coalesce(r.releaseTier, 'internal') AS releaseTier,
+                  toString(r.approvedAt) AS approvedAt,
+                  r.approvalContentHash AS approvalContentHash,
+                  r.content AS content
+           ORDER BY r.kind ASC, r.name ASC`,
+          { huntId: args.huntId, tenantId: ctx.activeOrgId },
+        );
+        rows = r.records.map((rec) => ({
+          id: rec.get('id') as string,
+          name: rec.get('name') as string,
+          kind: rec.get('kind') as string,
+          releaseTier: rec.get('releaseTier') as ReleaseTier,
+          approvedAt: rec.get('approvedAt') as string | null,
+          approvalContentHash: rec.get('approvalContentHash') as string | null,
+          content: rec.get('content') as string,
+        }));
+      } finally {
+        await session.close();
+      }
+
+      const { rows: matrix, summary } = computeHuntPushReadiness(rows);
+      return {
+        summary: {
+          totalRules: summary.totalRules,
+          approvedCount: summary.approvedCount,
+          staleCount: summary.staleCount,
+          unapprovedCount: summary.unapprovedCount,
+          shipCountPublic: summary.shipCountByTier.public,
+          shipCountCrossAgency: summary.shipCountByTier['cross-agency'],
+          shipCountSectoral: summary.shipCountByTier.sectoral,
+          shipCountInternal: summary.shipCountByTier.internal,
+        },
+        rows: matrix.map((row) => ({
+          ruleId: row.ruleId,
+          ruleName: row.ruleName,
+          ruleKind: row.ruleKind,
+          ruleTier: row.ruleTier.replace(/-/g, '_'),
+          approvalState: row.approvalState,
+          public: row.byTier.public,
+          crossAgency: row.byTier['cross-agency'],
+          sectoral: row.byTier.sectoral,
+          internal: row.byTier.internal,
+        })),
+      };
     },
   },
 

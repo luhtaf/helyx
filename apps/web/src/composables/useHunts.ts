@@ -296,6 +296,64 @@ export function useDownloadHuntZip() {
   };
 }
 
+// F1c+ — Hunt push readiness: per-rule × per-tier matrix + summary.
+const HUNT_PUSH_READINESS = gql`
+  query HuntPushReadiness($huntId: ID!) {
+    huntPushReadiness(huntId: $huntId) {
+      summary {
+        totalRules approvedCount staleCount unapprovedCount
+        shipCountPublic shipCountCrossAgency shipCountSectoral shipCountInternal
+      }
+      rows {
+        ruleId ruleName ruleKind ruleTier approvalState
+        public       { allowed reason }
+        crossAgency  { allowed reason }
+        sectoral     { allowed reason }
+        internal     { allowed reason }
+      }
+    }
+  }
+`;
+
+export interface HuntPushReadinessSummary {
+  totalRules: number;
+  approvedCount: number;
+  staleCount: number;
+  unapprovedCount: number;
+  shipCountPublic: number;
+  shipCountCrossAgency: number;
+  shipCountSectoral: number;
+  shipCountInternal: number;
+}
+
+export interface HuntPushReadinessRow {
+  ruleId: string;
+  ruleName: string;
+  ruleKind: 'YARA' | 'SURICATA' | 'SIGMA' | 'CUSTOM';
+  ruleTier: import('./useRules').ReleaseTier;
+  approvalState: 'approved' | 'stale' | 'unapproved';
+  public:      { allowed: boolean; reason: string | null };
+  crossAgency: { allowed: boolean; reason: string | null };
+  sectoral:    { allowed: boolean; reason: string | null };
+  internal:    { allowed: boolean; reason: string | null };
+}
+
+export function useHuntPushReadiness(huntId: () => string | null) {
+  const { result, loading, error, refetch } = useQuery<{
+    huntPushReadiness: { summary: HuntPushReadinessSummary; rows: HuntPushReadinessRow[] };
+  }>(
+    HUNT_PUSH_READINESS,
+    () => ({ huntId: huntId() ?? '' }),
+    () => ({ enabled: Boolean(huntId()), fetchPolicy: 'cache-and-network' }),
+  );
+  return {
+    summary: computed(() => result.value?.huntPushReadiness?.summary ?? null),
+    rows:    computed(() => result.value?.huntPushReadiness?.rows ?? []),
+    loading, error,
+    refetch: () => { refetch(); },
+  };
+}
+
 // H5.5 — Past STIX exports for a hunt. Newest-first; signature truncated.
 const RECENT_STIX_EXPORTS = gql`
   query RecentStixExports($huntId: ID!, $limit: Int) {

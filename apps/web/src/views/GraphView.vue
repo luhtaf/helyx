@@ -18,7 +18,7 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useTtpMaterialize, useSetHuntReleaseTier, type TtpFacets } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
@@ -102,6 +102,21 @@ const { submit: downloadZip, loading: downloadingZip } = useDownloadHuntZip();
 const { submit: exportStix, loading: exportingStix } = useExportHuntAsStix();
 const { exports: stixHistory, refetch: refetchStixHistory } = useRecentStixExports(() => huntId.value);
 const stixHistoryOpen = ref(false);
+
+const { summary: pushSummary, rows: pushRows, refetch: refetchPushReadiness } = useHuntPushReadiness(() => huntId.value);
+const pushReadinessOpen = ref(false);
+
+const KIND_CHIP_CLASS: Record<string, string> = {
+  YARA:     'text-signal',
+  SURICATA: 'text-sev-low',
+  SIGMA:    'text-sev-med',
+  CUSTOM:   'text-ink-dim',
+};
+const APPROVAL_CLASS: Record<string, string> = {
+  approved:   'text-sev-low',
+  stale:      'text-sev-med',
+  unapproved: 'text-ink-faint',
+};
 
 const TLP_CLASS: Record<string, string> = {
   white:  'text-ink-dim',
@@ -197,6 +212,7 @@ async function onExportStix(): Promise<void> {
       'success',
     );
     refetchStixHistory();
+    refetchPushReadiness();
   } catch (e) {
     const msg = (e as Error).message ?? 'unknown';
     if (msg.includes('no approved rules')) {
@@ -496,6 +512,72 @@ onMounted(() => { void plantSeed(); });
         @node-selected="(n) => (selected = n)"
         @cap-reached="onCapReached"
       />
+
+      <!-- F1c+: Hunt push readiness panel (hunt mode, when rules exist).
+           Bottom-LEFT; mirrors stix history panel layout. Header shows
+           "X/N ready at <tier>" summary; expand for per-rule matrix. -->
+      <aside
+        v-if="huntId && pushSummary && pushSummary.totalRules > 0"
+        class="absolute bottom-4 left-4 z-20 w-[420px] bg-base/95 backdrop-blur-sm border border-rule-strong rounded-md font-mono text-[11px] shadow-lg pointer-events-auto"
+      >
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-surface/50"
+          @click="pushReadinessOpen = !pushReadinessOpen"
+        >
+          <span class="flex items-baseline gap-2">
+            <span class="text-[10px] uppercase tracking-wider text-ink-faint">push readiness</span>
+            <span class="text-ink-dim">{{ pushSummary.totalRules }} rules</span>
+            <span class="text-sev-low">{{ pushSummary.approvedCount }} ✓</span>
+            <span v-if="pushSummary.staleCount > 0" class="text-sev-med">{{ pushSummary.staleCount }} stale</span>
+            <span v-if="pushSummary.unapprovedCount > 0" class="text-ink-faint">{{ pushSummary.unapprovedCount }} ✗</span>
+          </span>
+          <span class="text-ink-faint">{{ pushReadinessOpen ? '▾' : '▸' }}</span>
+        </button>
+        <div v-if="pushReadinessOpen" class="border-t border-rule">
+          <!-- Per-tier shipping summary -->
+          <div class="grid grid-cols-4 gap-2 px-3 py-2 border-b border-rule text-[10px]">
+            <div class="text-center">
+              <p class="text-ink-faint uppercase">public</p>
+              <p class="text-ink tabular-nums">{{ pushSummary.shipCountPublic }}/{{ pushSummary.totalRules }}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-ink-faint uppercase">cross-agency</p>
+              <p class="text-ink tabular-nums">{{ pushSummary.shipCountCrossAgency }}/{{ pushSummary.totalRules }}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-ink-faint uppercase">sectoral</p>
+              <p class="text-ink tabular-nums">{{ pushSummary.shipCountSectoral }}/{{ pushSummary.totalRules }}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-ink-faint uppercase">internal</p>
+              <p class="text-ink tabular-nums">{{ pushSummary.shipCountInternal }}/{{ pushSummary.totalRules }}</p>
+            </div>
+          </div>
+          <!-- Per-rule matrix -->
+          <div class="max-h-[260px] overflow-y-auto">
+            <div
+              v-for="row in pushRows"
+              :key="row.ruleId"
+              class="grid grid-cols-[1fr_auto] gap-2 px-3 py-2 border-b border-rule last:border-b-0 text-[10px]"
+            >
+              <router-link :to="`/rules/${row.ruleId}`" class="min-w-0">
+                <p class="text-ink truncate hover:underline" :title="row.ruleName">{{ row.ruleName }}</p>
+                <p class="flex gap-2 mt-0.5">
+                  <span :class="['uppercase', KIND_CHIP_CLASS[row.ruleKind] ?? 'text-ink-dim']">{{ row.ruleKind }}</span>
+                  <span :class="APPROVAL_CLASS[row.approvalState]">{{ row.approvalState }}</span>
+                </p>
+              </router-link>
+              <span class="flex gap-1 text-[8px] tabular-nums shrink-0 self-center">
+                <span :class="row.public.allowed ? 'text-sev-low' : 'text-ink-faint'" title="public">P</span>
+                <span :class="row.crossAgency.allowed ? 'text-sev-low' : 'text-ink-faint'" title="cross-agency">C</span>
+                <span :class="row.sectoral.allowed ? 'text-sev-low' : 'text-ink-faint'" title="sectoral">S</span>
+                <span :class="row.internal.allowed ? 'text-sev-low' : 'text-ink-faint'" title="internal">I</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </aside>
 
       <!-- H5.5: STIX export history panel (hunt mode only). Collapsed
            by default; click header to expand. Surfaces signature
