@@ -235,6 +235,40 @@ Helyx auth/session/logging implementation aligns with OWASP ASVS L2:
 
 Future ISO 27001 / SNI ISO 27001 alignment (Indonesian gov compliance ask) layers on top of this baseline.
 
+### Release governance (F1 + F2 + H5)
+
+CTI export pipeline enforces a 3-layer trust model. Every push path (H7 MISP, H7 OpenCTI, H9 EclecticIQ, H9 TAXII server) must consult these gates — never bypass.
+
+**F1 — Release tier (`cti/kinds.ts`):** 4-tier need-to-know ladder, dashed-form storage / underscored-form GraphQL enum:
+
+| Tier | Rank | TLP marking |
+| --- | --- | --- |
+| `public` | 1 | TLP:WHITE |
+| `cross-agency` | 2 | TLP:GREEN |
+| `sectoral` | 3 | TLP:AMBER |
+| `internal` | 4 (default) | TLP:RED |
+
+Every `:DetectionRule` and `:Hunt` carries `releaseTier` (defaults `internal` for legacy nodes via `coalesce()` in repo RETURNs). `setRuleReleaseTier` / `setHuntReleaseTier` mutations write a `:ReleaseTierChange` audit chain + `AuditEvent`. Push pre-condition: `rule.tier ≤ target.maxTier`.
+
+**F2 — Approval state (`rules/repo.ts`):** Three fields on `:DetectionRule`: `approvedByUserId`, `approvedAt`, `approvalContentHash` (sha256 captured at approve time). `approveRule` / `unapproveRule` mutations emit `:RuleApproval` chain + `AuditEvent`. **Stale = `sha256(current content) != approvalContentHash`** — content edited post-approval blocks push until re-approval. Browser SubtleCrypto runs the same hash for instant client-side stale detection (`isApprovalStale` in `useRules.ts`).
+
+**F1c — Push readiness guard (`cti/release/guards.ts`):** Pure function `checkRulePushAllowed(rule, targetMaxTier)` returning `{ allowed, reason: 'tier_too_high' | 'unapproved' | 'stale_approval' | null, detail }`. Same guard runs everywhere a push happens. Pre-flight via `dryRunPushRule(ruleId, targetMaxTier): PushReadiness` (VIEWER role). FE `useRulePushReadiness` runs all 4 tiers in one aliased query → 4-row grid on `/rules/:id`.
+
+**H5 — STIX 2.1 export (`exporters/stix.ts`):** `exportHuntAsStix(huntId)` packs only F2-approved + non-stale rules. TLP marking-def auto-derived from `Hunt.releaseTier` per F1. STIX ids stable: `indicator--<sha256(rule.id)>` so re-exports dedupe downstream. Validated against focused zod schemas (`stix-validate.ts`) before return; generator bugs fail loud. Persists `:StixExport {bundleId, contentHash, signature, signatureAlgorithm}` + `(:StixExport)-[:DERIVED_FROM]->(:Hunt)` + `[:INCLUDES]->(:DetectionRule)` + `[:SIGNED_BY]->(:CtiOrgKeypair)`.
+
+**F2 sign — Ed25519 detached signatures (`cti/sign/`):** Per-org `:CtiOrgKeypair`, lazy-generated on first export. Private key AES-256-GCM encrypted at rest with `CTI_SIGNING_MASTER_KEY` env (64 hex chars / 32 bytes). **Separate secret tier from `JWT_SECRET`** — different blast radius, do not collapse. MERGE-on-tenantId is race-safe. Every bundle ships with `signature` (base64) + `signerPublicKeyPem` so verifiers can `crypto.verify(null, bundleBytes, pub, sig)` without a roundtrip.
+
+**Operator surfaces:**
+- `/rules/:id` → 3 sections: approval (with stale chip) → push readiness (4-tier grid) → tier picker
+- `/graph?hunt=<id>` → tier `<select>` in header + Generate rules + Download zip + Export STIX buttons
+- Every governance mutation emits `AuditEvent` with the `<entity>.<verb>` action naming convention
+
+**.env requirement summary:**
+- `CTI_SIGNING_MASTER_KEY` — required before first STIX export (clear startup-time error if missing). Generate: `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`
+- `JWT_SECRET` — required at boot (existing)
+
+**Migrations involved:** `m017_release_policy_schema` (tier indexes + ReleaseTierChange) · `m018_cti_org_keypair` (CtiOrgKeypair + RuleApproval) · `m019_stix_export` (StixExport + edges).
+
 ## When extending this file
 
 Once real code exists, this file should grow sections for:
