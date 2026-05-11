@@ -32,7 +32,11 @@ function rowToHunt(rec: { get: (k: string) => unknown }): HuntRecord {
     name: rec.get('name') as string,
     kind: (rec.get('kind') as HuntRecord['kind']) ?? 'STRUCTURED',
     status: rec.get('status') as HuntStatus,
-    releaseTier: rec.get('releaseTier') as ReleaseTier,
+    // Encode dash → underscore at the boundary: storage uses 'cross-agency'
+    // but GraphQL ReleaseTier enum forbids hyphens (uses 'cross_agency').
+    // Fixing here covers every Hunt query path (hunt, hunts, useHuntGraph)
+    // in one place — symmetric with the same fix on listStixExportsForHunt.
+    releaseTier: ((rec.get('releaseTier') as string) ?? 'internal').replace(/-/g, '_') as ReleaseTier,
     createdAt: rec.get('createdAt') as string,
     updatedAt: rec.get('updatedAt') as string,
     createdByUserId: (rec.get('createdByUserId') as string | null) ?? null,
