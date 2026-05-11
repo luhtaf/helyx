@@ -20,6 +20,7 @@ import {
 } from './repo.js';
 import { generateRulesFromHunt } from '../exporters/index.js';
 import { packHuntRulesAsZip } from '../exporters/zip.js';
+import { buildHuntStixBundle, persistStixExport } from '../exporters/stix.js';
 import { materializeTtpHunt } from './materialize.repo.js';
 import { setHuntReleaseTier } from './repo.js';
 import { RELEASE_TIERS, type ReleaseTier } from '../cti/kinds.js';
@@ -208,6 +209,37 @@ export const huntResolvers = {
         proceedToGraph: args.input.proceedToGraph ?? false,
         capPerType: cap,
       });
+    },
+
+    exportHuntAsStix: async (
+      _p: unknown,
+      args: { huntId: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      const built = await buildHuntStixBundle(ctx.activeOrgId, args.huntId);
+      if (!built.ok) {
+        throw built.reason === 'hunt not found'
+          ? notFound('hunt not found')
+          : badInputErr(built.reason);
+      }
+      const record = await persistStixExport(
+        ctx.activeOrgId,
+        args.huntId,
+        built.result,
+        built.result.sourceRuleIds,
+      );
+      return {
+        exportId: record.id,
+        filename: built.result.filename,
+        base64: built.result.bytes.toString('base64'),
+        bundleId: built.result.bundle.id,
+        indicatorCount: built.result.stats.indicatorCount,
+        skippedUnapproved: built.result.stats.skippedUnapproved,
+        skippedStale: built.result.stats.skippedStale,
+        tlp: built.result.stats.tlp,
+        contentHash: record.contentHash,
+      };
     },
 
     setHuntReleaseTier: async (

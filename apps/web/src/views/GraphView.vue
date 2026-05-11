@@ -18,7 +18,7 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useTtpMaterialize, useSetHuntReleaseTier, type TtpFacets } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useTtpMaterialize, useSetHuntReleaseTier, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
@@ -99,6 +99,7 @@ const { submit: updateSnapshot } = useUpdateHuntSnapshot();
 const { search: searchEntities } = useSearchEntities();
 const { submit: generateRules, loading: generatingRules } = useGenerateRulesFromHunt();
 const { submit: downloadZip, loading: downloadingZip } = useDownloadHuntZip();
+const { submit: exportStix, loading: exportingStix } = useExportHuntAsStix();
 const { submit: setTier, loading: settingTier } = useSetHuntReleaseTier();
 
 async function onChangeHuntTier(e: Event): Promise<void> {
@@ -154,6 +155,36 @@ async function onDownloadZip(): Promise<void> {
   } catch (e) {
     const msg = (e as Error).message ?? 'unknown';
     showToast(msg.includes('no generated rules') ? 'Run "Generate rules" first' : `Download failed: ${msg}`, 'error');
+  }
+}
+
+// H5 — STIX export. Only F2-approved + non-stale rules ship. TLP marking
+// derives from Hunt.releaseTier. Skipped counts surface to operator so
+// they know exactly what stayed behind.
+async function onExportStix(): Promise<void> {
+  if (!huntId.value) return;
+  try {
+    const stix = await exportStix(huntId.value);
+    if (!stix) {
+      showToast('STIX export failed', 'error');
+      return;
+    }
+    const skipNote = stix.skippedUnapproved + stix.skippedStale > 0
+      ? ` (skipped ${stix.skippedUnapproved} unapproved + ${stix.skippedStale} stale)`
+      : '';
+    showToast(
+      `STIX bundle exported · ${stix.indicatorCount} indicators · TLP:${stix.tlp}${skipNote}`,
+      'success',
+    );
+  } catch (e) {
+    const msg = (e as Error).message ?? 'unknown';
+    if (msg.includes('no approved rules')) {
+      showToast('No approved rules — approve in /rules/<id> first', 'error');
+    } else if (msg.includes('no generated rules')) {
+      showToast('Run "Generate rules" first', 'error');
+    } else {
+      showToast(`STIX export failed: ${msg}`, 'error');
+    }
   }
 }
 
@@ -409,6 +440,15 @@ onMounted(() => { void plantSeed(); });
           </Button>
           <Button v-if="huntId" variant="ghost" :loading="downloadingZip" @click="onDownloadZip">
             Download zip
+          </Button>
+          <Button
+            v-if="huntId"
+            variant="ghost"
+            :loading="exportingStix"
+            title="STIX 2.1 Bundle — only F2-approved + non-stale rules export. TLP marking derives from Hunt release tier."
+            @click="onExportStix"
+          >
+            Export STIX
           </Button>
           <Button v-if="!huntId" variant="ghost" @click="saveOpen = true">Save as Hunt…</Button>
           <Button variant="ghost" @click="graphRef?.relayoutAll()">Re-layout</Button>

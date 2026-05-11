@@ -260,11 +260,16 @@ export interface PackedRulesZip {
 
 // Decode base64 → Blob → click invisible <a download>. Stays in browser
 // memory; no localStorage. Caller handles toast + error states.
-function triggerBrowserDownload(filename: string, base64: string): void {
+// mimeType defaults to 'application/zip' for back-compat with H2.2 zip path.
+function triggerBrowserDownload(
+  filename: string,
+  base64: string,
+  mimeType: string = 'application/zip',
+): void {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  const blob = new Blob([bytes], { type: 'application/zip' });
+  const blob = new Blob([bytes], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -286,6 +291,47 @@ export function useDownloadHuntZip() {
       const packed = r?.data?.packHuntRulesAsZip ?? null;
       if (packed) triggerBrowserDownload(packed.filename, packed.base64);
       return packed;
+    },
+    loading, error,
+  };
+}
+
+// H5 — Pack hunt approved rules as STIX 2.1 Bundle + browser download.
+// Only F2-approved + non-stale rules export. TLP marking-def derived
+// from Hunt.releaseTier.
+const EXPORT_HUNT_AS_STIX = gql`
+  mutation ExportHuntAsStix($huntId: ID!) {
+    exportHuntAsStix(huntId: $huntId) {
+      exportId filename base64 bundleId
+      indicatorCount skippedUnapproved skippedStale
+      tlp contentHash
+    }
+  }
+`;
+
+export interface StixExportResult {
+  exportId: string;
+  filename: string;
+  base64: string;
+  bundleId: string;
+  indicatorCount: number;
+  skippedUnapproved: number;
+  skippedStale: number;
+  tlp: 'white' | 'green' | 'amber' | 'red';
+  contentHash: string;
+}
+
+export function useExportHuntAsStix() {
+  const { mutate, loading, error } = useMutation<
+    { exportHuntAsStix: StixExportResult },
+    { huntId: string }
+  >(EXPORT_HUNT_AS_STIX);
+  return {
+    submit: async (huntId: string): Promise<StixExportResult | null> => {
+      const r = await mutate({ huntId });
+      const stix = r?.data?.exportHuntAsStix ?? null;
+      if (stix) triggerBrowserDownload(stix.filename, stix.base64, 'application/json');
+      return stix;
     },
     loading, error,
   };

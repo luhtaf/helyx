@@ -127,6 +127,30 @@ export const huntTypeDefs = /* GraphQL */ `
     """F1b — Set release tier on a Hunt. Mirror of setRuleReleaseTier.
     Audit-logged via :ReleaseTierChange + AuditEvent. No-op same-tier."""
     setHuntReleaseTier(id: ID!, tier: ReleaseTier!): Hunt!
+    """H5 — Pack approved rules from a Hunt as a STIX 2.1 Bundle.
+    Only F2-approved + non-stale rules export. TLP marking-def is derived
+    from Hunt.releaseTier (public/cross-agency/sectoral/internal →
+    white/green/amber/red). Persists :StixExport for /exports/:id detail."""
+    exportHuntAsStix(huntId: ID!): StixExportResult!
+  }
+
+  type StixExportResult {
+    """Persistent :StixExport id — links to detail page (future H5.5)."""
+    exportId: ID!
+    filename: String!
+    """Base64-encoded JSON bundle. Bundle is small (typically <50KB);
+    larger payloads should move to a Content-Disposition REST path."""
+    base64: String!
+    bundleId: String!
+    indicatorCount: Int!
+    skippedUnapproved: Int!
+    skippedStale: Int!
+    """Computed TLP marking ('white' | 'green' | 'amber' | 'red'). Derived
+    from Hunt.releaseTier — informational, the bundle already carries the
+    OASIS marking-definition object_marking_refs."""
+    tlp: String!
+    """sha256 of bundle bytes — for downstream signature comparison."""
+    contentHash: String!
   }
 
   type GenerateRulesResult {
