@@ -1,4 +1,5 @@
 import { RULE_KINDS, RULE_STATUSES, RULE_SOURCES, encodeSource } from './kinds.js';
+import { RELEASE_TIERS } from '../cti/kinds.js';
 
 export const ruleTypeDefs = /* GraphQL */ `
   """Detection engine syntax — what FORMAT the rule is in. NOT a taxonomy
@@ -7,6 +8,10 @@ export const ruleTypeDefs = /* GraphQL */ `
   enum RuleKind { ${RULE_KINDS.join(' ')} }
   enum RuleStatus { ${RULE_STATUSES.join(' ')} }
   enum RuleSource { ${RULE_SOURCES.map(encodeSource).join(' ')} }
+  """F1 — 4-tier need-to-know enforcement. public / cross-agency /
+  sectoral / internal. Push pre-conditions enforce rule.tier ≤
+  target.maxTier. See cti/kinds.ts for ranks."""
+  enum ReleaseTier { ${RELEASE_TIERS.map((t) => t.replace(/-/g, '_')).join(' ')} }
 
   type DetectionRule {
     id: ID!
@@ -18,6 +23,8 @@ export const ruleTypeDefs = /* GraphQL */ `
     source: RuleSource!
     sourceRef: String
     status: RuleStatus!
+    """F1 — release tier (defaults to 'internal' for legacy rules)."""
+    releaseTier: ReleaseTier!
     createdAt: String!
     updatedAt: String!
     """Number of artifacts (IOCs) this rule was derived from. >0 means
@@ -71,5 +78,8 @@ export const ruleTypeDefs = /* GraphQL */ `
     createDetectionRule(input: CreateRuleInput!): DetectionRule!
     updateDetectionRule(id: ID!, input: UpdateRuleInput!): DetectionRule!
     deleteDetectionRule(id: ID!): Boolean!
+    """F1 — set release tier on a rule. Audit-logged via
+    :ReleaseTierChange chain + AuditEvent. No-op on same-tier."""
+    setRuleReleaseTier(id: ID!, tier: ReleaseTier!): DetectionRule!
   }
 `;

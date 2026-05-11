@@ -4,6 +4,18 @@ import gql from 'graphql-tag';
 export { type RuleKind, type RuleStatus, type RuleSource } from './rule-kinds';
 import type { RuleKind, RuleStatus, RuleSource } from './rule-kinds';
 
+// F1 — release tier (4-tier need-to-know enforcement). GraphQL enum
+// uses underscored form ('cross_agency') because GraphQL enum names
+// can't have hyphens.
+export type ReleaseTier = 'public' | 'cross_agency' | 'sectoral' | 'internal';
+export const RELEASE_TIERS: ReleaseTier[] = ['public', 'cross_agency', 'sectoral', 'internal'];
+export const RELEASE_TIER_LABELS: Record<ReleaseTier, string> = {
+  public: 'public',
+  cross_agency: 'cross-agency',
+  sectoral: 'sectoral',
+  internal: 'internal',
+};
+
 export interface DetectionRule {
   id: string;
   kind: RuleKind;
@@ -14,6 +26,7 @@ export interface DetectionRule {
   source: RuleSource;
   sourceRef: string | null;
   status: RuleStatus;
+  releaseTier: ReleaseTier;
   createdAt: string;
   updatedAt: string;
   derivedFromArtifactCount: number;
@@ -41,7 +54,7 @@ const RULES_LIST = gql`
     detectionRules(filter: $filter, page: $page, perPage: $perPage) {
       total page perPage
       items {
-        id kind name description tags source sourceRef status
+        id kind name description tags source sourceRef status releaseTier
         createdAt updatedAt
         derivedFromArtifactCount detectsTechniqueCount generatedByHuntCount
       }
@@ -52,12 +65,35 @@ const RULES_LIST = gql`
 const RULE_DETAIL = gql`
   query DetectionRule($id: ID!) {
     detectionRule(id: $id) {
-      id kind name description content tags source sourceRef status
+      id kind name description content tags source sourceRef status releaseTier
       createdAt updatedAt
       derivedFromArtifactCount detectsTechniqueCount generatedByHuntCount
     }
   }
 `;
+
+const SET_RULE_RELEASE_TIER = gql`
+  mutation SetRuleReleaseTier($id: ID!, $tier: ReleaseTier!) {
+    setRuleReleaseTier(id: $id, tier: $tier) {
+      id releaseTier updatedAt
+    }
+  }
+`;
+
+export function useSetRuleReleaseTier() {
+  const { mutate, loading, error } = useMutation<
+    { setRuleReleaseTier: { id: string; releaseTier: ReleaseTier; updatedAt: string } },
+    { id: string; tier: ReleaseTier }
+  >(SET_RULE_RELEASE_TIER, () => ({
+    refetchQueries: ['DetectionRule', 'DetectionRules'],
+    awaitRefetchQueries: true,
+  }));
+  return {
+    submit: async (id: string, tier: ReleaseTier) =>
+      (await mutate({ id, tier }))?.data?.setRuleReleaseTier ?? null,
+    loading, error,
+  };
+}
 
 const CREATE_RULE = gql`
   mutation CreateDetectionRule($input: CreateRuleInput!) {

@@ -1,14 +1,42 @@
 <script setup lang="ts">
-import { toRef } from 'vue';
-import { useRule } from '@/composables/useRules';
+import { ref, toRef, watch } from 'vue';
+import { useRule, useSetRuleReleaseTier, RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import { KIND_CLASSES, type RuleKind } from '@/composables/rule-kinds';
+import { useToast } from '@/composables/useToast';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
 const { rule, loading, error } = useRule(() => idRef.value);
+const { submit: setTier, loading: settingTier } = useSetRuleReleaseTier();
+const { show: showToast } = useToast();
 
 const kindClass = (k: RuleKind): string => KIND_CLASSES[k];
+
+// Tier color: lower tier (more open) = warmer / wider; internal = restrained.
+const TIER_CLASS: Record<ReleaseTier, string> = {
+  public:       'bg-sev-low/15 text-sev-low border-sev-low/30',
+  cross_agency: 'bg-signal/15 text-signal border-signal/30',
+  sectoral:     'bg-sev-med/15 text-sev-med border-sev-med/30',
+  internal:     'bg-ink-faint/10 text-ink-dim border-ink-faint/30',
+};
+
+// Local pending state — track edit-in-flight separately from server value.
+const pendingTier = ref<ReleaseTier | null>(null);
+
+watch(rule, (r) => { if (r) pendingTier.value = null; });
+
+async function onChangeTier(next: ReleaseTier): Promise<void> {
+  if (!rule.value || next === rule.value.releaseTier) return;
+  pendingTier.value = next;
+  try {
+    const r = await setTier(rule.value.id, next);
+    if (r) showToast(`Release tier → ${RELEASE_TIER_LABELS[next]}`, 'success');
+  } catch (e) {
+    pendingTier.value = null;
+    showToast(`Tier change failed: ${(e as Error).message}`, 'error');
+  }
+}
 </script>
 
 <template>
@@ -31,6 +59,13 @@ const kindClass = (k: RuleKind): string => KIND_CLASSES[k];
         <div class="flex items-baseline gap-4 font-mono text-[11px] text-ink-faint">
           <span>{{ rule.status.toLowerCase() }}</span>
           <span>{{ rule.source.replace(/_/g, ' ') }}</span>
+          <span
+            :class="['inline-flex items-center px-2 py-0.5 rounded-sm border text-[10px] uppercase tracking-wider', TIER_CLASS[(pendingTier ?? rule.releaseTier)]]"
+            :title="`release tier — F1 need-to-know enforcement (push enforcement: rule.tier ≤ target.maxTier)`"
+          >
+            <span v-if="pendingTier" class="opacity-50">{{ RELEASE_TIER_LABELS[pendingTier] }} (saving)</span>
+            <span v-else>{{ RELEASE_TIER_LABELS[rule.releaseTier] }}</span>
+          </span>
         </div>
       </div>
     </header>
@@ -78,6 +113,32 @@ const kindClass = (k: RuleKind): string => KIND_CLASSES[k];
       <section v-if="rule.sourceRef" class="mb-8">
         <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">source ref</p>
         <p class="font-mono text-[12px] text-ink-dim">{{ rule.sourceRef }}</p>
+      </section>
+
+      <!-- F1 — release tier picker (4-tier need-to-know enforcement) -->
+      <section class="mb-8">
+        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">release tier</p>
+        <p class="text-[12px] text-ink-dim mb-3 max-w-[68ch]">
+          Controls who can receive this rule. Push pre-conditions enforce
+          <code class="font-mono text-ink">rule.tier ≤ target.maxTier</code>.
+          Lower tier = wider sharing.
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="t in RELEASE_TIERS"
+            :key="t"
+            type="button"
+            :disabled="settingTier"
+            :class="[
+              'px-3 py-1.5 rounded-sm border text-[11px] uppercase tracking-wider transition font-mono',
+              t === (pendingTier ?? rule.releaseTier)
+                ? TIER_CLASS[t]
+                : 'border-rule text-ink-faint hover:border-rule-strong hover:text-ink-dim',
+              settingTier ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+            ]"
+            @click="onChangeTier(t)"
+          >{{ RELEASE_TIER_LABELS[t] }}</button>
+        </div>
       </section>
 
       <footer class="border-t border-rule pt-4 font-mono text-[10px] text-ink-faint">

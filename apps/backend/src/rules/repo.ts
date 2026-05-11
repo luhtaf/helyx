@@ -1,20 +1,24 @@
 import { getSession } from '../db/neo4j.js';
 import { newId } from '../utils/uuid.js';
+import { GraphQLError } from 'graphql';
 import type {
   CreateRuleInput,
   DetectionRuleRow,
+  ReleaseTier,
   RuleFilter,
   RuleKind,
   RuleSource,
   RuleStatus,
   UpdateRuleInput,
 } from './types.js';
+import { logAudit } from '../audits/log.js';
 
 const RULE_RETURN = `
   r.id AS id, r.tenantId AS tenantId, r.kind AS kind,
   r.name AS name, r.description AS description, r.content AS content,
   coalesce(r.tags, []) AS tags,
   r.source AS source, r.sourceRef AS sourceRef, r.status AS status,
+  coalesce(r.releaseTier, 'internal') AS releaseTier,
   head([(u:User)-[:CREATED]->(r) | u.id]) AS createdByUserId,
   toString(r.createdAt) AS createdAt, toString(r.updatedAt) AS updatedAt,
   size([(r)-[:DERIVED_FROM]->() | 1]) AS derivedFromArtifactCount,
@@ -34,6 +38,7 @@ function rowToRule(rec: { get: (k: string) => unknown }): DetectionRuleRow {
     source: rec.get('source') as RuleSource,
     sourceRef: (rec.get('sourceRef') as string | null) ?? null,
     status: rec.get('status') as RuleStatus,
+    releaseTier: rec.get('releaseTier') as ReleaseTier,
     createdByUserId: (rec.get('createdByUserId') as string | null) ?? null,
     createdAt: rec.get('createdAt') as string,
     updatedAt: rec.get('updatedAt') as string,
@@ -41,6 +46,65 @@ function rowToRule(rec: { get: (k: string) => unknown }): DetectionRuleRow {
     detectsTechniqueCount: Number(rec.get('detectsTechniqueCount') ?? 0),
     generatedByHuntCount: Number(rec.get('generatedByHuntCount') ?? 0),
   };
+}
+
+// F1 — Set the release tier on a DetectionRule. Logs audit chain via
+// :ReleaseTierChange node + emits a tenant-wide audit event.
+// Tenant-guarded; throws NOT_FOUND if cross-tenant or missing.
+export async function setRuleReleaseTier(
+  tenantId: string,
+  userId: string,
+  ruleId: string,
+  tier: ReleaseTier,
+): Promise<DetectionRuleRow> {
+  const session = getSession();
+  try {
+    const result = await session.executeWrite(async (tx) => {
+      // Read current tier first (for audit before/after)
+      const current = await tx.run(
+        `MATCH (r:DetectionRule {id: $ruleId, tenantId: $tenantId})
+         RETURN coalesce(r.releaseTier, 'internal') AS tier`,
+        { ruleId, tenantId },
+      );
+      const before = current.records[0]?.get('tier') as ReleaseTier | undefined;
+      if (!before) {
+        throw new GraphQLError('rule not found', { extensions: { code: 'NOT_FOUND' } });
+      }
+      // No-op if tier unchanged — return current row, skip audit
+      if (before === tier) {
+        const r = await tx.run(
+          `MATCH (r:DetectionRule {id: $ruleId, tenantId: $tenantId}) RETURN ${RULE_RETURN}`,
+          { ruleId, tenantId },
+        );
+        return { row: rowToRule(r.records[0]!), changed: false, before };
+      }
+      // Update + write :ReleaseTierChange audit node
+      const upd = await tx.run(
+        `MATCH (r:DetectionRule {id: $ruleId, tenantId: $tenantId})
+         SET r.releaseTier = $tier, r.updatedAt = datetime()
+         CREATE (c:ReleaseTierChange {
+           id: randomUUID(), tenantId: $tenantId,
+           ruleId: $ruleId, fromTier: $before, toTier: $tier,
+           changedByUserId: $userId, ts: datetime()
+         })
+         RETURN ${RULE_RETURN}`,
+        { ruleId, tenantId, tier, before, userId },
+      );
+      return { row: rowToRule(upd.records[0]!), changed: true, before };
+    });
+    // Audit (best-effort, outside tx)
+    if (result.changed) {
+      await logAudit(
+        tenantId, userId, 'rule.release_tier_change',
+        { type: 'DetectionRule', id: ruleId },
+        { releaseTier: result.before },
+        { releaseTier: tier },
+      );
+    }
+    return result.row;
+  } finally {
+    await session.close();
+  }
 }
 
 export async function createRule(

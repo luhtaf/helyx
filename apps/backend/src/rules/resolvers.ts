@@ -8,6 +8,7 @@ import {
   deleteRule,
   findRuleById,
   listRules,
+  setRuleReleaseTier,
   updateRule,
 } from './repo.js';
 import {
@@ -19,6 +20,7 @@ import {
   type RuleSource,
   type RuleStatus,
 } from './kinds.js';
+import { RELEASE_TIERS, type ReleaseTier } from '../cti/kinds.js';
 import type { RuleFilter } from './types.js';
 
 const CreateRuleSchema = z.object({
@@ -50,7 +52,12 @@ function clampPerPage(raw: number | undefined, dflt: number, max: number): numbe
 }
 
 function encodeRow(row: import('./types.js').DetectionRuleRow): import('./types.js').DetectionRuleRow {
-  return { ...row, source: encodeSource(row.source) as RuleSource };
+  // GraphQL enum names can't have hyphens. Encode 'cross-agency' → 'cross_agency'.
+  return {
+    ...row,
+    source: encodeSource(row.source) as RuleSource,
+    releaseTier: row.releaseTier.replace(/-/g, '_') as ReleaseTier,
+  };
 }
 
 export const ruleResolvers = {
@@ -105,6 +112,22 @@ export const ruleResolvers = {
       const ok = await deleteRule(ctx.activeOrgId, args.id);
       if (!ok) throw notFound('detection rule not found');
       return true;
+    },
+
+    setRuleReleaseTier: async (
+      _p: unknown,
+      args: { id: string; tier: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      // GraphQL enum is underscored ('cross_agency'); storage is dashed
+      // ('cross-agency'). Decode at the boundary.
+      const decoded = args.tier.replace(/_/g, '-') as ReleaseTier;
+      if (!(RELEASE_TIERS as readonly string[]).includes(decoded)) {
+        throw notFound(`Invalid release tier: ${args.tier}`);
+      }
+      const updated = await setRuleReleaseTier(ctx.activeOrgId, ctx.user.id, args.id, decoded);
+      return encodeRow(updated);
     },
   },
 };
