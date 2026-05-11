@@ -18,7 +18,7 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip } from '@/composables/useHunts';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 
@@ -97,6 +97,7 @@ const { submit: saveHunt } = useSaveGraphAsHunt();
 const { submit: updateSnapshot } = useUpdateHuntSnapshot();
 const { search: searchEntities } = useSearchEntities();
 const { submit: generateRules, loading: generatingRules } = useGenerateRulesFromHunt();
+const { submit: downloadZip, loading: downloadingZip } = useDownloadHuntZip();
 
 async function onGenerateRules(): Promise<void> {
   if (!huntId.value) return;
@@ -115,6 +116,24 @@ async function onGenerateRules(): Promise<void> {
     `${total} rules generated (${stats.yaraCount} YARA + ${stats.suricataCount} Suricata + ${stats.sigmaCount} Sigma) → /rules`,
     'success',
   );
+}
+
+async function onDownloadZip(): Promise<void> {
+  if (!huntId.value) return;
+  try {
+    const packed = await downloadZip(huntId.value);
+    if (!packed) {
+      showToast('Download failed', 'error');
+      return;
+    }
+    showToast(
+      `Downloaded ${packed.filename} (${packed.ruleCount} rules: ${packed.yaraCount}/${packed.suricataCount}/${packed.sigmaCount})`,
+      'success',
+    );
+  } catch (e) {
+    const msg = (e as Error).message ?? 'unknown';
+    showToast(msg.includes('no generated rules') ? 'Run "Generate rules" first' : `Download failed: ${msg}`, 'error');
+  }
 }
 
 // ─── Graph state ───────────────────────────────────────────────────
@@ -320,6 +339,9 @@ onMounted(() => { void plantSeed(); });
           <Button variant="ghost" @click="searchOpen = true">+ Add by search</Button>
           <Button v-if="huntId" variant="ghost" :loading="generatingRules" @click="onGenerateRules">
             Generate rules
+          </Button>
+          <Button v-if="huntId" variant="ghost" :loading="downloadingZip" @click="onDownloadZip">
+            Download zip
           </Button>
           <Button v-if="!huntId" variant="ghost" @click="saveOpen = true">Save as Hunt…</Button>
           <Button variant="ghost" @click="graphRef?.relayoutAll()">Re-layout</Button>

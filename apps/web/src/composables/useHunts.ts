@@ -240,6 +240,57 @@ export function useGenerateRulesFromHunt() {
   };
 }
 
+// H2.2 — Pack hunt rules as zip + trigger browser download.
+const PACK_HUNT_RULES_AS_ZIP = gql`
+  mutation PackHuntRulesAsZip($huntId: ID!) {
+    packHuntRulesAsZip(huntId: $huntId) {
+      filename base64 ruleCount yaraCount suricataCount sigmaCount
+    }
+  }
+`;
+
+export interface PackedRulesZip {
+  filename: string;
+  base64: string;
+  ruleCount: number;
+  yaraCount: number;
+  suricataCount: number;
+  sigmaCount: number;
+}
+
+// Decode base64 → Blob → click invisible <a download>. Stays in browser
+// memory; no localStorage. Caller handles toast + error states.
+function triggerBrowserDownload(filename: string, base64: string): void {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+export function useDownloadHuntZip() {
+  const { mutate, loading, error } = useMutation<
+    { packHuntRulesAsZip: PackedRulesZip },
+    { huntId: string }
+  >(PACK_HUNT_RULES_AS_ZIP);
+  return {
+    submit: async (huntId: string): Promise<PackedRulesZip | null> => {
+      const r = await mutate({ huntId });
+      const packed = r?.data?.packHuntRulesAsZip ?? null;
+      if (packed) triggerBrowserDownload(packed.filename, packed.base64);
+      return packed;
+    },
+    loading, error,
+  };
+}
+
 // Hunt detail extended w/ snapshot fields for graph-kind hunts.
 const HUNT_GRAPH_DETAIL = gql`
   query HuntGraphDetail($id: ID!) {

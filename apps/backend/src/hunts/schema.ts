@@ -112,6 +112,11 @@ export const huntTypeDefs = /* GraphQL */ `
     IOCs/TTPs, run YARA/Suricata/Sigma generators, persist as
     :DetectionRule kind=GENERATED. Returns counters for what was created."""
     generateRulesFromHunt(huntId: ID!): GenerateRulesResult!
+    """H2.2 — Pack already-generated rules from a Hunt into a downloadable
+    zip with yara/, suricata/, sigma/ subdirs + manifest.json. Run
+    generateRulesFromHunt first; this is a packaging layer, not a generator.
+    Returns base64-encoded bytes (small payloads only — typical zip <50KB)."""
+    packHuntRulesAsZip(huntId: ID!): PackedRulesZip!
   }
 
   type GenerateRulesResult {
@@ -124,5 +129,14 @@ export const huntTypeDefs = /* GraphQL */ `
   type GenerateSkippedReason {
     reason: String!
     count: Int!
+  }
+
+  type PackedRulesZip {
+    filename: String!
+    base64: String!
+    ruleCount: Int!
+    yaraCount: Int!
+    suricataCount: Int!
+    sigmaCount: Int!
   }
 `;

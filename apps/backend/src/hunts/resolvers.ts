@@ -19,6 +19,8 @@ import {
   updateHuntSnapshot,
 } from './repo.js';
 import { generateRulesFromHunt } from '../exporters/index.js';
+import { packHuntRulesAsZip } from '../exporters/zip.js';
+import { badInput as badInputErr } from '../auth/errors.js';
 import type { HuntRecord } from './types.js';
 
 const CreateHuntSchema = z.object({
@@ -162,6 +164,28 @@ export const huntResolvers = {
         graphSnapshot: hunt.graphSnapshot,
       });
       return stats;
+    },
+
+    packHuntRulesAsZip: async (
+      _p: unknown,
+      args: { huntId: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      const result = await packHuntRulesAsZip(ctx.activeOrgId, args.huntId);
+      if (!result.ok) {
+        throw result.reason === 'hunt not found'
+          ? notFound('hunt not found')
+          : badInputErr(result.reason);
+      }
+      return {
+        filename: result.filename,
+        base64: result.bytes.toString('base64'),
+        ruleCount: result.manifest.ruleCounts.total,
+        yaraCount: result.manifest.ruleCounts.yara,
+        suricataCount: result.manifest.ruleCounts.suricata,
+        sigmaCount: result.manifest.ruleCounts.sigma,
+      };
     },
   },
 
