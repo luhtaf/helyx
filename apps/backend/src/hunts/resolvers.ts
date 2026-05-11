@@ -20,6 +20,7 @@ import {
 } from './repo.js';
 import { generateRulesFromHunt } from '../exporters/index.js';
 import { packHuntRulesAsZip } from '../exporters/zip.js';
+import { materializeTtpHunt } from './materialize.repo.js';
 import { badInput as badInputErr } from '../auth/errors.js';
 import type { HuntRecord } from './types.js';
 
@@ -186,6 +187,25 @@ export const huntResolvers = {
         suricataCount: result.manifest.ruleCounts.suricata,
         sigmaCount: result.manifest.ruleCounts.sigma,
       };
+    },
+
+    materializeTtpHunt: async (
+      _p: unknown,
+      args: { input: { techniqueId: string; actorId?: string | null; stakeholderIds?: string[] | null; proceedToGraph?: boolean; capPerType?: number } },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const techId = args.input.techniqueId.trim();
+      if (!/^T\d{4}(\.\d{3})?$/.test(techId)) {
+        throw badInputErr(`Invalid technique id "${techId}" — expected T-code like T1486 or T1059.001`);
+      }
+      const cap = Math.min(Math.max(args.input.capPerType ?? 50, 1), 200);
+      return materializeTtpHunt(ctx.activeOrgId, techId, {
+        actorId: args.input.actorId ?? null,
+        stakeholderIds: args.input.stakeholderIds ?? null,
+        proceedToGraph: args.input.proceedToGraph ?? false,
+        capPerType: cap,
+      });
     },
   },
 

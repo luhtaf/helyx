@@ -117,6 +117,11 @@ export const huntTypeDefs = /* GraphQL */ `
     generateRulesFromHunt first; this is a packaging layer, not a generator.
     Returns base64-encoded bytes (small payloads only — typical zip <50KB)."""
     packHuntRulesAsZip(huntId: ID!): PackedRulesZip!
+    """H3 — Materialize a TTP-seed hunt. Counts first ('1,847 matches →
+    refine'), then optional graph snapshot. Actor JOIN per Owner spec
+    via actorId. Hard cap per type prevents silent data loss; UI must
+    surface .capped=true."""
+    materializeTtpHunt(input: TtpMaterializeInput!): TtpMaterializeResult!
   }
 
   type GenerateRulesResult {
@@ -138,5 +143,39 @@ export const huntTypeDefs = /* GraphQL */ `
     yaraCount: Int!
     suricataCount: Int!
     sigmaCount: Int!
+  }
+
+  input TtpMaterializeInput {
+    """MITRE T-code, e.g. 'T1486'. Maps to AttackPattern.id."""
+    techniqueId: String!
+    """Optional Actor scope per Owner spec: 'TTP from Actor B'."""
+    actorId: String
+    """Optional refine — restrict to these stakeholders only."""
+    stakeholderIds: [String!]
+    """false = facets only (cheap, count-first UX). true = also return graph snapshot."""
+    proceedToGraph: Boolean = false
+    """Hard cap per entity type when proceedToGraph=true. Default 50; UI surfaces .capped."""
+    capPerType: Int = 50
+  }
+
+  type TtpFacets {
+    techniqueId: String!
+    techniqueName: String
+    actorCount: Int!
+    stakeholderCount: Int!
+    assetCount: Int!
+    ruleCount: Int!
+    artifactCount: Int!
+    """Sum + 1 (for the seed AttackPattern node) — headline 'X matches'."""
+    totalNodes: Int!
+  }
+
+  type TtpMaterializeResult {
+    facets: TtpFacets!
+    """JSON-encoded graphSnapshot when proceedToGraph=true; null otherwise."""
+    graphSnapshot: String
+    """True if any per-type collection hit capPerType — UI must surface."""
+    capped: Boolean!
+    cap: Int!
   }
 `;
