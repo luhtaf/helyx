@@ -239,6 +239,10 @@ export const huntResolvers = {
         skippedStale: built.result.stats.skippedStale,
         tlp: built.result.stats.tlp,
         contentHash: record.contentHash,
+        signature: record.signature,
+        signatureAlgorithm: 'ed25519',
+        signedByKeypairId: record.signedByKeypairId,
+        signerPublicKeyPem: record.signerPublicKeyPem,
       };
     },
 

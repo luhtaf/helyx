@@ -151,6 +151,17 @@ export const huntTypeDefs = /* GraphQL */ `
     tlp: String!
     """sha256 of bundle bytes — for downstream signature comparison."""
     contentHash: String!
+    """F2 — Ed25519 detached signature (base64) over bundle bytes.
+    Verifiers reproduce the bundle bytes and check signature against
+    signerPublicKeyPem with crypto.verify(null, bytes, pubKey, sig)."""
+    signature: String!
+    """F2 — Algorithm constant ('ed25519'). Future-proofs result shape
+    for when key-rotation supports alternate algorithms."""
+    signatureAlgorithm: String!
+    """F2 — id of the :CtiOrgKeypair used to sign this export."""
+    signedByKeypairId: ID!
+    """F2 — Signer public key (PEM, SPKI). Verifiers can use directly."""
+    signerPublicKeyPem: String!
   }
 
   type GenerateRulesResult {

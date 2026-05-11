@@ -13,6 +13,8 @@ import { getSession } from '../db/neo4j.js';
 import { RELEASE_TIER_RANK, type ReleaseTier } from '../cti/kinds.js';
 import type { RuleKind } from '../rules/kinds.js';
 import { validateStixBundle } from './stix-validate.js';
+import { getOrCreateOrgKeypair } from '../cti/sign/keypair.js';
+import { signBytes } from '../cti/sign/sign.js';
 
 // OASIS standard TLP marking-definition IDs (stable, well-known UUIDs).
 // See https://docs.oasis-open.org/cti/stix/v2.1/os/stix-v2.1-os.html#_yd3ar14ekwrs
@@ -281,10 +283,19 @@ export interface StixExportRecord {
   releaseTier: ReleaseTier;
   bytesSize: number;
   contentHash: string;
+  /** F2 — Ed25519 detached signature (base64) over the bundle bytes. */
+  signature: string;
+  /** F2 — id of the :CtiOrgKeypair used to sign. */
+  signedByKeypairId: string;
+  /** F2 — public key of the signer (PEM). Verifiers can use directly
+   *  without an extra fetch. */
+  signerPublicKeyPem: string;
 }
 
 // Persist :StixExport metadata + edges per m019 schema. Bundle bytes
 // themselves are NOT persisted (re-generatable from Hunt + included rules).
+// F2: signs the bundle with the org keypair (lazy-created on first call)
+// and persists the signature + SIGNED_BY edge.
 export async function persistStixExport(
   tenantId: string,
   huntId: string,
@@ -294,19 +305,30 @@ export async function persistStixExport(
   const id = randomUUID();
   const ts = new Date().toISOString();
   const contentHash = createHash('sha256').update(result.bytes).digest('hex');
+
+  // F2 — sign bundle bytes with the org's Ed25519 keypair. Lazy-create
+  // on first export. Failure here (e.g. CTI_SIGNING_MASTER_KEY missing)
+  // surfaces to the resolver and aborts the export — unsigned exports
+  // are not allowed once F2 is wired.
+  const keypair = await getOrCreateOrgKeypair(tenantId);
+  const signature = signBytes(keypair.privateKey, result.bytes);
+
   const session = getSession();
   try {
     await session.executeWrite(async (tx) => {
       await tx.run(
         `MATCH (h:Hunt {id: $huntId, tenantId: $tenantId})
+         MATCH (k:CtiOrgKeypair {id: $keypairId})
          CREATE (e:StixExport {
            id: $id, tenantId: $tenantId, huntId: $huntId,
            ts: datetime($ts),
            bundleId: $bundleId, indicatorCount: $indicatorCount,
            tlp: $tlp, releaseTier: $releaseTier,
-           bytesSize: $bytesSize, contentHash: $contentHash
+           bytesSize: $bytesSize, contentHash: $contentHash,
+           signature: $signature, signatureAlgorithm: 'ed25519'
          })
          MERGE (e)-[:DERIVED_FROM]->(h)
+         MERGE (e)-[:SIGNED_BY]->(k)
          WITH e
          UNWIND $ruleIds AS rid
          MATCH (r:DetectionRule {id: rid, tenantId: $tenantId})
@@ -319,6 +341,8 @@ export async function persistStixExport(
           releaseTier: result.stats.tier,
           bytesSize: result.bytes.length,
           contentHash,
+          signature,
+          keypairId: keypair.id,
           ruleIds: approvedRuleIds,
         },
       );
@@ -331,6 +355,9 @@ export async function persistStixExport(
       releaseTier: result.stats.tier,
       bytesSize: result.bytes.length,
       contentHash,
+      signature,
+      signedByKeypairId: keypair.id,
+      signerPublicKeyPem: keypair.publicKeyPem,
     };
   } finally {
     await session.close();

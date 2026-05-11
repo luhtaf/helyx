@@ -42,6 +42,12 @@ const schema = z.object({
   COOKIE_SECURE: z.coerce.boolean().default(process.env.NODE_ENV === 'production'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   TRUST_PROXY_HOPS: z.coerce.number().default(0),
+  // F2 — separate secret tier for data-at-rest CTI signing key encryption.
+  // 64 hex chars (32 bytes). Optional at config level; cti/sign/keypair.ts
+  // throws a loud, actionable error at first signing attempt if missing,
+  // so non-CTI code paths keep working in stripped-down dev envs.
+  // Generate: node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+  CTI_SIGNING_MASTER_KEY: z.string().regex(/^[0-9a-f]{64}$/, 'CTI_SIGNING_MASTER_KEY must be 64 hex chars (32 bytes)').optional(),
 });
 
 const parsed = schema.safeParse(process.env);

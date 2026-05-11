@@ -305,6 +305,7 @@ const EXPORT_HUNT_AS_STIX = gql`
       exportId filename base64 bundleId
       indicatorCount skippedUnapproved skippedStale
       tlp contentHash
+      signature signatureAlgorithm signedByKeypairId signerPublicKeyPem
     }
   }
 `;
@@ -319,6 +320,11 @@ export interface StixExportResult {
   skippedStale: number;
   tlp: 'white' | 'green' | 'amber' | 'red';
   contentHash: string;
+  // F2 — detached Ed25519 signature provenance.
+  signature: string;
+  signatureAlgorithm: string;
+  signedByKeypairId: string;
+  signerPublicKeyPem: string;
 }
 
 export function useExportHuntAsStix() {

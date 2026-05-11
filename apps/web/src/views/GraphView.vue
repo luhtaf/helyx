@@ -173,7 +173,7 @@ async function onExportStix(): Promise<void> {
       ? ` (skipped ${stix.skippedUnapproved} unapproved + ${stix.skippedStale} stale)`
       : '';
     showToast(
-      `STIX bundle exported · ${stix.indicatorCount} indicators · TLP:${stix.tlp}${skipNote}`,
+      `STIX exported · ${stix.indicatorCount} indicators · TLP:${stix.tlp} · signed (${stix.signatureAlgorithm})${skipNote}`,
       'success',
     );
   } catch (e) {
@@ -182,6 +182,8 @@ async function onExportStix(): Promise<void> {
       showToast('No approved rules — approve in /rules/<id> first', 'error');
     } else if (msg.includes('no generated rules')) {
       showToast('Run "Generate rules" first', 'error');
+    } else if (msg.includes('CTI_SIGNING_MASTER_KEY')) {
+      showToast('Signing key missing — set CTI_SIGNING_MASTER_KEY in backend .env', 'error');
     } else {
       showToast(`STIX export failed: ${msg}`, 'error');
     }
