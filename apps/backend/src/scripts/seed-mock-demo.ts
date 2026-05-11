@@ -575,7 +575,7 @@ async function seedHuntAndRules(plan: OrgPlan): Promise<{ huntId: string; ruleId
         const r = await tx.run(
           `MERGE (r:DetectionRule {tenantId: $tenantId, name: $name})
            ON CREATE SET r.id = randomUUID(), r.createdAt = datetime(),
-                         r.source = 'GENERATED', r.status = 'ACTIVE'
+                         r.source = 'helyx-generated', r.status = 'ACTIVE'
            SET r.kind = $kind, r.description = $description,
                r.content = $content, r.tags = $tags,
                r.releaseTier = $releaseTier,
