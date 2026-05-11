@@ -269,6 +269,23 @@ Every `:DetectionRule` and `:Hunt` carries `releaseTier` (defaults `internal` fo
 
 **Migrations involved:** `m017_release_policy_schema` (tier indexes + ReleaseTierChange) · `m018_cti_org_keypair` (CtiOrgKeypair + RuleApproval) · `m019_stix_export` (StixExport + edges).
 
+### Demo data (`pnpm seed:mock`)
+
+Idempotent additive seeder at `apps/backend/src/scripts/seed-mock-demo.ts`. Produces realistic Indonesian sektoral inventory + governance-state-rich hunts so the F1+F2+H5 loop demos visibly without manual setup. Re-run anytime — MERGE-based, won't duplicate.
+
+Per org (3 total):
+- 7 stakeholders with proper sektor (Acme: Industri/Transportasi/Keuangan/Perdagangan/TIK · Pajak: Administrasi Pemerintahan · Telkom: TIK)
+- Asset trees with `.go.id` / `.co.id` domains + RFC1918 IPs
+- 1 well-shaped hunt with 6-7 generated rules across YARA/SURICATA/SIGMA, mixed tier (1-2 public · 2-3 cross-agency · 1-2 sectoral · 1 internal) and mixed approval (3-4 fresh approved · 1 stale · 1-2 unapproved)
+- 1 historical `:StixExport` per hunt + lazy-created `:CtiOrgKeypair` (exercises the real signing + persistence path)
+
+**Demo URLs (after seed):**
+- `/graph?hunt=d11fce1e-077c-4c4d-a99c-f1de3ffdd94d` — Acme · Q2 Ransomware Garuda
+- `/graph?hunt=ed147e07-04c8-4947-a925-4684517b0e41` — Ditjen Pajak · Operasi Pemilu
+- `/graph?hunt=e618700b-75a8-4c01-8d3c-9c4601a24ede` — Telkom · APT41 Backbone Anomaly
+
+**Test users** (existing — not seeded by this script): `alice@helyx.test` (Acme + Pajak), `bob@helyx.test` (Telkom).
+
 ## When extending this file
 
 Once real code exists, this file should grow sections for:
