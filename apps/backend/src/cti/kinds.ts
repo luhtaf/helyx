@@ -29,3 +29,9 @@ export type CtiEgressMode = (typeof CTI_EGRESS_MODES)[number];
 // PDN allowlist patterns (matched as suffix). When CTI_EGRESS_MODE=pdn-only,
 // any push target hostname must end with one of these.
 export const PDN_ALLOWED_SUFFIXES = ['.pdn.go.id', '.bssn.go.id', 'localhost'] as const;
+
+// W2.5 — IOC type enum for tenant intel-pool :CtiIoc nodes. Re-exported
+// from artifacts/kinds.ts (same canonical values: IP/DOMAIN/URL/EMAIL/HASH).
+// Importing through cti/kinds.ts keeps cti consumers from reaching
+// across feature boundaries directly.
+export { IOC_TYPES, type IocType } from '../artifacts/kinds.js';

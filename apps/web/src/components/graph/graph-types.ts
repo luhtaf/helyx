@@ -2,7 +2,23 @@
 
 import type { DocumentNode } from 'graphql';
 
-export type NodeType = 'Stakeholder' | 'Asset' | 'CVE' | 'Case' | 'Sektor' | 'CWE';
+// AttackPattern + ThreatActor + Artifact + DetectionRule were added when
+// H3 materializeTtpHunt landed — the materialize repo emits nodes with
+// these types, but the union was missing them so TS couldn't catch the
+// drawer/style references. CtiIoc added for W2.5 indicator nodes once
+// they get rendered in the graph.
+export type NodeType =
+  | 'Stakeholder'
+  | 'Asset'
+  | 'CVE'
+  | 'Case'
+  | 'Sektor'
+  | 'CWE'
+  | 'AttackPattern'
+  | 'ThreatActor'
+  | 'DetectionRule'
+  | 'Artifact'
+  | 'CtiIoc';
 
 export interface GraphNode {
   /** Unique cytoscape node id: `${type}:${entityId}`. Idempotent — same id

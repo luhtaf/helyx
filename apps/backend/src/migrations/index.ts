@@ -18,6 +18,7 @@ import { m016_detection_rule_schema } from './m016_detection_rule_schema.js';
 import { m017_release_policy_schema } from './m017_release_policy_schema.js';
 import { m018_cti_org_keypair } from './m018_cti_org_keypair.js';
 import { m019_stix_export } from './m019_stix_export.js';
+import { m020_cti_ioc_intel } from './m020_cti_ioc_intel.js';
 
 export const migrations: Migration[] = [
   m001_initial_schema,
@@ -39,4 +40,5 @@ export const migrations: Migration[] = [
   m017_release_policy_schema,
   m018_cti_org_keypair,
   m019_stix_export,
+  m020_cti_ioc_intel,
 ];

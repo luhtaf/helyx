@@ -1,10 +1,24 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import type { GraphNode } from './graph-types';
 import { severityClass } from '@/utils/severity';
+import {
+  CTI_IOC_TYPES,
+  useActorTtpIndicators,
+  useAddCtiIoc,
+  useDeleteCtiIoc,
+  type CtiIocType,
+} from '@/composables/useCtiIocs';
+import { useToast } from '@/composables/useToast';
+import Input from '@/components/ui/Input.vue';
+import Button from '@/components/ui/Button.vue';
 
 const props = defineProps<{ node: GraphNode | null }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
+
+const route = useRoute();
+const { show: showToast } = useToast();
 
 interface KV { label: string; value: string; mono?: boolean; severity?: string }
 
@@ -50,6 +64,64 @@ function detailHref(): string | null {
     default: return null;
   }
 }
+
+// W2.5 — Actor × TTP indicators panel.
+// Shows when graph route has both ?ttp= and ?actor= AND the selected
+// node is the AttackPattern (TTP) or ThreatActor (Actor) — i.e. one
+// of the endpoints of the (Actor × TTP) edge the user is exploring.
+const ttpCode = computed(() => (route.query.ttp as string | undefined)?.toUpperCase() ?? null);
+const actorParam = computed(() => (route.query.actor as string | undefined) ?? null);
+const showIndicators = computed(() =>
+  Boolean(ttpCode.value && actorParam.value && props.node && (props.node.type === 'AttackPattern' || props.node.type === 'ThreatActor'))
+);
+
+const { indicators, loading: indicatorsLoading } = useActorTtpIndicators(
+  () => actorParam.value,
+  () => ttpCode.value,
+);
+const { submit: addIoc, loading: adding } = useAddCtiIoc();
+const { submit: deleteIoc } = useDeleteCtiIoc();
+
+// Inline add form state — collapsed by default to keep the panel compact.
+const addOpen = ref(false);
+const newType = ref<CtiIocType>('DOMAIN');
+const newValue = ref('');
+const newSource = ref('');
+const newNotes = ref('');
+const addErr = ref<string | null>(null);
+
+async function onAdd(): Promise<void> {
+  addErr.value = null;
+  if (!ttpCode.value || !actorParam.value) return;
+  const v = newValue.value.trim();
+  if (!v) { addErr.value = 'Value required'; return; }
+  try {
+    const created = await addIoc({
+      iocType: newType.value,
+      value: v,
+      source: newSource.value.trim() || null,
+      notes: newNotes.value.trim() || null,
+      actorId: actorParam.value,
+      techniqueId: ttpCode.value,
+    });
+    if (created) {
+      showToast(`Added ${created.iocType}: ${created.value}`, 'success');
+      newValue.value = '';
+      newSource.value = '';
+      newNotes.value = '';
+      // Keep form open for rapid multi-add — operator may have several IOCs queued.
+    }
+  } catch (e) {
+    addErr.value = (e as Error).message ?? 'add failed';
+  }
+}
+
+async function onDelete(id: string, value: string): Promise<void> {
+  if (!confirm(`Delete IOC "${value}"?`)) return;
+  const ok = await deleteIoc(id);
+  if (ok) showToast(`Deleted ${value}`, 'success');
+  else showToast('Delete failed', 'error');
+}
 </script>
 
 <template>
@@ -61,7 +133,7 @@ function detailHref(): string | null {
   >
     <aside
       v-if="node"
-      class="fixed top-0 right-0 h-screen w-[360px] bg-base border-l border-rule-strong z-30 overflow-y-auto"
+      class="fixed top-0 right-0 h-screen w-[400px] bg-base border-l border-rule-strong z-30 overflow-y-auto"
     >
       <div class="p-6">
         <header class="flex items-baseline justify-between mb-4 pb-3 border-b border-rule-strong">
@@ -94,6 +166,66 @@ function detailHref(): string | null {
           :to="detailHref()!"
           class="mt-6 inline-block font-mono text-[11px] text-signal hover:underline"
         >Open detail page →</RouterLink>
+
+        <!-- W2.5 — Actor × TTP indicators panel -->
+        <section v-if="showIndicators" class="mt-6 pt-5 border-t border-rule-strong">
+          <header class="flex items-baseline justify-between mb-3">
+            <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+              actor × ttp indicators
+            </p>
+            <span class="font-mono text-[10px] text-ink-faint tabular-nums">
+              {{ indicators.length }} / {{ ttpCode }}
+            </span>
+          </header>
+
+          <p v-if="indicatorsLoading && indicators.length === 0" class="text-[11px] text-ink-dim">loading…</p>
+
+          <ul v-else-if="indicators.length" class="space-y-2 mb-4">
+            <li v-for="ind in indicators" :key="ind.id" class="border border-rule rounded-md px-3 py-2">
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="font-mono text-[9px] uppercase tracking-wider text-signal shrink-0">{{ ind.iocType }}</span>
+                <button
+                  type="button"
+                  class="font-mono text-[9px] text-ink-faint hover:text-sev-crit transition shrink-0"
+                  @click="onDelete(ind.id, ind.value)"
+                >del</button>
+              </div>
+              <p class="font-mono text-[12px] text-ink break-all mt-0.5">{{ ind.value }}</p>
+              <p v-if="ind.source" class="font-mono text-[10px] text-ink-faint mt-0.5">via {{ ind.source }}</p>
+              <p v-if="ind.notes" class="text-[11px] text-ink-dim mt-0.5">{{ ind.notes }}</p>
+            </li>
+          </ul>
+
+          <p v-else class="text-[11px] text-ink-faint italic mb-3">
+            no indicators yet for this actor × ttp pair.
+          </p>
+
+          <button
+            v-if="!addOpen"
+            type="button"
+            class="font-mono text-[11px] text-signal hover:underline"
+            @click="addOpen = true"
+          >+ add indicator</button>
+
+          <div v-else class="border border-rule-strong rounded-md p-3 space-y-2">
+            <div class="flex gap-2">
+              <select
+                v-model="newType"
+                class="bg-surface border border-rule-strong rounded-sm px-2 py-1 text-[12px] text-ink font-mono shrink-0"
+              >
+                <option v-for="t in CTI_IOC_TYPES" :key="t" :value="t">{{ t }}</option>
+              </select>
+              <Input v-model="newValue" placeholder="value (IP, domain, hash …)" class="flex-1" />
+            </div>
+            <Input v-model="newSource" placeholder="source (optional, e.g. OTX-pulse-12345)" />
+            <Input v-model="newNotes" placeholder="notes (optional)" />
+            <p v-if="addErr" class="text-[11px] text-sev-crit">{{ addErr }}</p>
+            <div class="flex items-center gap-2">
+              <Button variant="primary" size="sm" :loading="adding" :disabled="!newValue.trim()" @click="onAdd">Add</Button>
+              <Button variant="ghost" size="sm" @click="addOpen = false; newValue = ''; addErr = null">Done</Button>
+            </div>
+          </div>
+        </section>
       </div>
     </aside>
   </Transition>
