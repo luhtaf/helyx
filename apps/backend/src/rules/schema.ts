@@ -74,9 +74,25 @@ export const ruleTypeDefs = /* GraphQL */ `
     status: RuleStatus
   }
 
+  enum PushBlockReason {
+    tier_too_high
+    unapproved
+    stale_approval
+  }
+
+  type PushReadiness {
+    allowed: Boolean!
+    reason: PushBlockReason
+    detail: String
+  }
+
   extend type Query {
     detectionRule(id: ID!): DetectionRule
     detectionRules(filter: RuleFilterInput, page: Int = 1, perPage: Int = 25): DetectionRulePage!
+    """F1c — Pre-flight check whether a rule can be pushed to a target
+    at the given max-tier. Pure read; no side effects. When H7 push
+    lands (Train 2-3), every push path calls this guard."""
+    dryRunPushRule(ruleId: ID!, targetMaxTier: ReleaseTier!): PushReadiness!
   }
 
   extend type Mutation {

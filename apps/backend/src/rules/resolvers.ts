@@ -23,6 +23,7 @@ import {
   type RuleStatus,
 } from './kinds.js';
 import { RELEASE_TIERS, type ReleaseTier } from '../cti/kinds.js';
+import { checkRulePushAllowed } from '../cti/release/guards.js';
 import type { RuleFilter } from './types.js';
 
 const CreateRuleSchema = z.object({
@@ -68,6 +69,30 @@ export const ruleResolvers = {
       assertOrgRole(ctx, 'VIEWER');
       const r = await findRuleById(ctx.activeOrgId, args.id);
       return r ? encodeRow(r) : null;
+    },
+
+    dryRunPushRule: async (
+      _p: unknown,
+      args: { ruleId: string; targetMaxTier: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const decoded = args.targetMaxTier.replace(/_/g, '-') as ReleaseTier;
+      if (!(RELEASE_TIERS as readonly string[]).includes(decoded)) {
+        throw notFound(`Invalid target tier: ${args.targetMaxTier}`);
+      }
+      const rule = await findRuleById(ctx.activeOrgId, args.ruleId);
+      if (!rule) throw notFound('rule not found');
+      return checkRulePushAllowed(
+        {
+          id: rule.id,
+          releaseTier: rule.releaseTier,
+          approvedAt: rule.approvedAt,
+          approvalContentHash: rule.approvalContentHash,
+          content: rule.content,
+        },
+        decoded,
+      );
     },
 
     detectionRules: async (
