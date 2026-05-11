@@ -41,11 +41,30 @@ export const ctiIocsTypeDefs = /* GraphQL */ `
     indicatorsForActorTtp(actorId: ID!, techniqueId: String!): [CtiIoc!]!
   }
 
+  input AddCtiIocsBulkInput {
+    iocType: CtiIocType!
+    """Newline-split values from operator paste. Trim + dedup happens server-side."""
+    values: [String!]!
+    notes: String
+    source: String
+    actorId: ID!
+    techniqueId: String!
+  }
+
+  type BulkAddResult {
+    added: Int!
+    duplicates: Int!
+    invalid: Int!
+  }
+
   extend type Mutation {
     """W2.5 — Add a tenant intel IOC attributed to (actor, technique).
     Idempotent on (tenantId, value, actorId, techniqueId): returns
     existing IOC if duplicate."""
     addCtiIoc(input: AddCtiIocInput!): CtiIoc!
+    """W2.5b — Bulk add IOCs from a paste-list. Server trims + dedupes
+    + idempotent-MERGEs. Returns per-bucket counts for the toast."""
+    addCtiIocsBulk(input: AddCtiIocsBulkInput!): BulkAddResult!
     """W2.5 — Delete a tenant intel IOC. Tenant-guarded."""
     deleteCtiIoc(id: ID!): Boolean!
   }

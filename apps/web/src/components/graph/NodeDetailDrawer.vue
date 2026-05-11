@@ -7,6 +7,7 @@ import {
   CTI_IOC_TYPES,
   useActorTtpIndicators,
   useAddCtiIoc,
+  useAddCtiIocsBulk,
   useDeleteCtiIoc,
   type CtiIocType,
 } from '@/composables/useCtiIocs';
@@ -80,15 +81,23 @@ const { indicators, loading: indicatorsLoading } = useActorTtpIndicators(
   () => ttpCode.value,
 );
 const { submit: addIoc, loading: adding } = useAddCtiIoc();
+const { submit: addIocsBulk, loading: addingBulk } = useAddCtiIocsBulk();
 const { submit: deleteIoc } = useDeleteCtiIoc();
 
 // Inline add form state — collapsed by default to keep the panel compact.
 const addOpen = ref(false);
+const addMode = ref<'single' | 'bulk'>('single');  // W2.5b
 const newType = ref<CtiIocType>('DOMAIN');
 const newValue = ref('');
 const newSource = ref('');
 const newNotes = ref('');
+const bulkText = ref('');
 const addErr = ref<string | null>(null);
+
+// Live count of non-empty lines in bulk paste — gives operator instant feedback.
+const bulkLineCount = computed(() =>
+  bulkText.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).length,
+);
 
 async function onAdd(): Promise<void> {
   addErr.value = null;
@@ -113,6 +122,33 @@ async function onAdd(): Promise<void> {
     }
   } catch (e) {
     addErr.value = (e as Error).message ?? 'add failed';
+  }
+}
+
+async function onAddBulk(): Promise<void> {
+  addErr.value = null;
+  if (!ttpCode.value || !actorParam.value) return;
+  const lines = bulkText.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) { addErr.value = 'Paste at least one value'; return; }
+  if (lines.length > 500) { addErr.value = 'Max 500 IOCs per paste — split into smaller batches'; return; }
+  try {
+    const r = await addIocsBulk({
+      iocType: newType.value,
+      values: lines,
+      source: newSource.value.trim() || null,
+      notes: newNotes.value.trim() || null,
+      actorId: actorParam.value,
+      techniqueId: ttpCode.value,
+    });
+    if (r) {
+      const dupNote = r.duplicates > 0 ? ` · ${r.duplicates} dup` : '';
+      const invNote = r.invalid > 0 ? ` · ${r.invalid} invalid` : '';
+      showToast(`Added ${r.added} ${newType.value}${dupNote}${invNote}`, 'success');
+      bulkText.value = '';
+      // Stay in bulk mode — operator may have multiple paste batches queued.
+    }
+  } catch (e) {
+    addErr.value = (e as Error).message ?? 'bulk add failed';
   }
 }
 
@@ -208,6 +244,21 @@ async function onDelete(id: string, value: string): Promise<void> {
           >+ add indicator</button>
 
           <div v-else class="border border-rule-strong rounded-md p-3 space-y-2">
+            <!-- W2.5b: mode toggle (single | bulk) -->
+            <div class="flex items-center gap-2 pb-1 border-b border-rule">
+              <button
+                type="button"
+                :class="['font-mono text-[10px] uppercase tracking-wider transition', addMode === 'single' ? 'text-signal' : 'text-ink-faint hover:text-ink-dim']"
+                @click="addMode = 'single'"
+              >single</button>
+              <span class="text-ink-faint">·</span>
+              <button
+                type="button"
+                :class="['font-mono text-[10px] uppercase tracking-wider transition', addMode === 'bulk' ? 'text-signal' : 'text-ink-faint hover:text-ink-dim']"
+                @click="addMode = 'bulk'"
+              >bulk paste</button>
+            </div>
+
             <div class="flex gap-2">
               <select
                 v-model="newType"
@@ -215,14 +266,39 @@ async function onDelete(id: string, value: string): Promise<void> {
               >
                 <option v-for="t in CTI_IOC_TYPES" :key="t" :value="t">{{ t }}</option>
               </select>
-              <Input v-model="newValue" placeholder="value (IP, domain, hash …)" class="flex-1" />
+              <Input v-if="addMode === 'single'" v-model="newValue" placeholder="value (IP, domain, hash …)" class="flex-1" />
+              <p v-else class="font-mono text-[10px] text-ink-faint self-center tabular-nums">
+                {{ bulkLineCount }} line{{ bulkLineCount === 1 ? '' : 's' }}
+              </p>
             </div>
+
+            <textarea
+              v-if="addMode === 'bulk'"
+              v-model="bulkText"
+              rows="6"
+              placeholder="paste one IOC per line — server will trim, dedupe, and merge"
+              class="w-full bg-surface border border-rule-strong rounded-sm px-2 py-1 text-[12px] text-ink font-mono resize-y"
+            />
+
             <Input v-model="newSource" placeholder="source (optional, e.g. OTX-pulse-12345)" />
-            <Input v-model="newNotes" placeholder="notes (optional)" />
+            <Input v-if="addMode === 'single'" v-model="newNotes" placeholder="notes (optional)" />
             <p v-if="addErr" class="text-[11px] text-sev-crit">{{ addErr }}</p>
             <div class="flex items-center gap-2">
-              <Button variant="primary" size="sm" :loading="adding" :disabled="!newValue.trim()" @click="onAdd">Add</Button>
-              <Button variant="ghost" size="sm" @click="addOpen = false; newValue = ''; addErr = null">Done</Button>
+              <Button
+                v-if="addMode === 'single'"
+                variant="primary" size="sm"
+                :loading="adding"
+                :disabled="!newValue.trim()"
+                @click="onAdd"
+              >Add</Button>
+              <Button
+                v-else
+                variant="primary" size="sm"
+                :loading="addingBulk"
+                :disabled="bulkLineCount === 0"
+                @click="onAddBulk"
+              >Add {{ bulkLineCount }}</Button>
+              <Button variant="ghost" size="sm" @click="addOpen = false; newValue = ''; bulkText = ''; addErr = null">Done</Button>
             </div>
           </div>
         </section>

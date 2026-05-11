@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { RequestContext } from '../../auth/context.js';
 import { assertOrgRole } from '../../auth/middleware.js';
-import { addIndicatorForActorTtp, deleteCtiIoc, listIndicatorsForActorTtp, type CtiIocRow } from './repo.js';
+import { addIndicatorForActorTtp, addIndicatorsBulk, deleteCtiIoc, listIndicatorsForActorTtp, type BulkAddResult, type CtiIocRow } from './repo.js';
 import { IOC_TYPES, type IocType } from '../kinds.js';
 
 const TCODE = /^T\d{4}(\.\d{3})?$/;
@@ -9,6 +9,15 @@ const TCODE = /^T\d{4}(\.\d{3})?$/;
 const AddCtiIocSchema = z.object({
   iocType: z.enum(IOC_TYPES),
   value: z.string().trim().min(1).max(2048),
+  notes: z.string().max(2000).nullable().optional(),
+  source: z.string().max(200).nullable().optional(),
+  actorId: z.string().min(1),
+  techniqueId: z.string().regex(TCODE, 'Expected T-code like T1486 or T1059.001'),
+});
+
+const AddCtiIocsBulkSchema = z.object({
+  iocType: z.enum(IOC_TYPES),
+  values: z.array(z.string().max(2048)).min(1).max(500),  // 500-IOC ceiling per call
   notes: z.string().max(2000).nullable().optional(),
   source: z.string().max(200).nullable().optional(),
   actorId: z.string().min(1),
@@ -37,6 +46,16 @@ export const ctiIocsResolvers = {
       assertOrgRole(ctx, 'ANALYST');
       const input = AddCtiIocSchema.parse(args.input);
       return addIndicatorForActorTtp(ctx.activeOrgId, ctx.user.id, input);
+    },
+
+    addCtiIocsBulk: async (
+      _p: unknown,
+      args: { input: { iocType: IocType; values: string[]; notes?: string | null; source?: string | null; actorId: string; techniqueId: string } },
+      ctx: RequestContext,
+    ): Promise<BulkAddResult> => {
+      assertOrgRole(ctx, 'ANALYST');
+      const input = AddCtiIocsBulkSchema.parse(args.input);
+      return addIndicatorsBulk(ctx.activeOrgId, ctx.user.id, input);
     },
 
     deleteCtiIoc: async (

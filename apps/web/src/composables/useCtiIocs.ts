@@ -39,6 +39,12 @@ const ADD_CTI_IOC = gql`
   }
 `;
 
+const ADD_CTI_IOCS_BULK = gql`
+  mutation AddCtiIocsBulk($input: AddCtiIocsBulkInput!) {
+    addCtiIocsBulk(input: $input) { added duplicates invalid }
+  }
+`;
+
 const DELETE_CTI_IOC = gql`
   mutation DeleteCtiIoc($id: ID!) {
     deleteCtiIoc(id: $id)
@@ -88,6 +94,36 @@ export function useAddCtiIoc() {
   return {
     submit: async (input: AddCtiIocInput): Promise<CtiIoc | null> =>
       (await mutate({ input }))?.data?.addCtiIoc ?? null,
+    loading, error,
+  };
+}
+
+export interface AddCtiIocsBulkInput {
+  iocType: CtiIocType;
+  values: string[];
+  notes?: string | null;
+  source?: string | null;
+  actorId: string;
+  techniqueId: string;
+}
+
+export interface BulkAddResult {
+  added: number;
+  duplicates: number;
+  invalid: number;
+}
+
+export function useAddCtiIocsBulk() {
+  const { mutate, loading, error } = useMutation<
+    { addCtiIocsBulk: BulkAddResult },
+    { input: AddCtiIocsBulkInput }
+  >(ADD_CTI_IOCS_BULK, () => ({
+    refetchQueries: ['IndicatorsForActorTtp'],
+    awaitRefetchQueries: true,
+  }));
+  return {
+    submit: async (input: AddCtiIocsBulkInput): Promise<BulkAddResult | null> =>
+      (await mutate({ input }))?.data?.addCtiIocsBulk ?? null,
     loading, error,
   };
 }

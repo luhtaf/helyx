@@ -186,6 +186,109 @@ async function listIndicatorsForActorTtpInTx(
   }));
 }
 
+export interface BulkAddInput {
+  iocType: IocType;
+  values: string[];        // dedup + trim happens here
+  notes?: string | null;   // applied to all
+  source?: string | null;  // applied to all
+  actorId: string;
+  techniqueId: string;
+}
+
+export interface BulkAddResult {
+  added: number;       // newly created
+  duplicates: number;  // skipped (already attributed to this actor+ttp)
+  invalid: number;     // skipped (empty/whitespace after trim)
+}
+
+// W2.5b — Bulk add IOCs in one tx via UNWIND. Trims + dedupes
+// caller-side values, then dedupes against existing (tenantId, value,
+// actorId, techniqueId) tuples in DB. Operator with 50 IOCs at hand
+// shouldn't click Add 50 times.
+export async function addIndicatorsBulk(
+  tenantId: string,
+  userId: string,
+  input: BulkAddInput,
+): Promise<BulkAddResult> {
+  // Pre-filter: trim, drop empties, dedupe within input batch (case-sensitive
+  // for hashes, lowercased for hostnames is operator's job — we don't
+  // normalize since IP/HASH/etc shouldn't be normalized identically).
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  let invalid = 0;
+  for (const raw of input.values) {
+    const v = raw.trim();
+    if (!v) { invalid++; continue; }
+    if (seen.has(v)) { invalid++; continue; }
+    seen.add(v);
+    cleaned.push(v);
+  }
+  if (cleaned.length === 0) return { added: 0, duplicates: 0, invalid };
+
+  const session = getSession();
+  try {
+    return await session.executeWrite(async (tx) => {
+      // Validate actor + technique exist (one query for both).
+      const valid = await tx.run(
+        `OPTIONAL MATCH (a:IntrusionSet {id: $actorId})
+         OPTIONAL MATCH (t:AttackPattern {id: $techniqueId})
+         RETURN a IS NOT NULL AS actorOk, t IS NOT NULL AS techOk`,
+        { actorId: input.actorId, techniqueId: input.techniqueId },
+      );
+      const v = valid.records[0];
+      if (!v?.get('actorOk')) {
+        throw new GraphQLError(`Actor not found: ${input.actorId}`, { extensions: { code: 'NOT_FOUND' } });
+      }
+      if (!v?.get('techOk')) {
+        throw new GraphQLError(`Technique not found: ${input.techniqueId}`, { extensions: { code: 'NOT_FOUND' } });
+      }
+
+      // Single MERGE-by-(tenantId, value, actorId, techniqueId) round-trip
+      // via UNWIND. ON CREATE sets node properties + ts; ON MATCH no-ops.
+      // Attribution edges are MERGEd unconditionally (idempotent).
+      const rows = cleaned.map((v) => ({ id: randomUUID(), value: v }));
+      const r = await tx.run(
+        `MATCH (a:IntrusionSet {id: $actorId})
+         MATCH (t:AttackPattern {id: $techniqueId})
+         UNWIND $rows AS row
+         OPTIONAL MATCH (existing:CtiIoc {tenantId: $tenantId, value: row.value})
+                  -[:ATTRIBUTED_TO]->(a)
+         WHERE EXISTS { (existing)-[:HINTS_AT_TTP]->(t) }
+         WITH row, a, t, existing
+         CALL {
+           WITH row, a, t, existing
+           WITH row, a, t, existing WHERE existing IS NULL
+           CREATE (i:CtiIoc {
+             id: row.id, tenantId: $tenantId, iocType: $iocType, value: row.value,
+             notes: $notes, source: $source, addedByUserId: $userId, addedAt: datetime()
+           })
+           CREATE (i)-[:ATTRIBUTED_TO]->(a)
+           CREATE (i)-[:HINTS_AT_TTP]->(t)
+           RETURN 1 AS createdFlag
+           UNION
+           WITH row, a, t, existing
+           WITH row, a, t, existing WHERE existing IS NOT NULL
+           RETURN 0 AS createdFlag
+         }
+         RETURN sum(createdFlag) AS added, count(*) AS total`,
+        {
+          tenantId, userId,
+          actorId: input.actorId, techniqueId: input.techniqueId,
+          iocType: input.iocType,
+          notes: input.notes ?? null, source: input.source ?? null,
+          rows,
+        },
+      );
+      const rec = r.records[0];
+      const added = Number(rec?.get('added') ?? 0);
+      const total = Number(rec?.get('total') ?? 0);
+      return { added, duplicates: total - added, invalid };
+    });
+  } finally {
+    await session.close();
+  }
+}
+
 // Delete an IOC. Detach all edges. Tenant-guarded so cross-tenant
 // IDs cannot be deleted via crafted mutations.
 export async function deleteCtiIoc(tenantId: string, iocId: string): Promise<boolean> {
