@@ -295,7 +295,7 @@ export function useDownloadHuntZip() {
 const HUNT_GRAPH_DETAIL = gql`
   query HuntGraphDetail($id: ID!) {
     hunt(id: $id) {
-      id name kind status createdAt updatedAt
+      id name kind status releaseTier createdAt updatedAt
       graphSnapshot graphSeedType graphSeedId
     }
   }
@@ -306,11 +306,36 @@ export interface HuntGraphDetail {
   name: string;
   kind: 'STRUCTURED' | 'GRAPH';
   status: 'ACTIVE' | 'ARCHIVED';
+  releaseTier: import('./useRules').ReleaseTier;  // F1b — re-use rule's tier type
   createdAt: string;
   updatedAt: string;
   graphSnapshot: string | null;
   graphSeedType: string | null;
   graphSeedId: string | null;
+}
+
+const SET_HUNT_RELEASE_TIER = gql`
+  mutation SetHuntReleaseTier($id: ID!, $tier: ReleaseTier!) {
+    setHuntReleaseTier(id: $id, tier: $tier) {
+      id releaseTier updatedAt
+    }
+  }
+`;
+
+export function useSetHuntReleaseTier() {
+  type T = import('./useRules').ReleaseTier;
+  const { mutate, loading, error } = useMutation<
+    { setHuntReleaseTier: { id: string; releaseTier: T; updatedAt: string } },
+    { id: string; tier: T }
+  >(SET_HUNT_RELEASE_TIER, () => ({
+    refetchQueries: ['HuntGraphDetail'],
+    awaitRefetchQueries: true,
+  }));
+  return {
+    submit: async (id: string, tier: T) =>
+      (await mutate({ id, tier }))?.data?.setHuntReleaseTier ?? null,
+    loading, error,
+  };
 }
 
 export function useHuntGraph(id: () => string | null | undefined) {

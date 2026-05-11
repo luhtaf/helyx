@@ -1,5 +1,6 @@
 import { getSession } from '../db/neo4j.js';
 import { newId } from '../utils/uuid.js';
+import { GraphQLError } from 'graphql';
 import type {
   HuntActorRef,
   HuntAssetRef,
@@ -7,11 +8,14 @@ import type {
   HuntRecord,
   HuntStatus,
   HuntTtpRow,
+  ReleaseTier,
 } from './types.js';
+import { logAudit } from '../audits/log.js';
 
 const HUNT_RETURN = `
   h.id AS id, h.tenantId AS tenantId, h.name AS name, h.status AS status,
   coalesce(h.kind, 'STRUCTURED') AS kind,
+  coalesce(h.releaseTier, 'internal') AS releaseTier,
   toString(h.createdAt) AS createdAt, toString(h.updatedAt) AS updatedAt,
   head([(u:User)-[:CREATED]->(h) | u.id]) AS createdByUserId,
   size([(h)-[:TARGETS]->(:IntrusionSet) | 1]) AS targetActorCount,
@@ -28,6 +32,7 @@ function rowToHunt(rec: { get: (k: string) => unknown }): HuntRecord {
     name: rec.get('name') as string,
     kind: (rec.get('kind') as HuntRecord['kind']) ?? 'STRUCTURED',
     status: rec.get('status') as HuntStatus,
+    releaseTier: rec.get('releaseTier') as ReleaseTier,
     createdAt: rec.get('createdAt') as string,
     updatedAt: rec.get('updatedAt') as string,
     createdByUserId: (rec.get('createdByUserId') as string | null) ?? null,
@@ -37,6 +42,61 @@ function rowToHunt(rec: { get: (k: string) => unknown }): HuntRecord {
     graphSeedType: (rec.get('graphSeedType') as string | null) ?? null,
     graphSeedId: (rec.get('graphSeedId') as string | null) ?? null,
   };
+}
+
+// F1b — Set release tier on a Hunt. Mirror of setRuleReleaseTier.
+// Audit chain via :ReleaseTierChange (same node label, distinguished
+// by huntId vs ruleId field). No-op on same-tier.
+export async function setHuntReleaseTier(
+  tenantId: string,
+  userId: string,
+  huntId: string,
+  tier: ReleaseTier,
+): Promise<HuntRecord> {
+  const session = getSession();
+  try {
+    const result = await session.executeWrite(async (tx) => {
+      const current = await tx.run(
+        `MATCH (h:Hunt {id: $huntId, tenantId: $tenantId})
+         RETURN coalesce(h.releaseTier, 'internal') AS tier`,
+        { huntId, tenantId },
+      );
+      const before = current.records[0]?.get('tier') as ReleaseTier | undefined;
+      if (!before) {
+        throw new GraphQLError('hunt not found', { extensions: { code: 'NOT_FOUND' } });
+      }
+      if (before === tier) {
+        const r = await tx.run(
+          `MATCH (h:Hunt {id: $huntId, tenantId: $tenantId}) RETURN ${HUNT_RETURN}`,
+          { huntId, tenantId },
+        );
+        return { row: rowToHunt(r.records[0]!), changed: false, before };
+      }
+      const upd = await tx.run(
+        `MATCH (h:Hunt {id: $huntId, tenantId: $tenantId})
+         SET h.releaseTier = $tier, h.updatedAt = datetime()
+         CREATE (c:ReleaseTierChange {
+           id: randomUUID(), tenantId: $tenantId,
+           huntId: $huntId, fromTier: $before, toTier: $tier,
+           changedByUserId: $userId, ts: datetime()
+         })
+         RETURN ${HUNT_RETURN}`,
+        { huntId, tenantId, tier, before, userId },
+      );
+      return { row: rowToHunt(upd.records[0]!), changed: true, before };
+    });
+    if (result.changed) {
+      await logAudit(
+        tenantId, userId, 'hunt.release_tier_change',
+        { type: 'Hunt', id: huntId },
+        { releaseTier: result.before },
+        { releaseTier: tier },
+      );
+    }
+    return result.row;
+  } finally {
+    await session.close();
+  }
 }
 
 export interface CreateHuntInput {

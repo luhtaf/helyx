@@ -14,6 +14,8 @@ export const huntTypeDefs = /* GraphQL */ `
     name: String!
     kind: HuntKind!
     status: HuntStatus!
+    """F1 — release tier (defaults 'internal' for legacy hunts)."""
+    releaseTier: ReleaseTier!
     createdAt: String!
     updatedAt: String!
     targetActorCount: Int!
@@ -122,6 +124,9 @@ export const huntTypeDefs = /* GraphQL */ `
     via actorId. Hard cap per type prevents silent data loss; UI must
     surface .capped=true."""
     materializeTtpHunt(input: TtpMaterializeInput!): TtpMaterializeResult!
+    """F1b — Set release tier on a Hunt. Mirror of setRuleReleaseTier.
+    Audit-logged via :ReleaseTierChange + AuditEvent. No-op same-tier."""
+    setHuntReleaseTier(id: ID!, tier: ReleaseTier!): Hunt!
   }
 
   type GenerateRulesResult {

@@ -18,7 +18,8 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useTtpMaterialize, type TtpFacets } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useTtpMaterialize, useSetHuntReleaseTier, type TtpFacets } from '@/composables/useHunts';
+import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 
@@ -98,6 +99,18 @@ const { submit: updateSnapshot } = useUpdateHuntSnapshot();
 const { search: searchEntities } = useSearchEntities();
 const { submit: generateRules, loading: generatingRules } = useGenerateRulesFromHunt();
 const { submit: downloadZip, loading: downloadingZip } = useDownloadHuntZip();
+const { submit: setTier, loading: settingTier } = useSetHuntReleaseTier();
+
+async function onChangeHuntTier(e: Event): Promise<void> {
+  const next = (e.target as HTMLSelectElement).value as ReleaseTier;
+  if (!huntId.value || !hunt.value || next === hunt.value.releaseTier) return;
+  try {
+    await setTier(huntId.value, next);
+    showToast(`Hunt release tier → ${RELEASE_TIER_LABELS[next]}`, 'success');
+  } catch (err) {
+    showToast(`Tier change failed: ${(err as Error).message}`, 'error');
+  }
+}
 
 // ─── TTP-seed mode (?ttp=T1486[&actor=...]) — H3 materialize ─────────
 const ttpCode = computed(() => (route.query.ttp as string | undefined)?.toUpperCase() ?? null);
@@ -380,6 +393,17 @@ onMounted(() => { void plantSeed(); });
         </div>
         <div class="flex items-center gap-2 pointer-events-auto">
           <Button variant="ghost" @click="searchOpen = true">+ Add by search</Button>
+          <!-- F1b — release tier picker, hunt-mode only -->
+          <select
+            v-if="huntId && hunt"
+            :value="hunt.releaseTier"
+            :disabled="settingTier"
+            class="bg-surface border border-rule-strong rounded-md px-2 py-1 text-[11px] text-ink-dim font-mono uppercase tracking-wider"
+            :title="`release tier — F1 need-to-know enforcement (push: rule.tier ≤ target.tier)`"
+            @change="onChangeHuntTier"
+          >
+            <option v-for="t in RELEASE_TIERS" :key="t" :value="t">{{ RELEASE_TIER_LABELS[t] }}</option>
+          </select>
           <Button v-if="huntId" variant="ghost" :loading="generatingRules" @click="onGenerateRules">
             Generate rules
           </Button>

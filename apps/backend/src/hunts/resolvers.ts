@@ -21,6 +21,8 @@ import {
 import { generateRulesFromHunt } from '../exporters/index.js';
 import { packHuntRulesAsZip } from '../exporters/zip.js';
 import { materializeTtpHunt } from './materialize.repo.js';
+import { setHuntReleaseTier } from './repo.js';
+import { RELEASE_TIERS, type ReleaseTier } from '../cti/kinds.js';
 import { badInput as badInputErr } from '../auth/errors.js';
 import type { HuntRecord } from './types.js';
 
@@ -206,6 +208,22 @@ export const huntResolvers = {
         proceedToGraph: args.input.proceedToGraph ?? false,
         capPerType: cap,
       });
+    },
+
+    setHuntReleaseTier: async (
+      _p: unknown,
+      args: { id: string; tier: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      // GraphQL enum is underscored; storage is dashed (cti/kinds.ts).
+      const decoded = args.tier.replace(/_/g, '-') as ReleaseTier;
+      if (!(RELEASE_TIERS as readonly string[]).includes(decoded)) {
+        throw badInputErr(`Invalid release tier: ${args.tier}`);
+      }
+      const updated = await setHuntReleaseTier(ctx.activeOrgId, ctx.user.id, args.id, decoded);
+      // Encode dash → underscore at boundary (same pattern as ruleResolvers.encodeRow)
+      return { ...updated, releaseTier: updated.releaseTier.replace(/-/g, '_') };
     },
   },
 

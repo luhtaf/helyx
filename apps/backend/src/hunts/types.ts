@@ -1,5 +1,8 @@
 export type HuntStatus = 'ACTIVE' | 'ARCHIVED';
 export type HuntKind = 'STRUCTURED' | 'GRAPH';
+// F1 — release tier (defaults to 'internal' for legacy hunts).
+export { type ReleaseTier } from '../cti/kinds.js';
+import type { ReleaseTier } from '../cti/kinds.js';
 
 export interface HuntRecord {
   id: string;
@@ -7,6 +10,7 @@ export interface HuntRecord {
   name: string;
   kind: HuntKind;
   status: HuntStatus;
+  releaseTier: ReleaseTier;
   createdAt: string;
   updatedAt: string;
   createdByUserId: string | null;
