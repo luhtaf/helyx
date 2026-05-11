@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, toRef, watch, watchEffect } from 'vue';
-import { useRule, useSetRuleReleaseTier, useApproveRule, useUnapproveRule, isApprovalStale, RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
+import { ref, toRef, watch, watchEffect, computed } from 'vue';
+import { useRule, useSetRuleReleaseTier, useApproveRule, useUnapproveRule, useRulePushReadiness, isApprovalStale, RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier, type PushBlockReason } from '@/composables/useRules';
 import { KIND_CLASSES, type RuleKind } from '@/composables/rule-kinds';
 import { useToast } from '@/composables/useToast';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
@@ -69,6 +69,20 @@ async function onUnapprove(): Promise<void> {
     showToast(`Unapprove failed: ${(e as Error).message}`, 'error');
   }
 }
+
+// F1c — push readiness across all 4 release tiers. One round-trip,
+// renders a 4-row grid showing where this rule could ship today.
+const { readiness, loading: pushLoading } = useRulePushReadiness(() => idRef.value);
+const pushRows = computed(() => {
+  if (!readiness.value) return [];
+  return RELEASE_TIERS.map((t) => ({ tier: t, ...readiness.value![t] }));
+});
+
+const REASON_LABEL: Record<PushBlockReason, string> = {
+  tier_too_high: 'rule tier > target',
+  unapproved:    'no current approval',
+  stale_approval: 'content edited post-approval',
+};
 </script>
 
 <template>
@@ -183,6 +197,38 @@ async function onUnapprove(): Promise<void> {
             :loading="unapproving"
             @click="onUnapprove"
           >Revoke</Button>
+        </div>
+      </section>
+
+      <!-- F1c — push readiness across all 4 target tiers -->
+      <section class="mb-8">
+        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">push readiness</p>
+        <p class="text-[12px] text-ink-dim mb-3 max-w-[68ch]">
+          Pre-flight check: can this rule ship to a downstream collector
+          accepting tier ≤ X? Combines F1 (tier ladder) + F2 (approval +
+          content-hash freshness). Push paths (H7 MISP, H7 OpenCTI, H9
+          TAXII) call the same guard.
+        </p>
+        <p v-if="pushLoading && pushRows.length === 0" class="text-[12px] text-ink-faint">checking…</p>
+        <div v-else class="border border-rule-strong rounded-md overflow-hidden">
+          <div
+            v-for="row in pushRows"
+            :key="row.tier"
+            class="grid grid-cols-[140px_90px_1fr] items-center gap-3 px-3 py-2 border-b border-rule last:border-b-0 font-mono text-[11px]"
+          >
+            <span class="text-ink-dim uppercase tracking-wider">→ {{ RELEASE_TIER_LABELS[row.tier] }}</span>
+            <span
+              :class="[
+                'inline-flex justify-center px-2 py-0.5 rounded-sm border text-[10px] uppercase tracking-wider',
+                row.allowed
+                  ? 'bg-sev-low/15 text-sev-low border-sev-low/30'
+                  : 'bg-sev-med/15 text-sev-med border-sev-med/30',
+              ]"
+            >{{ row.allowed ? 'allowed' : 'blocked' }}</span>
+            <span class="text-ink-faint truncate">
+              {{ row.allowed ? '—' : (row.reason ? REASON_LABEL[row.reason] : 'blocked') }}
+            </span>
+          </div>
         </div>
       </section>
 

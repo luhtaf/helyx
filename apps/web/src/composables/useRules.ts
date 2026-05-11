@@ -142,6 +142,50 @@ export function useUnapproveRule() {
   };
 }
 
+// F1c — Push readiness across all 4 release tiers in one round-trip.
+// Aliases let one query fetch tier-by-tier results without 4 round-trips.
+const RULE_PUSH_READINESS = gql`
+  query RulePushReadiness($ruleId: ID!) {
+    public:       dryRunPushRule(ruleId: $ruleId, targetMaxTier: public)       { allowed reason detail }
+    cross_agency: dryRunPushRule(ruleId: $ruleId, targetMaxTier: cross_agency) { allowed reason detail }
+    sectoral:     dryRunPushRule(ruleId: $ruleId, targetMaxTier: sectoral)     { allowed reason detail }
+    internal:     dryRunPushRule(ruleId: $ruleId, targetMaxTier: internal)     { allowed reason detail }
+  }
+`;
+
+export type PushBlockReason = 'tier_too_high' | 'unapproved' | 'stale_approval';
+
+export interface PushReadiness {
+  allowed: boolean;
+  reason: PushBlockReason | null;
+  detail: string | null;
+}
+
+export interface RulePushReadinessByTier {
+  public: PushReadiness;
+  cross_agency: PushReadiness;
+  sectoral: PushReadiness;
+  internal: PushReadiness;
+}
+
+export function useRulePushReadiness(id: () => string | null): {
+  readiness: ComputedRef<RulePushReadinessByTier | null>;
+  loading: Ref<boolean>;
+  error: Ref<Error | null>;
+  refetch: () => void;
+} {
+  const { result, loading, error, refetch } = useQuery<RulePushReadinessByTier>(
+    RULE_PUSH_READINESS,
+    () => ({ ruleId: id() ?? '' }),
+    () => ({ enabled: Boolean(id()), fetchPolicy: 'cache-and-network' }),
+  );
+  return {
+    readiness: computed(() => (result.value ? result.value : null)),
+    loading, error,
+    refetch: () => { refetch(); },
+  };
+}
+
 // Stale-approval detector — runs in browser to flag content edits that
 // invalidate prior approvals. Pure function; mirrors backend sha256.
 // Browser SubtleCrypto is async, so caller awaits.
