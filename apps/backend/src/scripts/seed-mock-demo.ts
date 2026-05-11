@@ -9,6 +9,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { closeDriver, getSession } from '../db/neo4j.js';
+import { buildHuntStixBundle, persistStixExport } from '../exporters/stix.js';
 
 interface StakeholderDef {
   slug: string;
@@ -611,6 +612,33 @@ async function seedHuntAndRules(plan: OrgPlan): Promise<{ huntId: string; ruleId
   }
 }
 
+// H5.5 — Seed 1 historical :StixExport per demo hunt so the export
+// history panel is populated on first visit. Uses the real export
+// pipeline (lazy-creates the org keypair if missing). Idempotent:
+// skip if any :StixExport already exists for this hunt.
+async function seedHistoricalExport(plan: OrgPlan, huntId: string): Promise<string | null> {
+  const session = getSession();
+  let alreadyHasExport = false;
+  try {
+    const r = await session.run(
+      `MATCH (e:StixExport {tenantId: $tenantId, huntId: $huntId})
+       RETURN count(e) AS n`,
+      { tenantId: plan.orgId, huntId },
+    );
+    alreadyHasExport = (r.records[0]!.get('n') as { toString: () => string }).toString() !== '0';
+  } finally {
+    await session.close();
+  }
+  if (alreadyHasExport) return 'exists';
+
+  // Real export path — produces signed bundle + persists :StixExport.
+  // Will throw if CTI_SIGNING_MASTER_KEY missing (loud/actionable).
+  const built = await buildHuntStixBundle(plan.orgId, huntId);
+  if (!built.ok) return `skipped (${built.reason})`;
+  const record = await persistStixExport(plan.orgId, huntId, built.result, built.result.sourceRuleIds);
+  return `exported ${record.indicatorCount} indicators · TLP:${record.tlp}`;
+}
+
 async function seedOrg(plan: OrgPlan): Promise<void> {
   console.log(`\n=== ${plan.orgName} ===`);
   console.log(`  → ${plan.stakeholders.length} stakeholders + assets…`);
@@ -628,6 +656,13 @@ async function seedOrg(plan: OrgPlan): Promise<void> {
   console.log(`     hunt id: ${huntId}`);
   console.log(`     rules: ${ruleIds.length} total · ${approvedCount} approved (fresh) · ${staleCount} stale · ${ruleIds.length - approvedCount - staleCount} unapproved`);
   console.log(`     tiers : ${JSON.stringify(tierBreakdown)}`);
+  console.log(`  → seeding historical STIX export…`);
+  try {
+    const result = await seedHistoricalExport(plan, huntId);
+    console.log(`     ${result}`);
+  } catch (e) {
+    console.log(`     skipped: ${(e as Error).message}`);
+  }
 }
 
 async function main(): Promise<void> {
