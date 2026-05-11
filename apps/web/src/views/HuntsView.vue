@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useHuntsList } from '@/composables/useHunts';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import Pagination from '@/components/ui/Pagination.vue';
 import Button from '@/components/ui/Button.vue';
+import TtpSeedSlide from '@/components/hunts/TtpSeedSlide.vue';
 
 const route = useRoute();
 const router = useRouter();
+const ttpSlideOpen = ref(false);
 
 const page = computed(() => Number(route.query.page) || 1);
 const perPage = 25;
@@ -38,9 +40,12 @@ function fmtDate(s: string): string {
       </div>
       <div class="flex items-center gap-2">
         <Button variant="ghost" size="sm" @click="router.push('/graph')">+ open graph hunt</Button>
+        <Button variant="ghost" size="sm" @click="ttpSlideOpen = true">+ hunt by TTP</Button>
         <Button variant="primary" size="sm" @click="router.push('/hunts/new')">+ structured hunt</Button>
       </div>
     </header>
+
+    <TtpSeedSlide :open="ttpSlideOpen" @close="ttpSlideOpen = false" />
 
     <SectionRule label="hunts">
       <template #right>

@@ -18,7 +18,7 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useTtpMaterialize, type TtpFacets } from '@/composables/useHunts';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 
@@ -99,6 +99,14 @@ const { search: searchEntities } = useSearchEntities();
 const { submit: generateRules, loading: generatingRules } = useGenerateRulesFromHunt();
 const { submit: downloadZip, loading: downloadingZip } = useDownloadHuntZip();
 
+// ─── TTP-seed mode (?ttp=T1486[&actor=...]) — H3 materialize ─────────
+const ttpCode = computed(() => (route.query.ttp as string | undefined)?.toUpperCase() ?? null);
+const ttpActorId = computed(() => (route.query.actor as string | undefined) ?? null);
+const { submit: materializeTtp, loading: materializingTtp } = useTtpMaterialize();
+const ttpFacets = ref<TtpFacets | null>(null);
+const ttpCapped = ref(false);
+let ttpMaterialized = false;
+
 async function onGenerateRules(): Promise<void> {
   if (!huntId.value) return;
   const stats = await generateRules(huntId.value);
@@ -175,6 +183,41 @@ async function loadHunt(): Promise<void> {
   }
 }
 watch([hunt, graphRef], loadHunt, { immediate: true });
+
+// TTP-seed mode: materialize on mount, render snapshot, footer bar shows facets.
+async function loadTtpSeed(): Promise<void> {
+  if (ttpMaterialized || !ttpCode.value || !graphRef.value) return;
+  ttpMaterialized = true;  // guard against re-fire
+  try {
+    const r = await materializeTtp({
+      techniqueId: ttpCode.value,
+      actorId: ttpActorId.value,
+      proceedToGraph: true,
+      capPerType: 50,
+    });
+    if (!r) {
+      showToast('TTP materialize failed', 'error');
+      ttpMaterialized = false;
+      return;
+    }
+    ttpFacets.value = r.facets;
+    ttpCapped.value = r.capped;
+    if (r.graphSnapshot) {
+      const snap = JSON.parse(r.graphSnapshot);
+      graphRef.value.loadSnapshot(snap);
+    }
+    if (r.capped) {
+      showToast(
+        `Showing first ${r.cap} per type — refine via Actor scope to see specific subset`,
+        'info',
+      );
+    }
+  } catch (e) {
+    showToast(`TTP materialize failed: ${(e as Error).message}`, 'error');
+    ttpMaterialized = false;
+  }
+}
+watch([ttpCode, graphRef], loadTtpSeed, { immediate: true });
 
 // Auto-save: debounce 2s after any graph change. Only when in hunt mode
 // (URL has ?hunt=<id>). Otherwise the graph is ephemeral.
@@ -296,8 +339,8 @@ onMounted(() => { void plantSeed(); });
 
 <template>
   <div class="fixed inset-0 top-0 left-[180px] right-0 bottom-0 z-10">
-    <!-- Empty state — only show if NO seed AND NO hunt AND not empty-canvas mode -->
-    <div v-if="!seed && !huntId && !isEmptyCanvas" class="h-full flex flex-col items-center justify-center px-12 text-center">
+    <!-- Empty state — only show if NO seed AND NO hunt AND not empty-canvas mode AND not ttp mode -->
+    <div v-if="!seed && !huntId && !isEmptyCanvas && !ttpCode" class="h-full flex flex-col items-center justify-center px-12 text-center">
       <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint mb-3">graph explorer</p>
       <h1 class="text-[22px] font-medium text-ink mb-2">Pick a seed or start fresh</h1>
       <p class="text-[13px] text-ink-dim max-w-[40ch] mb-8">
@@ -326,7 +369,7 @@ onMounted(() => { void plantSeed(); });
       <header class="absolute top-4 left-4 right-4 z-20 flex items-baseline justify-between gap-4 pointer-events-none">
         <div class="bg-base/80 backdrop-blur-sm border border-rule-strong rounded-md px-3 py-1.5 pointer-events-auto">
           <p class="font-mono text-[9px] uppercase tracking-wider text-ink-faint">
-            {{ huntId ? 'hunt' : (isEmptyCanvas ? 'empty canvas' : 'seed') }}
+            {{ huntId ? 'hunt' : (ttpCode ? `ttp seed · ${ttpCode}${ttpActorId ? ' · actor scope' : ''}` : (isEmptyCanvas ? 'empty canvas' : 'seed')) }}
           </p>
           <p class="font-mono text-[12px] text-ink mt-0.5">
             {{ huntId ? (hunt?.name ?? 'loading…') : (seedNode?.label ?? (isEmptyCanvas ? 'fresh start' : (seed?.id ?? '—'))) }}
@@ -353,14 +396,43 @@ onMounted(() => { void plantSeed(); });
         class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[13px] text-ink-dim"
       >loading seed…</p>
 
+      <p
+        v-if="materializingTtp && !ttpFacets"
+        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[13px] text-ink-dim"
+      >materializing TTP graph…</p>
+
       <HelyxGraph
         ref="graphRef"
-        :seed-id="seed?.id ?? huntId ?? (isEmptyCanvas ? 'empty' : null)"
+        :seed-id="seed?.id ?? huntId ?? ttpCode ?? (isEmptyCanvas ? 'empty' : null)"
         :cap="200"
         @context-menu="(p) => (ctxMenu = p)"
         @node-selected="(n) => (selected = n)"
         @cap-reached="onCapReached"
       />
+
+      <!-- T1.5: persistent footer bar for TTP-seed mode (not yet saved) -->
+      <footer
+        v-if="ttpCode && !huntId && ttpFacets"
+        class="absolute bottom-0 left-0 right-0 z-20 bg-base/95 backdrop-blur-sm border-t border-rule-strong px-6 py-3 flex items-center justify-between gap-6 pointer-events-auto"
+      >
+        <div class="flex items-baseline gap-5 min-w-0">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint shrink-0">ttp materialize</p>
+          <p class="font-mono text-[12px] text-signal shrink-0">{{ ttpFacets.techniqueId }}</p>
+          <p class="text-[12px] text-ink truncate">{{ ttpFacets.techniqueName }}</p>
+          <p class="font-mono text-[11px] text-ink-dim shrink-0 tabular-nums">
+            {{ ttpFacets.totalNodes }} nodes · {{ ttpFacets.actorCount }}A · {{ ttpFacets.stakeholderCount }}S · {{ ttpFacets.assetCount }} assets · {{ ttpFacets.ruleCount }}R · {{ ttpFacets.artifactCount }} artifacts
+          </p>
+          <p v-if="ttpCapped" class="font-mono text-[10px] text-sev-med shrink-0">⚠ capped</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            @click="saveName = `TTP ${ttpFacets.techniqueId}${ttpActorId ? ` (actor ${ttpActorId.slice(0,8)})` : ''}`; saveOpen = true"
+          >Save as Hunt…</Button>
+          <Button variant="ghost" size="sm" @click="router.push('/hunts')">Discard</Button>
+        </div>
+      </footer>
 
       <ContextMenu
         v-if="ctxMenu"

@@ -322,3 +322,59 @@ export function useHuntGraph(id: () => string | null | undefined) {
   const hunt = computed(() => result.value?.hunt ?? null);
   return { hunt, loading, error, refetch };
 }
+
+// H3 — TTP-seed materialize. Two-mode: facets-only (cheap count-first
+// for the picker preview), then proceedToGraph=true for the canvas.
+const MATERIALIZE_TTP_HUNT = gql`
+  mutation MaterializeTtpHunt($input: TtpMaterializeInput!) {
+    materializeTtpHunt(input: $input) {
+      facets {
+        techniqueId techniqueName
+        actorCount stakeholderCount assetCount ruleCount artifactCount totalNodes
+      }
+      graphSnapshot
+      capped
+      cap
+    }
+  }
+`;
+
+export interface TtpFacets {
+  techniqueId: string;
+  techniqueName: string | null;
+  actorCount: number;
+  stakeholderCount: number;
+  assetCount: number;
+  ruleCount: number;
+  artifactCount: number;
+  totalNodes: number;
+}
+
+export interface TtpMaterializeResult {
+  facets: TtpFacets;
+  graphSnapshot: string | null;
+  capped: boolean;
+  cap: number;
+}
+
+export interface TtpMaterializeInput {
+  techniqueId: string;
+  actorId?: string | null;
+  stakeholderIds?: string[] | null;
+  proceedToGraph?: boolean;
+  capPerType?: number;
+}
+
+export function useTtpMaterialize() {
+  const { mutate, loading, error } = useMutation<
+    { materializeTtpHunt: TtpMaterializeResult },
+    { input: TtpMaterializeInput }
+  >(MATERIALIZE_TTP_HUNT);
+  return {
+    submit: async (input: TtpMaterializeInput): Promise<TtpMaterializeResult | null> => {
+      const r = await mutate({ input });
+      return r?.data?.materializeTtpHunt ?? null;
+    },
+    loading, error,
+  };
+}

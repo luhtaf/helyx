@@ -94,7 +94,9 @@ const graph = computed<{ nodes: GraphNode[]; edges: GraphEdge[]; truncated: bool
       label: tech.id,
       type: 'TTP',
       color: tierColor(phaseTier(tech.killChainPhases)),
-      routeTo: `/techniques/${tech.id}`,
+      // Actor-scoped focus: clicking TTP from this actor's graph opens the
+      // materialize-by-this-actor flow, not the generic technique encyclopedia.
+      routeTo: `/graph?ttp=${tech.id}&actor=${t.id}`,
     });
     edges.push({ source: center, target: nid });
   }
@@ -186,13 +188,21 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
           </div>
           <ul class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 pl-5">
             <li v-for="tech in group.items" :key="tech.id" class="flex items-baseline gap-3 text-[12px]">
-              <a
-                :href="tech.url ?? undefined"
-                :target="tech.url ? '_blank' : undefined"
-                rel="noopener noreferrer"
-                class="font-mono text-ink-dim hover:text-ink tabular-nums w-20 shrink-0 transition"
-              >{{ tech.id }}</a>
+              <RouterLink
+                :to="{ path: '/graph', query: { ttp: tech.id, actor: ta.id } }"
+                class="font-mono text-ink-dim hover:text-signal tabular-nums w-20 shrink-0 transition"
+                :title="`Open TTP ${tech.id} as used by ${ta.name}`"
+              >{{ tech.id }}</RouterLink>
               <span class="text-ink-dim truncate">{{ tech.name }}</span>
+              <a
+                v-if="tech.url"
+                :href="tech.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="font-mono text-[10px] text-ink-faint hover:text-ink-dim ml-auto shrink-0 transition"
+                :title="`MITRE detail for ${tech.id}`"
+                @click.stop
+              >mitre↗</a>
             </li>
           </ul>
         </div>
