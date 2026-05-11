@@ -12,6 +12,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { getSession } from '../db/neo4j.js';
 import { RELEASE_TIER_RANK, type ReleaseTier } from '../cti/kinds.js';
 import type { RuleKind } from '../rules/kinds.js';
+import { validateStixBundle } from './stix-validate.js';
 
 // OASIS standard TLP marking-definition IDs (stable, well-known UUIDs).
 // See https://docs.oasis-open.org/cti/stix/v2.1/os/stix-v2.1-os.html#_yd3ar14ekwrs
@@ -229,6 +230,22 @@ export async function buildHuntStixBundle(
     id: `bundle--${randomUUID()}`,
     objects,
   };
+
+  // H5b — fail loud on generator bugs. Validation against our focused
+  // STIX 2.1 schema set runs every export so any future shape regression
+  // (typo in pattern_type, missing valid_from, malformed id) surfaces
+  // immediately instead of breaking downstream consumers.
+  const validation = validateStixBundle(bundle);
+  if (!validation.valid) {
+    const detail = validation.errors.slice(0, 5)
+      .map((e) => `${e.path}: ${e.message}`)
+      .join('; ');
+    return {
+      ok: false,
+      reason: `STIX validation failed (generator bug): ${detail}`,
+    };
+  }
+
   const json = JSON.stringify(bundle, null, 2);
   const bytes = Buffer.from(json, 'utf8');
   const safeName = hunt.name.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 60) || 'hunt';
