@@ -20,7 +20,7 @@ import {
 } from './repo.js';
 import { generateRulesFromHunt } from '../exporters/index.js';
 import { packHuntRulesAsZip } from '../exporters/zip.js';
-import { buildHuntStixBundle, persistStixExport } from '../exporters/stix.js';
+import { buildHuntStixBundle, persistStixExport, listStixExportsForHunt } from '../exporters/stix.js';
 import { materializeTtpHunt } from './materialize.repo.js';
 import { setHuntReleaseTier } from './repo.js';
 import { RELEASE_TIERS, type ReleaseTier } from '../cti/kinds.js';
@@ -90,6 +90,15 @@ export const huntResolvers = {
       assertOrgRole(ctx, 'VIEWER');
       const perTypeLimit = clampLimit(args.first, 10, 25);
       return searchEntities(ctx.activeOrgId, args.q, perTypeLimit);
+    },
+
+    recentStixExports: async (
+      _p: unknown,
+      args: { huntId: string; limit?: number },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      return listStixExportsForHunt(ctx.activeOrgId, args.huntId, clampLimit(args.limit, 10, 50));
     },
   },
 

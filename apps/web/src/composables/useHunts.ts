@@ -296,6 +296,43 @@ export function useDownloadHuntZip() {
   };
 }
 
+// H5.5 — Past STIX exports for a hunt. Newest-first; signature truncated.
+const RECENT_STIX_EXPORTS = gql`
+  query RecentStixExports($huntId: ID!, $limit: Int) {
+    recentStixExports(huntId: $huntId, limit: $limit) {
+      id ts bundleId indicatorCount tlp releaseTier bytesSize contentHash
+      signaturePrefix signatureAlgorithm signedByKeypairId
+    }
+  }
+`;
+
+export interface StixExportRow {
+  id: string;
+  ts: string;
+  bundleId: string;
+  indicatorCount: number;
+  tlp: 'white' | 'green' | 'amber' | 'red';
+  releaseTier: import('./useRules').ReleaseTier;
+  bytesSize: number;
+  contentHash: string;
+  signaturePrefix: string;
+  signatureAlgorithm: string;
+  signedByKeypairId: string | null;
+}
+
+export function useRecentStixExports(huntId: () => string | null) {
+  const { result, loading, error, refetch } = useQuery<{ recentStixExports: StixExportRow[] }>(
+    RECENT_STIX_EXPORTS,
+    () => ({ huntId: huntId() ?? '', limit: 10 }),
+    () => ({ enabled: Boolean(huntId()), fetchPolicy: 'cache-and-network' }),
+  );
+  return {
+    exports: computed(() => result.value?.recentStixExports ?? []),
+    loading, error,
+    refetch: () => { refetch(); },
+  };
+}
+
 // H5 — Pack hunt approved rules as STIX 2.1 Bundle + browser download.
 // Only F2-approved + non-stale rules export. TLP marking-def derived
 // from Hunt.releaseTier.

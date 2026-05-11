@@ -18,7 +18,7 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useTtpMaterialize, useSetHuntReleaseTier, type TtpFacets } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useTtpMaterialize, useSetHuntReleaseTier, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
@@ -100,6 +100,26 @@ const { search: searchEntities } = useSearchEntities();
 const { submit: generateRules, loading: generatingRules } = useGenerateRulesFromHunt();
 const { submit: downloadZip, loading: downloadingZip } = useDownloadHuntZip();
 const { submit: exportStix, loading: exportingStix } = useExportHuntAsStix();
+const { exports: stixHistory, refetch: refetchStixHistory } = useRecentStixExports(() => huntId.value);
+const stixHistoryOpen = ref(false);
+
+const TLP_CLASS: Record<string, string> = {
+  white:  'text-ink-dim',
+  green:  'text-sev-low',
+  amber:  'text-sev-med',
+  red:    'text-sev-crit',
+};
+
+function tsRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const sec = Math.round(ms / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.round(hr / 24)}d ago`;
+}
 const { submit: setTier, loading: settingTier } = useSetHuntReleaseTier();
 
 async function onChangeHuntTier(e: Event): Promise<void> {
@@ -176,6 +196,7 @@ async function onExportStix(): Promise<void> {
       `STIX exported · ${stix.indicatorCount} indicators · TLP:${stix.tlp} · signed (${stix.signatureAlgorithm})${skipNote}`,
       'success',
     );
+    refetchStixHistory();
   } catch (e) {
     const msg = (e as Error).message ?? 'unknown';
     if (msg.includes('no approved rules')) {
@@ -475,6 +496,41 @@ onMounted(() => { void plantSeed(); });
         @node-selected="(n) => (selected = n)"
         @cap-reached="onCapReached"
       />
+
+      <!-- H5.5: STIX export history panel (hunt mode only). Collapsed
+           by default; click header to expand. Surfaces signature
+           provenance permanently (not just in the post-export toast). -->
+      <aside
+        v-if="huntId && stixHistory.length > 0"
+        class="absolute bottom-4 right-4 z-20 w-[360px] bg-base/95 backdrop-blur-sm border border-rule-strong rounded-md font-mono text-[11px] shadow-lg pointer-events-auto"
+      >
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-surface/50"
+          @click="stixHistoryOpen = !stixHistoryOpen"
+        >
+          <span class="flex items-baseline gap-2">
+            <span class="text-[10px] uppercase tracking-wider text-ink-faint">stix exports</span>
+            <span class="text-ink-dim">{{ stixHistory.length }}</span>
+            <span class="text-ink-faint">· last {{ tsRelative(stixHistory[0]!.ts) }}</span>
+            <span :class="['uppercase', TLP_CLASS[stixHistory[0]!.tlp] ?? 'text-ink-dim']">TLP:{{ stixHistory[0]!.tlp }}</span>
+          </span>
+          <span class="text-ink-faint">{{ stixHistoryOpen ? '▾' : '▸' }}</span>
+        </button>
+        <div v-if="stixHistoryOpen" class="border-t border-rule max-h-[280px] overflow-y-auto">
+          <div
+            v-for="row in stixHistory"
+            :key="row.id"
+            class="grid grid-cols-[80px_60px_60px_1fr] items-center gap-2 px-3 py-2 border-b border-rule last:border-b-0 text-[10px]"
+            :title="`bundle ${row.bundleId}\nsigned by keypair ${row.signedByKeypairId ?? '—'}\ncontent sha256 ${row.contentHash.slice(0, 16)}…`"
+          >
+            <span class="text-ink-dim tabular-nums">{{ tsRelative(row.ts) }}</span>
+            <span class="text-ink tabular-nums">{{ row.indicatorCount }} ind</span>
+            <span :class="['uppercase', TLP_CLASS[row.tlp] ?? 'text-ink-dim']">TLP:{{ row.tlp }}</span>
+            <span class="text-ink-faint truncate">sig:{{ row.signaturePrefix }}…</span>
+          </div>
+        </div>
+      </aside>
 
       <!-- T1.5: persistent footer bar for TTP-seed mode (not yet saved) -->
       <footer

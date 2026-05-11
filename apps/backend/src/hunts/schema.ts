@@ -101,6 +101,24 @@ export const huntTypeDefs = /* GraphQL */ `
     hunts(page: Int = 1, perPage: Int = 25): HuntPage!
     """Cross-type entity search for graph canvas search-add. Tenant-scoped."""
     searchEntities(q: String!, first: Int = 10): [SearchEntityResult!]!
+    """H5.5 — Past STIX exports for a hunt, newest first. Used by the
+    Export history panel on /graph?hunt=<id>. Signature is truncated
+    to 16 chars; full signature lives on the persisted record."""
+    recentStixExports(huntId: ID!, limit: Int = 10): [StixExportRow!]!
+  }
+
+  type StixExportRow {
+    id: ID!
+    ts: String!
+    bundleId: String!
+    indicatorCount: Int!
+    tlp: String!
+    releaseTier: ReleaseTier!
+    bytesSize: Int!
+    contentHash: String!
+    signaturePrefix: String!
+    signatureAlgorithm: String!
+    signedByKeypairId: ID
   }
 
   extend type Mutation {

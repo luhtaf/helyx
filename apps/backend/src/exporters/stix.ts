@@ -367,3 +367,63 @@ export async function persistStixExport(
 // Convenience export — for callers that don't care about the full record.
 export const STIX_TLP_LADDER = TIER_TO_TLP;
 export const STIX_RANK = RELEASE_TIER_RANK;
+
+export interface StixExportRow {
+  id: string;
+  ts: string;
+  bundleId: string;
+  indicatorCount: number;
+  tlp: string;
+  releaseTier: ReleaseTier;
+  bytesSize: number;
+  contentHash: string;
+  /** First 16 chars of base64 sig — full sig is too long for list views,
+   *  full record fetched separately on detail. */
+  signaturePrefix: string;
+  signatureAlgorithm: string;
+  signedByKeypairId: string;
+}
+
+// H5.5 — list past exports for a hunt, newest first. Used by the
+// Export history panel on GraphView so signing provenance is visible
+// beyond the post-export toast.
+export async function listStixExportsForHunt(
+  tenantId: string,
+  huntId: string,
+  limit: number = 10,
+): Promise<StixExportRow[]> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (e:StixExport {tenantId: $tenantId, huntId: $huntId})
+       OPTIONAL MATCH (e)-[:SIGNED_BY]->(k:CtiOrgKeypair)
+       RETURN e.id AS id, toString(e.ts) AS ts,
+              e.bundleId AS bundleId, e.indicatorCount AS indicatorCount,
+              e.tlp AS tlp, e.releaseTier AS releaseTier,
+              e.bytesSize AS bytesSize, e.contentHash AS contentHash,
+              substring(coalesce(e.signature, ''), 0, 16) AS signaturePrefix,
+              coalesce(e.signatureAlgorithm, 'ed25519') AS signatureAlgorithm,
+              k.id AS signedByKeypairId
+       ORDER BY e.ts DESC
+       LIMIT $limit`,
+      { tenantId, huntId, limit: Math.max(1, Math.min(limit, 50)) },
+    );
+    return r.records.map((rec) => ({
+      id: rec.get('id') as string,
+      ts: rec.get('ts') as string,
+      bundleId: rec.get('bundleId') as string,
+      indicatorCount: (rec.get('indicatorCount') as { toInt?: () => number } | number)?.toString
+        ? Number((rec.get('indicatorCount') as { toString: () => string }).toString())
+        : (rec.get('indicatorCount') as number),
+      tlp: rec.get('tlp') as string,
+      releaseTier: rec.get('releaseTier') as ReleaseTier,
+      bytesSize: Number((rec.get('bytesSize') as { toString: () => string }).toString()),
+      contentHash: rec.get('contentHash') as string,
+      signaturePrefix: rec.get('signaturePrefix') as string,
+      signatureAlgorithm: rec.get('signatureAlgorithm') as string,
+      signedByKeypairId: (rec.get('signedByKeypairId') as string | null) ?? '',
+    }));
+  } finally {
+    await session.close();
+  }
+}
