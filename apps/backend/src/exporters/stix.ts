@@ -405,7 +405,7 @@ export async function listStixExportsForHunt(
               coalesce(e.signatureAlgorithm, 'ed25519') AS signatureAlgorithm,
               k.id AS signedByKeypairId
        ORDER BY e.ts DESC
-       LIMIT $limit`,
+       LIMIT toInteger($limit)`,
       { tenantId, huntId, limit: Math.max(1, Math.min(limit, 50)) },
     );
     return r.records.map((rec) => ({
@@ -416,7 +416,9 @@ export async function listStixExportsForHunt(
         ? Number((rec.get('indicatorCount') as { toString: () => string }).toString())
         : (rec.get('indicatorCount') as number),
       tlp: rec.get('tlp') as string,
-      releaseTier: rec.get('releaseTier') as ReleaseTier,
+      // Encode dash → underscore at the boundary: storage uses 'cross-agency'
+      // but GraphQL ReleaseTier enum forbids hyphens (uses 'cross_agency').
+      releaseTier: ((rec.get('releaseTier') as string) ?? 'internal').replace(/-/g, '_') as ReleaseTier,
       bytesSize: Number((rec.get('bytesSize') as { toString: () => string }).toString()),
       contentHash: rec.get('contentHash') as string,
       signaturePrefix: rec.get('signaturePrefix') as string,
