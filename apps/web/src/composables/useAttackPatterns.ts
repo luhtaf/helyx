@@ -57,3 +57,34 @@ export function useAttackPatternDetail(id: () => string): {
   const ap = computed(() => result.value?.attackPattern ?? null);
   return { ap, loading, error };
 }
+
+// Lightweight autocomplete query — used by guess-actor TTP picker etc.
+const SEARCH_ATTACK_PATTERNS = gql`
+  query SearchAttackPatterns($q: String!, $limit: Int) {
+    searchAttackPatterns(q: $q, limit: $limit) {
+      id
+      name
+      isSubtechnique
+      parentTechniqueId
+    }
+  }
+`;
+
+export interface AttackPatternSearchHit {
+  id: string;
+  name: string;
+  isSubtechnique: boolean;
+  parentTechniqueId: string | null;
+}
+
+export function useSearchAttackPatterns(q: () => string, limit = 10) {
+  const { result, loading } = useQuery<{ searchAttackPatterns: AttackPatternSearchHit[] }>(
+    SEARCH_ATTACK_PATTERNS,
+    () => ({ q: q().trim(), limit }),
+    () => ({ enabled: q().trim().length >= 2, fetchPolicy: 'cache-first' }),
+  );
+  return {
+    hits: computed(() => result.value?.searchAttackPatterns ?? []),
+    loading,
+  };
+}

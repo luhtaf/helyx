@@ -3,6 +3,7 @@ import { assertAuthed } from '../auth/middleware.js';
 import {
   getAttackPattern,
   listThreatActorsUsingTechnique,
+  searchAttackPatterns,
   type AttackPatternDetail,
 } from './repo.js';
 
@@ -11,6 +12,15 @@ export const attackPatternResolvers = {
     attackPattern: async (_parent: unknown, args: { id: string }, ctx: RequestContext) => {
       assertAuthed(ctx);
       return getAttackPattern(args.id);
+    },
+
+    searchAttackPatterns: async (
+      _p: unknown,
+      args: { q: string; limit?: number },
+      ctx: RequestContext,
+    ) => {
+      assertAuthed(ctx);
+      return searchAttackPatterns(args.q, args.limit ?? 10);
     },
   },
 

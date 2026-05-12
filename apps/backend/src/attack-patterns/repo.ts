@@ -119,3 +119,50 @@ export async function listThreatActorsUsingTechnique(
     await session.close();
   }
 }
+
+export interface AttackPatternSearchHit {
+  id: string;
+  name: string;
+  isSubtechnique: boolean;
+  parentTechniqueId: string | null;
+}
+
+// Fuzzy autocomplete search. Two match strategies, OR-ed:
+//   1. T-code prefix (case-insensitive, anchored): query 'T1059' →
+//      matches T1059, T1059.001, T1059.002, ... cheap and intentional.
+//   2. Name CONTAINS (case-insensitive): query 'powershell' →
+//      matches T1059.001 PowerShell.
+// Sort by id ASC so parent (T1059) lands before its sub-techniques
+// (T1059.001 ...) in the dropdown — natural reading order.
+export async function searchAttackPatterns(
+  q: string,
+  limit: number,
+): Promise<AttackPatternSearchHit[]> {
+  const trimmed = q.trim();
+  if (trimmed.length < 2) return [];
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (a:AttackPattern)
+       WHERE toLower(a.id) STARTS WITH toLower($q)
+          OR toLower(a.name) CONTAINS toLower($q)
+       RETURN a.id AS id, a.name AS name,
+              coalesce(a.isSubtechnique, false) AS isSubtechnique
+       ORDER BY a.id ASC
+       LIMIT toInteger($limit)`,
+      { q: trimmed, limit: Math.max(1, Math.min(limit, 25)) },
+    );
+    return r.records.map((rec) => {
+      const id = rec.get('id') as string;
+      const isSub = Boolean(rec.get('isSubtechnique'));
+      return {
+        id,
+        name: rec.get('name') as string,
+        isSubtechnique: isSub,
+        parentTechniqueId: isSub ? id.split('.')[0] ?? null : null,
+      };
+    });
+  } finally {
+    await session.close();
+  }
+}
