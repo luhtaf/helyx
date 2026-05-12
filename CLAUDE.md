@@ -141,7 +141,7 @@ Tenancy is `User` ∈ `Team` ∈ `Organization`. `Team` schema is in place but t
 
 These are the owner's stated rules. Treat them as review gates:
 
-1. **File length**: hard ceiling **500–1000 lines** per file, and that is already the absolute max — aim well below. Split early.
+1. **File length**: hard ceiling **~1200 lines** for pure TS / repos / GraphQL schemas, **~2000 lines** for Vue SFCs (template+script+style natural bloat). Aim well below — split early when a file owns 3+ unrelated responsibilities.
 2. **Backend DRY**: shared logic must be extracted; no copy-paste resolvers.
 3. **No N+1**: every GraphQL resolver hitting Neo4j must be batched (DataLoader pattern or Cypher-level expansion). Assume reviewer will check query counts.
 4. **Frontend composables + shared components**: reuse first, build second.
