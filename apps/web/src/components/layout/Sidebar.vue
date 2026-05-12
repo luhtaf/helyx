@@ -58,12 +58,13 @@ const baseNavItems: NavItem[] = [
 const isAdminOrOwner = computed(() =>
   auth.activeOrgRole === 'ADMIN' || auth.activeOrgRole === 'OWNER',
 );
+const isOwner = computed(() => auth.activeOrgRole === 'OWNER');
 
 const navItems = computed<NavItem[]>(() => {
-  if (isAdminOrOwner.value) {
-    return [...baseNavItems, { to: '/admin/stakeholders/inbox', label: 'inbox' }];
-  }
-  return baseNavItems;
+  const items = [...baseNavItems];
+  if (isAdminOrOwner.value) items.push({ to: '/admin/stakeholders/inbox', label: 'inbox' });
+  if (isOwner.value) items.push({ to: '/admin/cti-keys', label: 'cti keys' });
+  return items;
 });
 
 function isActive(item: NavItem, isActiveRoute: boolean, isExactRoute: boolean): boolean {

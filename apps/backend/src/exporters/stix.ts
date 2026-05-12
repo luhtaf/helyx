@@ -13,7 +13,7 @@ import { getSession } from '../db/neo4j.js';
 import { RELEASE_TIER_RANK, type ReleaseTier } from '../cti/kinds.js';
 import type { RuleKind } from '../rules/kinds.js';
 import { validateStixBundle } from './stix-validate.js';
-import { getOrCreateOrgKeypair } from '../cti/sign/keypair.js';
+import { getActiveOrCreateOrgKeypair } from '../cti/sign/keypair.js';
 import { signBytes } from '../cti/sign/sign.js';
 
 // OASIS standard TLP marking-definition IDs (stable, well-known UUIDs).
@@ -310,7 +310,7 @@ export async function persistStixExport(
   // on first export. Failure here (e.g. CTI_SIGNING_MASTER_KEY missing)
   // surfaces to the resolver and aborts the export — unsigned exports
   // are not allowed once F2 is wired.
-  const keypair = await getOrCreateOrgKeypair(tenantId);
+  const keypair = await getActiveOrCreateOrgKeypair(tenantId);
   const signature = signBytes(keypair.privateKey, result.bytes);
 
   const session = getSession();

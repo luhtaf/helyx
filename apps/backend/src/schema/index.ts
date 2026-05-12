@@ -15,6 +15,7 @@ import { ruleTypeDefs } from '../rules/schema.js';
 import { ctiIocsTypeDefs } from '../cti/iocs/schema.js';
 import { auditTypeDefs } from '../audits/schema.js';
 import { otxTypeDefs } from '../sources/otx/schema.js';
+import { ctiKeypairTypeDefs } from '../cti/sign/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -48,4 +49,5 @@ export const typeDefs = [
   ctiIocsTypeDefs,
   auditTypeDefs,
   otxTypeDefs,
+  ctiKeypairTypeDefs,
 ];

@@ -92,6 +92,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Audit log', requiresRole: 'ANALYST' },
   },
   {
+    path: '/admin/cti-keys',
+    name: 'cti-keys',
+    component: () => import('@/views/CtiKeypairsView.vue'),
+    meta: { title: 'CTI signing keys', requiresRole: 'OWNER' },
+  },
+  {
     path: '/cases',
     name: 'cases',
     component: () => import('@/views/CasesView.vue'),
