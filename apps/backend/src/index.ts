@@ -15,6 +15,7 @@ import { apiLimiter } from './security/rate-limit.js';
 import { readSessionCookie, readCsrfCookie } from './auth/cookie.js';
 import { loadCsrfToken, safeEqual } from './auth/csrf.js';
 import { verifyAccessToken } from './auth/jwt.js';
+import { startScheduler } from './scheduler/index.js';
 
 // ---------------------------------------------------------------------------
 // CSRF guard — AST-based mutation detection
@@ -145,6 +146,7 @@ async function main(): Promise<void> {
 
   app.listen(port, host, () => {
     logger.info({ port, host }, `helyx backend listening at http://${host}:${port}/graphql`);
+    startScheduler();
   });
 }
 

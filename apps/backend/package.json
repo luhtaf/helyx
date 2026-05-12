@@ -17,7 +17,8 @@
     "bootstrap:stakeholders": "tsx src/sources/elk/cli-bootstrap-stakeholders.ts",
     "sf:sync": "tsx src/sources/spiderfoot/cli.ts",
     "rules:seed-sigma": "tsx src/rules/cli-seed-sigma.ts",
-    "seed:mock": "tsx src/scripts/seed-mock-demo.ts"
+    "seed:mock": "tsx src/scripts/seed-mock-demo.ts",
+    "scheduler:run": "tsx src/scheduler/cli.ts"
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",
@@ -35,6 +36,7 @@
     "jose": "^5.9.6",
     "jszip": "^3.10.1",
     "neo4j-driver": "^5.26.0",
+    "node-cron": "^4.2.1",
     "pino": "^9.5.0",
     "pino-pretty": "^11.3.0",
     "rate-limit-redis": "^4.3.1",
@@ -46,6 +48,7 @@
     "@types/express": "^4.17.25",
     "@types/graphql-depth-limit": "^1.1.6",
     "@types/node": "^22.10.0",
+    "@types/node-cron": "^3.0.11",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
