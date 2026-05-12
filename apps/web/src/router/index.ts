@@ -86,6 +86,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Reconciliation Inbox', requiresRole: 'ADMIN' },
   },
   {
+    path: '/admin/audit',
+    name: 'audit',
+    component: () => import('@/views/AuditView.vue'),
+    meta: { title: 'Audit log', requiresRole: 'ANALYST' },
+  },
+  {
     path: '/cases',
     name: 'cases',
     component: () => import('@/views/CasesView.vue'),
