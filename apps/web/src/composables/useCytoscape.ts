@@ -156,6 +156,14 @@ export function useCytoscape(seedKey: () => string | null): UseCytoscapeReturn {
     try {
       if (newNodes.length > 0) {
         await scheduleLayout(wasEmpty ? FULL_LAYOUT_OPTS : INCREMENTAL_LAYOUT_OPTS);
+        // Fit camera to include the freshly-added nodes — without this,
+        // expanding from a tightly-laid-out hub places new nodes outside
+        // the current viewport and the operator sees 'nothing happened'.
+        // 50ms gives fcose a tick to settle final positions.
+        if (cy.value) {
+          const cyRef = cy.value;
+          setTimeout(() => cyRef.animate({ fit: { eles: cyRef.elements(), padding: 60 }, duration: 250 }), 50);
+        }
       }
     } finally {
       toLock.unlock();

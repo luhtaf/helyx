@@ -10,8 +10,6 @@
 
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useApolloClient } from '@vue/apollo-composable';
-import gql from 'graphql-tag';
 import { useTtpSelection } from '@/composables/useTtpSelection';
 import { useMatrix } from '@/composables/useMatrix';
 import { useGuessActorByTtps, type ActorMatch } from '@/composables/useThreatActors';
@@ -23,7 +21,6 @@ import Button from '@/components/ui/Button.vue';
 const ttp = useTtpSelection();
 const router = useRouter();
 const route = useRoute();
-const { client } = useApolloClient();
 const { show: showToast } = useToast();
 
 // Drawer modes — picker (default, click matrix tiles) vs results (after
@@ -65,12 +62,6 @@ const { matches, loading: guessing, submit: submitGuess } = useGuessActorByTtps(
 const { submit: saveGraphAsHunt } = useSaveGraphAsHunt();
 const creatingForActorId = ref<string | null>(null);
 
-const ACTOR_TTPS_FOR_GRAPH = gql`
-  query ActorTtpsForGraph($id: ID!) {
-    threatActor(id: $id) { id name techniques { id name isSubtechnique } }
-  }
-`;
-
 function onGuessActor(): void {
   if (ttp.count.value === 0) return;
   submitGuess(ttp.selectedIds.value, 20);
@@ -84,36 +75,26 @@ function backToPicker(): void {
 interface SnapNode { id: string; type: string; entityId: string; label: string; data: Record<string, unknown>; position: { x: number; y: number }; locked: boolean }
 interface SnapEdge { id: string; source: string; target: string; edgeType: string; label: string }
 
-function buildActorSnapshot(actor: { id: string; name: string }, ttps: Array<{ id: string; name: string }>): string {
+// Initial snapshot is intentionally minimal — just the actor. Operator
+// right-clicks → 'Show TTPs they USE' to expand. Pre-loading 100+ TTPs
+// (Lazarus, APT41) created visual noise that buried the investigation
+// signal. Sparse-by-default is the operator-friendly choice.
+function buildActorSnapshot(actor: { id: string; name: string }): string {
   const actorNodeId = `ThreatActor:${actor.id}`;
   const actorData = { id: actorNodeId, type: 'ThreatActor', entityId: actor.id, label: actor.name };
   const nodes: SnapNode[] = [
     { ...actorData, data: actorData, position: { x: 0, y: 0 }, locked: false },
   ];
-  const edges: SnapEdge[] = [];
-  const radius = Math.max(280, ttps.length * 9);
-  ttps.forEach((t, idx) => {
-    const tNodeId = `AttackPattern:${t.id}`;
-    const angle = (idx / Math.max(1, ttps.length)) * 2 * Math.PI;
-    const tData = { id: tNodeId, type: 'AttackPattern', entityId: t.id, label: t.name };
-    nodes.push({ ...tData, data: tData, position: { x: Math.round(Math.cos(angle) * radius), y: Math.round(Math.sin(angle) * radius) }, locked: false });
-    edges.push({ id: `${actorNodeId}->${tNodeId}:USES`, source: actorNodeId, target: tNodeId, edgeType: 'USES', label: 'USES' });
-  });
-  return JSON.stringify({ nodes, edges, viewport: { zoom: 0.6, pan: { x: 0, y: 0 } } });
+  return JSON.stringify({ nodes, edges: [] as SnapEdge[], viewport: { zoom: 1, pan: { x: 0, y: 0 } } });
 }
 
 async function openActorAsHunt(actor: ActorMatch['actor']): Promise<void> {
   if (creatingForActorId.value) return;
   creatingForActorId.value = actor.id;
   try {
-    const r = await client.query<{ threatActor: { id: string; name: string; techniques: Array<{ id: string; name: string }> } | null }>({
-      query: ACTOR_TTPS_FOR_GRAPH,
-      variables: { id: actor.id },
-      fetchPolicy: 'network-only',
-    });
-    const detail = r.data.threatActor;
-    if (!detail) { showToast('Could not load actor techniques', 'error'); return; }
-    const snapshot = buildActorSnapshot(actor, detail.techniques);
+    // Sparse-by-default: actor only, no TTPs auto-loaded. Operator
+    // right-clicks the actor → 'Show TTPs they USE' to expand on demand.
+    const snapshot = buildActorSnapshot(actor);
     const hunt = await saveGraphAsHunt({
       name: `${actor.name} — guessed from TTPs`,
       snapshot,
@@ -121,7 +102,7 @@ async function openActorAsHunt(actor: ActorMatch['actor']): Promise<void> {
       seedId: actor.id,
     });
     if (!hunt) { showToast('Hunt creation failed', 'error'); return; }
-    showToast(`Hunt created: ${actor.name} · ${detail.techniques.length} TTPs`, 'success');
+    showToast(`Hunt created: ${actor.name} — right-click to expand`, 'success');
     ttp.close();
     router.push(`/graph?hunt=${hunt.id}`);
   } catch (e) {
@@ -134,13 +115,6 @@ async function openActorAsHunt(actor: ActorMatch['actor']): Promise<void> {
 function barWidth(score: number): string {
   const pct = Math.min(score / 0.5, 1) * 100;
   return `${pct.toFixed(1)}%`;
-}
-
-function onTtpSeedFirst(): void {
-  const first = ttp.selected.value[0];
-  if (!first) return;
-  ttp.close();
-  router.push({ path: '/graph', query: { ttp: first.id } });
 }
 
 // `/graph?hunt=X` cooperative handoff — drop chosen TTPs as cytoscape
@@ -353,13 +327,6 @@ watch(() => ttp.isOpen.value, (open) => {
               :disabled="ttp.count.value === 0"
               @click="onAddToGraph"
             >+ Add to graph</Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              :disabled="ttp.count.value === 0"
-              @click="onTtpSeedFirst"
-              :title="'Materialize first selected TTP — ' + (ttp.selected.value[0]?.id ?? '')"
-            >Materialize first →</Button>
             <Button
               variant="primary"
               size="sm"

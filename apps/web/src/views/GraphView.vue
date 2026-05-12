@@ -405,6 +405,22 @@ function onHide(): void {
   autoSave();
 }
 
+// Keyboard shortcut: Delete / Backspace removes the currently-selected
+// node from the graph (matches the right-click 'Remove from graph'
+// action). Skip when focus is in an input so typing in the search bar
+// doesn't accidentally remove nodes.
+function onDelKey(e: KeyboardEvent): void {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  const target = e.target as HTMLElement | null;
+  const tag = target?.tagName?.toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+  if (!selected.value || !graphRef.value) return;
+  graphRef.value.removeNode(selected.value.id);
+  selected.value = null;
+  autoSave();
+}
+onMounted(() => window.addEventListener('keydown', onDelKey));
+
 // ─── Empty state — last 5 stakeholders for quick-pick ──────────────
 const RECENT_STAKEHOLDERS = gql`
   query GraphRecentStakeholders {

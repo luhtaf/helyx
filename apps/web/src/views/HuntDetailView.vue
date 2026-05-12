@@ -2,6 +2,7 @@
 import { computed, toRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { useHuntDetail, useDeleteHunt } from '@/composables/useHunts';
+import { useToast } from '@/composables/useToast';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityWord from '@/components/ui/SeverityWord.vue';
 import EntityGraph, { type GraphEdge, type GraphNode } from '@/components/graph/EntityGraph.vue';
@@ -15,15 +16,22 @@ const idRef = toRef(props, 'id');
 const router = useRouter();
 
 const { hunt, loading, error } = useHuntDetail(() => idRef.value);
-const { submit: deleteSubmit, loading: deleting } = useDeleteHunt();
+const { submit: deleteSubmit, loading: deleting, error: deleteError } = useDeleteHunt();
+const { show: showToast } = useToast();
 
 function fmtDate(s: string | null | undefined): string {
   return s?.slice(0, 10) ?? '—';
 }
 
 async function onDelete(): Promise<void> {
+  if (!confirm(`Delete hunt "${hunt.value?.name ?? 'this hunt'}"? This cannot be undone.`)) return;
   const ok = await deleteSubmit(idRef.value);
-  if (ok) router.replace('/hunts');
+  if (ok) {
+    showToast('Hunt deleted', 'success');
+    router.replace('/hunts');
+  } else {
+    showToast(`Delete failed: ${deleteError.value?.message ?? 'unknown'}`, 'error');
+  }
 }
 
 const graph = computed<{ nodes: GraphNode[]; edges: GraphEdge[] }>(() => {

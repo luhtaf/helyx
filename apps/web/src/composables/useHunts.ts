@@ -123,10 +123,20 @@ export function useCreateHunt() {
 }
 
 export function useDeleteHunt() {
-  const { mutate, loading, error } = useMutation<{ deleteHunt: boolean }>(DELETE_HUNT);
+  // Refetch the list so /hunts updates immediately after delete + redirect.
+  // Without this, Apollo's cache still serves the deleted hunt and the
+  // operator sees it 'come back' on the list page.
+  const { mutate, loading, error } = useMutation<{ deleteHunt: boolean }>(DELETE_HUNT, () => ({
+    refetchQueries: ['Hunts'],
+    awaitRefetchQueries: true,
+  }));
   async function submit(id: string): Promise<boolean> {
-    const res = await mutate({ id });
-    return Boolean(res?.data?.deleteHunt);
+    try {
+      const res = await mutate({ id });
+      return Boolean(res?.data?.deleteHunt);
+    } catch {
+      return false;
+    }
   }
   return { submit, loading, error };
 }

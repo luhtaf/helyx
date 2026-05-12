@@ -77,9 +77,9 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
         >Pin position (dbl-click)</button>
         <button
           type="button"
-          class="w-full text-left px-3 py-1.5 text-ink-faint hover:bg-surface hover:text-ink-dim transition"
+          class="w-full text-left px-3 py-1.5 text-sev-crit/80 hover:bg-sev-crit/10 hover:text-sev-crit transition flex items-center justify-between"
           @click="emit('hide'); emit('close')"
-        >Hide node</button>
+        ><span>Remove from graph</span><span class="text-[9px] text-ink-faint">del</span></button>
       </div>
     </div>
   </Teleport>
