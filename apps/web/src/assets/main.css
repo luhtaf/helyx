@@ -6,18 +6,18 @@
   :root {
     --bg: #0b0a08;
     --surface: #14120e;
-    --ink: #e8e3d6;
-    --ink-mid: #b3a994;
-    --ink-dim: #8a8273;
-    --ink-faint: #5a5447;
+    --ink: #ece7da;
+    --ink-mid: #c1b8a3;
+    --ink-dim: #a39a85;
+    --ink-faint: #807968;
     --rule: #1d1a14;
-    --rule-strong: #2a2519;
-    --signal: #c8b07a;
-    --sev-crit: #e07254;
-    --sev-high: #d49656;
-    --sev-med:  #c5b572;
-    --sev-low:  #7d9474;
-    --sev-none: #5a5447;
+    --rule-strong: #34301f;
+    --signal: #d4bc83;
+    --sev-crit: #e8826a;
+    --sev-high: #dba268;
+    --sev-med:  #cebd7c;
+    --sev-low:  #8aa17e;
+    --sev-none: #807968;
   }
 
   html, body, #app {
