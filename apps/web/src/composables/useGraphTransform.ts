@@ -14,14 +14,16 @@ interface InflightEntry {
 }
 
 export function useGraphTransform(): {
-  run: (transform: Transform, parent: GraphNode) => Promise<ExpandResult>;
+  run: (transform: Transform, parent: GraphNode, limit?: number) => Promise<ExpandResult>;
 } {
   const { client } = useApolloClient();
   const { show } = useToast();
   const inflight = new Map<string, InflightEntry>();
 
-  async function run(transform: Transform, parent: GraphNode): Promise<ExpandResult> {
-    const flightKey = `${transform.id}|${parent.id}`;
+  async function run(transform: Transform, parent: GraphNode, limit?: number): Promise<ExpandResult> {
+    // Include limit in the inflight key so picking different sizes back-
+    // to-back doesn't coalesce into one fetch.
+    const flightKey = `${transform.id}|${parent.id}|${limit ?? 'default'}`;
     const existing = inflight.get(flightKey);
     if (existing) return existing.promise;
 
@@ -33,10 +35,10 @@ export function useGraphTransform(): {
         const apollo = client as ApolloClient<NormalizedCacheObject>;
         const r = await apollo.query({
           query: transform.query,
-          variables: { id: parent.entityId },
+          variables: { id: parent.entityId, limit },
           fetchPolicy: 'cache-first',
         });
-        const result = transform.expand(r.data, parent);
+        const result = transform.expand(r.data, parent, limit);
 
         if (result.nodes.length === 0 && result.edges.length === 0) {
           show(`No results for "${transform.label}"`, 'info');

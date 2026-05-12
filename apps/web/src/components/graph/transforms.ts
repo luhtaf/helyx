@@ -396,9 +396,14 @@ const tActorTechniques: Transform<ActorTechniquesResp> = {
   description: 'Every MITRE technique this actor is documented to use.',
   appliesTo: 'ThreatActor',
   cap: 200,
+  // Inline picker: "How many TTPs?" Operator avoids dumping 100+ TTPs
+  // (Lazarus, APT41) when they only want a sample. ThreatActor.techniques
+  // BE field returns all — slice client-side post-fetch.
+  varyLimit: [10, 25, 50],
   query: ACTOR_TECHNIQUES,
-  expand: (resp, parent) => {
-    const ttps = resp.threatActor?.techniques ?? [];
+  expand: (resp, parent, limit) => {
+    const all = resp.threatActor?.techniques ?? [];
+    const ttps = limit && limit < all.length ? all.slice(0, limit) : all;
     return {
       nodes: ttps.map((t) => ({
         id: nodeId('AttackPattern', t.id),
@@ -414,6 +419,7 @@ const tActorTechniques: Transform<ActorTechniquesResp> = {
         edgeType: 'USES',
         label: 'uses',
       })),
+      totalAvailable: all.length,
     };
   },
 };
@@ -426,9 +432,9 @@ interface AttackPatternActorsResp {
   } | null;
 }
 const ATTACK_PATTERN_ACTORS = gql`
-  query GraphAttackPatternActors($id: ID!) {
+  query GraphAttackPatternActors($id: ID!, $limit: Int) {
     attackPattern(id: $id) {
-      threatActors(limit: 50) { id name techniqueCount }
+      threatActors(limit: $limit) { id name techniqueCount }
     }
   }
 `;
@@ -438,7 +444,8 @@ const tAttackPatternActors: Transform<AttackPatternActorsResp> = {
   label: 'Show actors who USE this',
   description: 'IntrusionSets documented to use this MITRE technique.',
   appliesTo: 'AttackPattern',
-  cap: 50,
+  cap: 100,
+  varyLimit: [10, 25, 50],
   query: ATTACK_PATTERN_ACTORS,
   expand: (resp, parent) => {
     const actors = resp.attackPattern?.threatActors ?? [];

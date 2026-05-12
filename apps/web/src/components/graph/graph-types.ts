@@ -71,9 +71,16 @@ export interface Transform<TResponse = unknown> {
   /** Soft cap on returned nodes. Backend may return more; truncated client-
    *  side and surfaced via ExpandResult.totalAvailable. */
   cap: number;
+  /** Optional list of size choices for an inline 'how many?' picker on
+   *  the context menu. Right-click → see [10] [25] [50] [All ≤cap]
+   *  before fetch instead of dumping cap-sized result on first click.
+   *  Pass the chosen limit as a `limit` variable to the query. */
+  varyLimit?: number[];
   /** Map response → graph delta. Pure function; no side effects, no cytoscape
-   *  refs. Easy to unit-test in isolation when test runner lands. */
-  expand: (response: TResponse, parent: GraphNode) => ExpandResult;
+   *  refs. Easy to unit-test in isolation when test runner lands.
+   *  When `limit` is set, expand may need to client-slice if the BE field
+   *  doesn't accept a limit arg. */
+  expand: (response: TResponse, parent: GraphNode, limit?: number) => ExpandResult;
 }
 
 /** Build a node id from type + entity uuid. */

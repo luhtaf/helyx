@@ -338,10 +338,10 @@ watch(() => auth.activeOrgId, () => {
 });
 
 // ─── Transform pick ────────────────────────────────────────────────
-async function onPick(transform: Transform): Promise<void> {
+async function onPick(transform: Transform, limit?: number): Promise<void> {
   if (!ctxMenu.value || !graphRef.value) return;
   const parent = ctxMenu.value.node;
-  const result = await runTransform(transform, parent);
+  const result = await runTransform(transform, parent, limit);
   if (result.nodes.length > 0 || result.edges.length > 0) {
     await graphRef.value.addNodes(result.nodes, result.edges);
     autoSave();  // no-op outside hunt mode

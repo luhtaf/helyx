@@ -11,7 +11,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'pick', transform: Transform): void;
+  (e: 'pick', transform: Transform, limit?: number): void;
   (e: 'close'): void;
   (e: 'hide'): void;
   (e: 'pin'): void;
@@ -57,17 +57,38 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
         class="px-3 py-2 text-ink-faint italic"
       >No transforms for this type.</p>
 
-      <button
-        v-for="t in applicable"
-        :key="t.id"
-        type="button"
-        class="w-full text-left px-3 py-1.5 text-ink-dim hover:bg-surface hover:text-ink transition flex items-baseline justify-between gap-3"
-        :title="t.description ?? ''"
-        @click="emit('pick', t); emit('close')"
-      >
-        <span>{{ t.label }}</span>
-        <span class="text-[9px] text-ink-faint shrink-0">≤{{ t.cap }}</span>
-      </button>
+      <template v-for="t in applicable" :key="t.id">
+        <!-- Without varyLimit: single click → fetch with default cap -->
+        <button
+          v-if="!t.varyLimit"
+          type="button"
+          class="w-full text-left px-3 py-1.5 text-ink-dim hover:bg-surface hover:text-ink transition flex items-baseline justify-between gap-3"
+          :title="t.description ?? ''"
+          @click="emit('pick', t); emit('close')"
+        >
+          <span>{{ t.label }}</span>
+          <span class="text-[9px] text-ink-faint shrink-0">≤{{ t.cap }}</span>
+        </button>
+        <!-- With varyLimit: label header + size buttons row, no auto-pick -->
+        <div v-else class="px-3 py-1.5 text-ink-dim" :title="t.description ?? ''">
+          <p class="text-[11px] text-ink-dim">{{ t.label }}</p>
+          <div class="mt-1.5 flex items-center gap-1">
+            <button
+              v-for="n in t.varyLimit"
+              :key="n"
+              type="button"
+              class="font-mono text-[10px] px-2 py-0.5 rounded-sm border border-rule text-ink-faint hover:border-signal hover:text-signal transition"
+              @click="emit('pick', t, n); emit('close')"
+            >{{ n }}</button>
+            <button
+              type="button"
+              class="font-mono text-[10px] px-2 py-0.5 rounded-sm border border-rule text-ink-faint hover:border-signal hover:text-signal transition"
+              :title="`fetch up to the cap (${t.cap})`"
+              @click="emit('pick', t, t.cap); emit('close')"
+            >all ≤{{ t.cap }}</button>
+          </div>
+        </div>
+      </template>
 
       <div class="border-t border-rule mt-1 pt-1">
         <button
