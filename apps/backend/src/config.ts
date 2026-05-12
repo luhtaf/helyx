@@ -48,6 +48,10 @@ const schema = z.object({
   // so non-CTI code paths keep working in stripped-down dev envs.
   // Generate: node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
   CTI_SIGNING_MASTER_KEY: z.string().regex(/^[0-9a-f]{64}$/, 'CTI_SIGNING_MASTER_KEY must be 64 hex chars (32 bytes)').optional(),
+  // Disable in-process node-cron scheduler. Set true when migrating jobs
+  // to a separate runtime (Kubernetes CronJob, dedicated worker tier).
+  // The CLI path `pnpm scheduler:run <name>` still works regardless.
+  SCHEDULER_DISABLED: z.coerce.boolean().default(false),
 });
 
 const parsed = schema.safeParse(process.env);

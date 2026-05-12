@@ -12,7 +12,7 @@ import { runJobNow } from './index.js';
 const jobName = process.argv[2];
 if (!jobName) {
   console.error('usage: tsx src/scheduler/cli.ts <job-name>');
-  console.error('known jobs: mitre-daily');
+  console.error('known jobs: mitre-daily, nvd-daily');
   process.exit(2);
 }
 

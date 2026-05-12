@@ -1,0 +1,70 @@
+# Example: migrate Helyx scheduled jobs from in-process node-cron to
+# Kubernetes CronJob. Each job becomes its own CronJob resource.
+#
+# Pre-flight:
+#   1. BE pods set SCHEDULER_DISABLED=true so in-process cron is silenced
+#   2. Image must be the same as BE; jobs run `node dist/scheduler/cli.js`
+#   3. Mount the same secret env (NEO4J_*, REDIS_URL, NVD_API_KEY,
+#      MITRE bundle URL if overridden)
+#
+# The Redis lock primitive (tryAcquireJobLock) works identically here —
+# in-process cron and CronJob workers can co-exist during migration.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: helyx-mitre-daily
+  namespace: helyx
+spec:
+  # Asia/Jakarta 02:00 — same as in-process default (k8s 1.27+ supports tz)
+  timeZone: Asia/Jakarta
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid       # don't stack runs if one over-runs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 1800   # 30min hard cap (matches lock TTL)
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: mitre-daily
+            image: ghcr.io/your-org/helyx-backend:latest
+            command: ["node", "dist/scheduler/cli.js", "mitre-daily"]
+            envFrom:
+            - secretRef:
+                name: helyx-backend-env
+            resources:
+              requests: { cpu: 100m, memory: 256Mi }
+              limits:   { cpu: 500m, memory: 512Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: helyx-nvd-daily
+  namespace: helyx
+spec:
+  timeZone: Asia/Jakarta
+  schedule: "0 3 * * *"           # staggered 1h after mitre — same as in-process
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600   # 60min hard cap (matches lock TTL)
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: nvd-daily
+            image: ghcr.io/your-org/helyx-backend:latest
+            command: ["node", "dist/scheduler/cli.js", "nvd-daily"]
+            envFrom:
+            - secretRef:
+                name: helyx-backend-env
+            resources:
+              requests: { cpu: 100m, memory: 256Mi }
+              limits:   { cpu: 500m, memory: 512Mi }
