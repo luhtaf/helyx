@@ -375,6 +375,92 @@ const tCaseStakeholder: Transform<CaseStakeholderResp> = {
   },
 };
 
+// ─── ThreatActor transforms ─────────────────────────────────────────
+
+interface ActorTechniquesResp {
+  threatActor: {
+    techniques: { id: string; name: string; isSubtechnique: boolean }[];
+  } | null;
+}
+const ACTOR_TECHNIQUES = gql`
+  query GraphActorTechniques($id: ID!) {
+    threatActor(id: $id) {
+      techniques { id name isSubtechnique }
+    }
+  }
+`;
+
+const tActorTechniques: Transform<ActorTechniquesResp> = {
+  id: 'actor.techniques',
+  label: 'Show TTPs they USE',
+  description: 'Every MITRE technique this actor is documented to use.',
+  appliesTo: 'ThreatActor',
+  cap: 200,
+  query: ACTOR_TECHNIQUES,
+  expand: (resp, parent) => {
+    const ttps = resp.threatActor?.techniques ?? [];
+    return {
+      nodes: ttps.map((t) => ({
+        id: nodeId('AttackPattern', t.id),
+        entityId: t.id,
+        type: 'AttackPattern',
+        label: t.name,
+        data: { isSubtechnique: t.isSubtechnique },
+      })),
+      edges: ttps.map((t) => ({
+        id: edgeId(parent.id, nodeId('AttackPattern', t.id), 'USES'),
+        source: parent.id,
+        target: nodeId('AttackPattern', t.id),
+        edgeType: 'USES',
+        label: 'uses',
+      })),
+    };
+  },
+};
+
+// ─── AttackPattern transforms ───────────────────────────────────────
+
+interface AttackPatternActorsResp {
+  attackPattern: {
+    threatActors: { id: string; name: string; techniqueCount: number }[];
+  } | null;
+}
+const ATTACK_PATTERN_ACTORS = gql`
+  query GraphAttackPatternActors($id: ID!) {
+    attackPattern(id: $id) {
+      threatActors(limit: 50) { id name techniqueCount }
+    }
+  }
+`;
+
+const tAttackPatternActors: Transform<AttackPatternActorsResp> = {
+  id: 'attackPattern.actors',
+  label: 'Show actors who USE this',
+  description: 'IntrusionSets documented to use this MITRE technique.',
+  appliesTo: 'AttackPattern',
+  cap: 50,
+  query: ATTACK_PATTERN_ACTORS,
+  expand: (resp, parent) => {
+    const actors = resp.attackPattern?.threatActors ?? [];
+    return {
+      nodes: actors.map((a) => ({
+        id: nodeId('ThreatActor', a.id),
+        entityId: a.id,
+        type: 'ThreatActor',
+        label: a.name,
+        data: { techniqueCount: a.techniqueCount },
+      })),
+      edges: actors.map((a) => ({
+        id: edgeId(nodeId('ThreatActor', a.id), parent.id, 'USES'),
+        source: nodeId('ThreatActor', a.id),
+        target: parent.id,
+        edgeType: 'USES',
+        label: 'uses',
+      })),
+    };
+  },
+};
+
 // ─── Registry ──────────────────────────────────────────────────────
 
 export const TRANSFORMS: Transform[] = [
@@ -387,6 +473,8 @@ export const TRANSFORMS: Transform[] = [
   tCveAffectedAssets as Transform,
   tCveWeaknesses as Transform,
   tCaseStakeholder as Transform,
+  tActorTechniques as Transform,
+  tAttackPatternActors as Transform,
 ];
 
 /** Find the transforms applicable to a given node type. */

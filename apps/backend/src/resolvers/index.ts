@@ -18,6 +18,7 @@ import { caseResolvers } from '../cases/resolvers.js';
 import { artifactResolvers } from '../artifacts/resolvers/index.js';
 import { ruleResolvers } from '../rules/resolvers.js';
 import { ctiIocsResolvers } from '../cti/iocs/resolvers.js';
+import { auditResolvers } from '../audits/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -51,6 +52,7 @@ export const resolvers = {
     ...caseResolvers.Query,
     ...ruleResolvers.Query,
     ...ctiIocsResolvers.Query,
+    ...auditResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -81,4 +83,5 @@ export const resolvers = {
   RawStakeholder: reconciliationResolvers.RawStakeholder,
   Case: caseResolvers.Case,
   Artifact: artifactResolvers.Artifact,
+  AuditEvent: auditResolvers.AuditEvent,
 };

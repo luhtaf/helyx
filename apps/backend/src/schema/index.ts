@@ -13,6 +13,7 @@ import { artifactTypeDefs } from '../artifacts/schema.js';
 import { caseTypeDefs } from '../cases/schema.js';
 import { ruleTypeDefs } from '../rules/schema.js';
 import { ctiIocsTypeDefs } from '../cti/iocs/schema.js';
+import { auditTypeDefs } from '../audits/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -44,4 +45,5 @@ export const typeDefs = [
   caseTypeDefs,
   ruleTypeDefs,
   ctiIocsTypeDefs,
+  auditTypeDefs,
 ];
