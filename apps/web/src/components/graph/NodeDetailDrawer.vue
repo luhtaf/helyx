@@ -12,6 +12,7 @@ import {
   type CtiIocType,
 } from '@/composables/useCtiIocs';
 import { useToast } from '@/composables/useToast';
+import { useOtxLookup, type OtxIocKind } from '@/composables/useOtxLookup';
 import Input from '@/components/ui/Input.vue';
 import Button from '@/components/ui/Button.vue';
 
@@ -64,6 +65,36 @@ function detailHref(): string | null {
     case 'Case': return `/cases/${props.node.entityId}`;
     default: return null;
   }
+}
+
+// ─── H6 OTX lookup ──────────────────────────────────────────────────
+// Surfaces for nodes whose data carries lookupable IOCs:
+//   Asset.ipAddresses[] → ipv4 lookup per IP
+//   CtiIoc → kind-mapped lookup based on iocType
+const otx = useOtxLookup();
+const otxTargets = computed<Array<{ label: string; value: string; kind: OtxIocKind }>>(() => {
+  if (!props.node) return [];
+  const d = (props.node.data ?? {}) as Record<string, unknown>;
+  if (props.node.type === 'Asset' && Array.isArray(d.ipAddresses)) {
+    return (d.ipAddresses as string[])
+      .filter((ip) => /^(\d{1,3}\.){3}\d{1,3}$/.test(ip))
+      .map((ip) => ({ label: ip, value: ip, kind: 'ipv4' as OtxIocKind }));
+  }
+  if (props.node.type === 'CtiIoc' && typeof d.iocType === 'string' && typeof d.value === 'string') {
+    const kindMap: Record<string, OtxIocKind | null> = {
+      IP: 'ipv4',
+      DOMAIN: 'domain',
+      URL: 'url',
+      HASH: 'file_sha256', // try sha256 first; OTX accepts md5/sha1 via same /file endpoint
+    };
+    const k = kindMap[d.iocType];
+    return k ? [{ label: d.value, value: d.value, kind: k }] : [];
+  }
+  return [];
+});
+
+async function onOtxLookup(t: { value: string; kind: OtxIocKind }): Promise<void> {
+  await otx.lookup(t.value, t.kind);
 }
 
 // W2.5 — Actor × TTP indicators panel.
@@ -300,6 +331,87 @@ async function onDelete(id: string, value: string): Promise<void> {
               >Add {{ bulkLineCount }}</Button>
               <Button variant="ghost" size="sm" @click="addOpen = false; newValue = ''; bulkText = ''; addErr = null">Done</Button>
             </div>
+          </div>
+        </section>
+
+        <!-- H6 OTX lookup — Asset (ipv4 per IP) / CtiIoc -->
+        <section v-if="otxTargets.length" class="mt-6 pt-5 border-t border-rule-strong">
+          <header class="flex items-baseline justify-between mb-3">
+            <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">otx · alienvault</p>
+            <span class="font-mono text-[10px] text-ink-faint">on-demand</span>
+          </header>
+
+          <div class="flex flex-wrap gap-1.5 mb-3">
+            <Button
+              v-for="t in otxTargets"
+              :key="t.value"
+              size="sm"
+              variant="ghost"
+              :loading="otx.loading.value"
+              :title="`OTX lookup ${t.kind} → ${t.value}`"
+              @click="onOtxLookup(t)"
+            >Lookup {{ t.label }}</Button>
+          </div>
+
+          <p v-if="otx.error.value" class="text-[11px] text-sev-crit mb-2">{{ otx.error.value }}</p>
+
+          <div v-if="otx.result.value" class="border border-rule rounded-md p-3 space-y-3">
+            <div class="flex items-baseline justify-between gap-2">
+              <p class="font-mono text-[11px] text-signal">{{ otx.result.value.queriedValue }}</p>
+              <p class="font-mono text-[10px] text-ink-faint tabular-nums">
+                {{ otx.result.value.pulseCount }} pulse{{ otx.result.value.pulseCount === 1 ? '' : 's' }}
+              </p>
+            </div>
+
+            <div v-if="otx.result.value.adversaries.length" class="space-y-1">
+              <p class="font-mono text-[9px] uppercase tracking-wider text-ink-faint">adversaries</p>
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="a in otx.result.value.adversaries"
+                  :key="a"
+                  class="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-sev-crit/15 border border-sev-crit/30 text-sev-crit"
+                >{{ a }}</span>
+              </div>
+            </div>
+
+            <div v-if="otx.result.value.attackIds.length" class="space-y-1">
+              <p class="font-mono text-[9px] uppercase tracking-wider text-ink-faint">mitre techniques</p>
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="t in otx.result.value.attackIds.slice(0, 12)"
+                  :key="t"
+                  class="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-sev-high/15 border border-sev-high/30 text-sev-high"
+                >{{ t }}</span>
+                <span v-if="otx.result.value.attackIds.length > 12" class="font-mono text-[10px] text-ink-faint self-center">
+                  +{{ otx.result.value.attackIds.length - 12 }}
+                </span>
+              </div>
+            </div>
+
+            <div v-if="otx.result.value.malwareFamilies.length" class="space-y-1">
+              <p class="font-mono text-[9px] uppercase tracking-wider text-ink-faint">malware families</p>
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="m in otx.result.value.malwareFamilies.slice(0, 8)"
+                  :key="m"
+                  class="font-mono text-[10px] px-1.5 py-0.5 rounded-sm bg-sev-med/15 border border-sev-med/30 text-sev-med"
+                >{{ m }}</span>
+              </div>
+            </div>
+
+            <div v-if="otx.result.value.pulses.length" class="space-y-1.5 pt-2 border-t border-rule">
+              <p class="font-mono text-[9px] uppercase tracking-wider text-ink-faint">recent pulses</p>
+              <div v-for="p in otx.result.value.pulses.slice(0, 5)" :key="p.id" class="text-[11px]">
+                <p class="text-ink truncate">{{ p.name }}</p>
+                <p class="font-mono text-[10px] text-ink-faint">
+                  {{ p.author || 'anon' }}<span v-if="p.modifiedAt"> · {{ p.modifiedAt.slice(0, 10) }}</span>
+                </p>
+              </div>
+            </div>
+
+            <p v-if="otx.result.value.pulseCount === 0" class="text-[11px] text-ink-dim">
+              clean — not seen in OTX catalog
+            </p>
           </div>
         </section>
       </div>

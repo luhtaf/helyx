@@ -30,6 +30,10 @@ const schema = z.object({
   NEO4J_PASSWORD: z.string().min(1),
   NEO4J_DATABASE: z.string().default('neo4j'),
   NVD_API_KEY: z.string().optional(),
+  // H6 — OTX (AlienVault) lookup-on-demand. Optional; resolver throws
+  // an actionable error if missing. Get free key at otx.alienvault.com.
+  OTX_API_KEY: z.string().optional(),
+  OTX_BASE_URL: z.string().default('https://otx.alienvault.com/api/v1'),
   NVD_BASE_URL: z.string().default('https://services.nvd.nist.gov/rest/json/cves/2.0'),
   ELK_BASE_URL: z.string().default('http://elk.th'),
   ELK_USERNAME: z.string().optional(),
