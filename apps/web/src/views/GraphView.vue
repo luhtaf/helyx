@@ -17,6 +17,7 @@ import { transformsFor } from '@/components/graph/transforms';
 import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph-types';
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
+import { useConfirm } from '@/composables/useConfirm';
 import { useAuthStore } from '@/stores/auth';
 import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, useDeleteHunt, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
@@ -27,6 +28,7 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const { show: showToast } = useToast();
+const { confirm } = useConfirm();
 const { run: runTransform } = useGraphTransform();
 
 // ─── Seed parsing ──────────────────────────────────────────────────
@@ -409,7 +411,13 @@ function onHide(): void {
 const { submit: deleteHunt, loading: deletingHunt, error: deleteHuntError } = useDeleteHunt();
 async function onDeleteHunt(): Promise<void> {
   if (!huntId.value) return;
-  if (!confirm(`Delete hunt "${hunt.value?.name ?? 'this hunt'}"? This cannot be undone.`)) return;
+  const ok0 = await confirm({
+    title: `Delete hunt "${hunt.value?.name ?? 'this hunt'}"?`,
+    message: 'This cannot be undone.',
+    variant: 'danger',
+    confirmLabel: 'Delete',
+  });
+  if (!ok0) return;
   const ok = await deleteHunt(huntId.value);
   if (ok) {
     showToast('Hunt deleted', 'success');

@@ -3,6 +3,7 @@ import { computed, toRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { useHuntDetail, useDeleteHunt } from '@/composables/useHunts';
 import { useToast } from '@/composables/useToast';
+import { useConfirm } from '@/composables/useConfirm';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityWord from '@/components/ui/SeverityWord.vue';
 import EntityGraph, { type GraphEdge, type GraphNode } from '@/components/graph/EntityGraph.vue';
@@ -18,13 +19,20 @@ const router = useRouter();
 const { hunt, loading, error } = useHuntDetail(() => idRef.value);
 const { submit: deleteSubmit, loading: deleting, error: deleteError } = useDeleteHunt();
 const { show: showToast } = useToast();
+const { confirm } = useConfirm();
 
 function fmtDate(s: string | null | undefined): string {
   return s?.slice(0, 10) ?? '—';
 }
 
 async function onDelete(): Promise<void> {
-  if (!confirm(`Delete hunt "${hunt.value?.name ?? 'this hunt'}"? This cannot be undone.`)) return;
+  const ok0 = await confirm({
+    title: `Delete hunt "${hunt.value?.name ?? 'this hunt'}"?`,
+    message: 'This cannot be undone.',
+    variant: 'danger',
+    confirmLabel: 'Delete',
+  });
+  if (!ok0) return;
   const ok = await deleteSubmit(idRef.value);
   if (ok) {
     showToast('Hunt deleted', 'success');

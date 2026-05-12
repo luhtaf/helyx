@@ -3,6 +3,7 @@ import { ref, toRef, watch, watchEffect, computed } from 'vue';
 import { useRule, useSetRuleReleaseTier, useApproveRule, useUnapproveRule, useRulePushReadiness, isApprovalStale, RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier, type PushBlockReason } from '@/composables/useRules';
 import { KIND_CLASSES, type RuleKind } from '@/composables/rule-kinds';
 import { useToast } from '@/composables/useToast';
+import { useConfirm } from '@/composables/useConfirm';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
 
@@ -11,6 +12,7 @@ const idRef = toRef(props, 'id');
 const { rule, loading, error } = useRule(() => idRef.value);
 const { submit: setTier, loading: settingTier } = useSetRuleReleaseTier();
 const { show: showToast } = useToast();
+const { confirm } = useConfirm();
 
 const kindClass = (k: RuleKind): string => KIND_CLASSES[k];
 
@@ -61,7 +63,13 @@ async function onApprove(): Promise<void> {
 
 async function onUnapprove(): Promise<void> {
   if (!rule.value) return;
-  if (!confirm('Revoke approval? Push paths will reject this rule until re-approved.')) return;
+  const ok = await confirm({
+    title: 'Revoke approval?',
+    message: 'Push paths will reject this rule until re-approved.',
+    variant: 'danger',
+    confirmLabel: 'Revoke',
+  });
+  if (!ok) return;
   try {
     await unapprove(rule.value.id);
     showToast('Approval revoked', 'success');

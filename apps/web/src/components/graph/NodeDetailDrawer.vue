@@ -12,6 +12,7 @@ import {
   type CtiIocType,
 } from '@/composables/useCtiIocs';
 import { useToast } from '@/composables/useToast';
+import { useConfirm } from '@/composables/useConfirm';
 import { useOtxLookup, type OtxIocKind } from '@/composables/useOtxLookup';
 import Input from '@/components/ui/Input.vue';
 import Button from '@/components/ui/Button.vue';
@@ -21,6 +22,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 
 const route = useRoute();
 const { show: showToast } = useToast();
+const { confirm } = useConfirm();
 
 interface KV { label: string; value: string; mono?: boolean; severity?: string }
 
@@ -184,7 +186,12 @@ async function onAddBulk(): Promise<void> {
 }
 
 async function onDelete(id: string, value: string): Promise<void> {
-  if (!confirm(`Delete IOC "${value}"?`)) return;
+  const ok0 = await confirm({
+    title: `Delete IOC "${value}"?`,
+    variant: 'danger',
+    confirmLabel: 'Delete',
+  });
+  if (!ok0) return;
   const ok = await deleteIoc(id);
   if (ok) showToast(`Deleted ${value}`, 'success');
   else showToast('Delete failed', 'error');
