@@ -260,6 +260,11 @@ async function loadHunt(): Promise<void> {
   try {
     const snap = JSON.parse(hunt.value.graphSnapshot);
     graphRef.value.loadSnapshot(snap);
+    // Auto-fit: snapshot viewports often don't match the new canvas size
+    // (different screen, different sidebar collapsed state, etc.).
+    // Re-laying out fits everything to the available rect instead of
+    // showing nodes off-screen + forcing the user to click Re-layout.
+    setTimeout(() => graphRef.value?.relayoutAll(), 50);
     huntLoaded = true;
   } catch (e) {
     showToast('Failed to load hunt snapshot', 'error');

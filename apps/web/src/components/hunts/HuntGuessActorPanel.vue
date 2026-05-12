@@ -8,8 +8,10 @@
 
 import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useApolloClient } from '@vue/apollo-composable';
+import gql from 'graphql-tag';
 import { useGuessActorByTtps } from '@/composables/useThreatActors';
-import { useCreateHunt } from '@/composables/useHunts';
+import { useSaveGraphAsHunt } from '@/composables/useHunts';
 import { useToast } from '@/composables/useToast';
 import { useTtpSelection } from '@/composables/useTtpSelection';
 import Button from '@/components/ui/Button.vue';
@@ -39,21 +41,88 @@ function openInMatrix(matchedIds: string[]): void {
   router.push({ path: '/techniques', query: { q: matchedIds[0] } });
 }
 
-const { submit: createHunt } = useCreateHunt();
+// Open as Hunt = "actor becomes part of a graph". Builds a cytoscape
+// snapshot containing the actor (centre node) + every TTP they USE
+// (radial), saves as a GRAPH-kind Hunt, lands on /graph?hunt=<id>.
+// Pure client orchestration — uses existing actor.techniques query +
+// existing saveGraphAsHunt mutation, no new backend surface.
+const { client } = useApolloClient();
+const { submit: saveGraphAsHunt } = useSaveGraphAsHunt();
 const creatingForActorId = ref<string | null>(null);
+
+const ACTOR_TTPS_FOR_GRAPH = gql`
+  query ActorTtpsForGraph($id: ID!) {
+    threatActor(id: $id) { id name techniques { id name isSubtechnique } }
+  }
+`;
+
+// SnapshotShape (matches HelyxGraph.loadSnapshot expectations): nodes
+// carry top-level id+type+label+entityId AND a nested `data` mirror,
+// AND explicit positions — loadSnapshot skips layout to preserve
+// user-pinned positions, so we MUST pre-position here.
+//
+// Layout: actor at origin, TTPs in a single ring around. Radius scales
+// with TTP count so ring stays readable at 100+ TTPs (Lazarus, APT41).
+interface SnapshotNode {
+  id: string; type: string; entityId: string; label: string;
+  data: Record<string, unknown>;
+  position: { x: number; y: number };
+  locked: boolean;
+}
+interface SnapshotEdge { id: string; source: string; target: string; edgeType: string; label: string }
+
+function buildActorSnapshot(actor: { id: string; name: string }, ttps: Array<{ id: string; name: string }>): string {
+  const actorNodeId = `ThreatActor:${actor.id}`;
+  const actorData = { id: actorNodeId, type: 'ThreatActor', entityId: actor.id, label: actor.name };
+  const nodes: SnapshotNode[] = [
+    { ...actorData, data: actorData, position: { x: 0, y: 0 }, locked: false },
+  ];
+  const edges: SnapshotEdge[] = [];
+  const radius = Math.max(280, ttps.length * 9);
+  ttps.forEach((t, idx) => {
+    const tNodeId = `AttackPattern:${t.id}`;
+    const angle = (idx / Math.max(1, ttps.length)) * 2 * Math.PI;
+    const tData = { id: tNodeId, type: 'AttackPattern', entityId: t.id, label: t.name };
+    nodes.push({
+      ...tData,
+      data: tData,
+      position: { x: Math.round(Math.cos(angle) * radius), y: Math.round(Math.sin(angle) * radius) },
+      locked: false,
+    });
+    edges.push({
+      id: `${actorNodeId}->${tNodeId}:USES`,
+      source: actorNodeId, target: tNodeId, edgeType: 'USES', label: 'USES',
+    });
+  });
+  return JSON.stringify({
+    nodes, edges,
+    viewport: { zoom: 0.6, pan: { x: 0, y: 0 } },
+  });
+}
 
 async function openAsHunt(actor: { id: string; name: string }): Promise<void> {
   if (creatingForActorId.value) return;
   creatingForActorId.value = actor.id;
   try {
-    const hunt = await createHunt({
+    // Fetch actor's full TTP list — drives the snapshot density.
+    const r = await client.query<{ threatActor: { id: string; name: string; techniques: Array<{ id: string; name: string; isSubtechnique: boolean }> } | null }>({
+      query: ACTOR_TTPS_FOR_GRAPH,
+      variables: { id: actor.id },
+      fetchPolicy: 'network-only',
+    });
+    const detail = r.data.threatActor;
+    if (!detail) { showToast('Could not load actor techniques', 'error'); return; }
+
+    const snapshot = buildActorSnapshot(actor, detail.techniques);
+    const hunt = await saveGraphAsHunt({
       name: `${actor.name} — guessed from TTPs`,
-      targetActorIds: [actor.id],
-      scopedAssetIds: [],
+      snapshot,
+      seedType: 'ThreatActor',
+      seedId: actor.id,
     });
     if (!hunt) { showToast('Hunt creation failed', 'error'); return; }
-    showToast(`Hunt created: ${actor.name}`, 'success');
-    router.push(`/hunts/${hunt.id}`);
+    showToast(`Hunt created: ${actor.name} · ${detail.techniques.length} TTPs`, 'success');
+    router.push(`/graph?hunt=${hunt.id}`);
   } catch (e) {
     showToast(`Hunt creation failed: ${(e as Error).message}`, 'error');
   } finally {
