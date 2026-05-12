@@ -18,7 +18,7 @@ import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, type TtpFacets } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, useDeleteHunt, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
@@ -405,6 +405,20 @@ function onHide(): void {
   autoSave();
 }
 
+// Delete the current hunt entirely. Confirms first; redirects to /hunts.
+const { submit: deleteHunt, loading: deletingHunt, error: deleteHuntError } = useDeleteHunt();
+async function onDeleteHunt(): Promise<void> {
+  if (!huntId.value) return;
+  if (!confirm(`Delete hunt "${hunt.value?.name ?? 'this hunt'}"? This cannot be undone.`)) return;
+  const ok = await deleteHunt(huntId.value);
+  if (ok) {
+    showToast('Hunt deleted', 'success');
+    router.replace('/hunts');
+  } else {
+    showToast(`Delete failed: ${deleteHuntError.value?.message ?? 'unknown'}`, 'error');
+  }
+}
+
 // Keyboard shortcut: Delete / Backspace removes the currently-selected
 // node from the graph (matches the right-click 'Remove from graph'
 // action). Skip when focus is in an input so typing in the search bar
@@ -512,6 +526,13 @@ onMounted(() => { void plantSeed(); });
           </Button>
           <Button v-if="!huntId" variant="ghost" @click="saveOpen = true">Save as Hunt…</Button>
           <Button variant="ghost" @click="graphRef?.relayoutAll()">Re-layout</Button>
+          <Button
+            v-if="huntId"
+            variant="ghost"
+            :loading="deletingHunt"
+            class="!text-sev-crit hover:!bg-sev-crit/10"
+            @click="onDeleteHunt"
+          >Delete hunt</Button>
         </div>
       </header>
 

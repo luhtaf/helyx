@@ -121,6 +121,75 @@ export const HELYX_STYLESHEET: StylesheetStyle[] = [
       color: C.inkMid,
     },
   },
+  // ─── CTI / threat-attribution types ─────────────────────────────
+  // Visual hierarchy by importance:
+  //   ThreatActor (adversary, top of food chain)  — biggest, octagon, red
+  //   AttackPattern (their tactic)                — hexagon, orange (sub: smaller)
+  //   DetectionRule (our defense)                 — round-rect outline, green
+  //   Artifact (evidence)                          — cut-rectangle, yellow
+  //   CtiIoc (atomic indicator)                   — small ellipse, neutral
+  {
+    selector: 'node[type = "ThreatActor"]',
+    style: {
+      shape: 'octagon',
+      'background-color': C.sevCrit,
+      width: 42,
+      height: 42,
+      'font-size': 12,
+      color: C.ink,
+    },
+  },
+  {
+    selector: 'node[type = "AttackPattern"]',
+    style: {
+      shape: 'round-tag',
+      'background-color': C.sevHigh,
+      width: 36,
+      height: 30,
+      color: C.base,
+    },
+  },
+  {
+    selector: 'node[type = "AttackPattern"][?isSubtechnique]',
+    style: {
+      width: 26,
+      height: 22,
+      'background-color': C.sevMed,
+      'font-size': 9,
+    },
+  },
+  {
+    selector: 'node[type = "DetectionRule"]',
+    style: {
+      shape: 'round-rectangle',
+      'background-color': C.base,
+      'border-color': C.sevLow,
+      'border-width': 2,
+      width: 34,
+      height: 26,
+      color: C.sevLow,
+    },
+  },
+  {
+    selector: 'node[type = "Artifact"]',
+    style: {
+      shape: 'cut-rectangle',
+      'background-color': C.sevMed,
+      width: 28,
+      height: 24,
+      color: C.base,
+    },
+  },
+  {
+    selector: 'node[type = "CtiIoc"]',
+    style: {
+      shape: 'ellipse',
+      'background-color': C.inkDim,
+      width: 22,
+      height: 22,
+      'font-size': 9,
+    },
+  },
   // ---------- selection ----------
   {
     selector: 'node:selected',
