@@ -21,7 +21,11 @@ const PLATFORM_OPTIONS = [
 
 const platform = ref((route.query.platform as string) || '');
 const search = ref((route.query.q as string) || '');
-const showSubtechniques = computed(() => route.query.sub === '1');
+// Sub-techniques default ON — they're 475 of 691 patterns (69%) and
+// the load-bearing detail for matching actor TTPs. Opt-out via ?sub=0
+// for a cleaner overview when needed. Backwards-compat: ?sub=1 still
+// works for shared URLs from before the flip.
+const showSubtechniques = computed(() => route.query.sub !== '0');
 
 const { columns, loading, error } = useMatrix(() => ({
   platform: platform.value || null,
@@ -52,7 +56,8 @@ watch(search, () => {
 
 function toggleSubtechniques(event: Event): void {
   const checked = (event.target as HTMLInputElement).checked;
-  setQuery({ sub: checked ? '1' : null });
+  // ON = default (no query param) · OFF = explicit ?sub=0
+  setQuery({ sub: checked ? null : '0' });
 }
 </script>
 
