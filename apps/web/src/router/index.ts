@@ -60,6 +60,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'New hunt' },
   },
   {
+    path: '/hunts/guess-actor',
+    name: 'hunt-guess-actor',
+    component: () => import('@/views/HuntGuessActorView.vue'),
+    meta: { title: 'Guess actor by TTPs' },
+  },
+  {
     path: '/hunts/:id',
     name: 'hunt-detail',
     component: () => import('@/views/HuntDetailView.vue'),

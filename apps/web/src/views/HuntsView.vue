@@ -41,6 +41,7 @@ function fmtDate(s: string): string {
       <div class="flex items-center gap-2">
         <Button variant="ghost" size="sm" @click="router.push('/graph')">+ open graph hunt</Button>
         <Button variant="ghost" size="sm" @click="ttpSlideOpen = true">+ hunt by TTP</Button>
+        <Button variant="ghost" size="sm" @click="router.push('/hunts/guess-actor')">guess actor</Button>
         <Button variant="primary" size="sm" @click="router.push('/hunts/new')">+ structured hunt</Button>
       </div>
     </header>

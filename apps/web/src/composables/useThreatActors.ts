@@ -1,5 +1,5 @@
 import { computed } from 'vue';
-import { useQuery } from '@vue/apollo-composable';
+import { useQuery, useLazyQuery } from '@vue/apollo-composable';
 import gql from 'graphql-tag';
 
 const TA_LIST = gql`
@@ -104,4 +104,42 @@ export function useThreatActorDetail(id: () => string) {
   );
   const ta = computed(() => result.value?.threatActor ?? null);
   return { ta, loading, error };
+}
+
+// C — Guess threat actor by TTPs. Single mutation/query, no caching
+// nuance needed; user always wants fresh result for new TTP set.
+const GUESS_ACTOR_BY_TTPS = gql`
+  query GuessActorByTtps($ids: [String!]!, $limit: Int) {
+    guessActorByTtps(techniqueIds: $ids, limit: $limit) {
+      matchedCount
+      actorTtpCount
+      score
+      matchedTechniqueIds
+      actor { id name aliases }
+    }
+  }
+`;
+
+export interface ActorMatch {
+  matchedCount: number;
+  actorTtpCount: number;
+  score: number;
+  matchedTechniqueIds: string[];
+  actor: { id: string; name: string; aliases: string[] };
+}
+
+export function useGuessActorByTtps() {
+  const { result, loading, error, load } = useLazyQuery<{ guessActorByTtps: ActorMatch[] }>(
+    GUESS_ACTOR_BY_TTPS,
+    {},
+    { fetchPolicy: 'no-cache' },
+  );
+  return {
+    matches: computed(() => result.value?.guessActorByTtps ?? []),
+    loading,
+    error,
+    submit: (ids: string[], limit = 20): void => {
+      void load(undefined, { ids, limit });
+    },
+  };
 }

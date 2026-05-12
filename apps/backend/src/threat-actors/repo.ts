@@ -97,6 +97,60 @@ export async function findThreatActorById(id: string): Promise<ThreatActorRow | 
   }
 }
 
+// C — Guess threat actor by TTP overlap. Returns ranked actors using
+// Jaccard index over the USES edge set. Single Cypher pass: iterate the
+// input technique set, walk USES backwards to actors, then for each
+// candidate count its full TTP set for the union denominator.
+//
+// Why Jaccard over raw matched count: penalises mass-actor noise. An
+// actor that uses 200 TTPs (kitchen-sink IntrusionSets like Lazarus)
+// would always win on raw count even with thin overlap. Jaccard is
+// symmetric — favours actors whose USES set most resembles the input.
+export interface ActorMatchRow {
+  actor: ThreatActorRow;
+  matchedCount: number;
+  actorTtpCount: number;
+  score: number;
+  matchedTechniqueIds: string[];
+}
+
+export async function guessActorByTtps(
+  techniqueIds: string[],
+  limit: number,
+): Promise<ActorMatchRow[]> {
+  if (techniqueIds.length === 0) return [];
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `WITH $techniqueIds AS inputIds, size($techniqueIds) AS inputCount
+       UNWIND inputIds AS tid
+       MATCH (a:AttackPattern {id: tid})<-[:USES]-(i:IntrusionSet)
+       WITH i, inputIds, inputCount, collect(DISTINCT tid) AS matchedIds
+       WITH i, matchedIds, size(matchedIds) AS matchedCount,
+            inputCount,
+            size([(i)-[:USES]->(:AttackPattern) | 1]) AS actorTtpCount
+       WITH i, matchedIds, matchedCount, actorTtpCount,
+            (inputCount + actorTtpCount - matchedCount) AS unionCount
+       WITH i, matchedIds, matchedCount, actorTtpCount,
+            CASE WHEN unionCount = 0 THEN 0.0
+                 ELSE toFloat(matchedCount) / toFloat(unionCount) END AS score
+       RETURN ${TA_RETURN}, matchedCount, actorTtpCount, score, matchedIds AS matchedTechniqueIds
+       ORDER BY matchedCount DESC, score DESC, i.name ASC
+       LIMIT toInteger($limit)`,
+      { techniqueIds, limit: Math.max(1, Math.min(limit, 50)) },
+    );
+    return r.records.map((rec) => ({
+      actor: rowToTa(rec),
+      matchedCount: Number((rec.get('matchedCount') as { toString: () => string }).toString()),
+      actorTtpCount: Number((rec.get('actorTtpCount') as { toString: () => string }).toString()),
+      score: rec.get('score') as number,
+      matchedTechniqueIds: rec.get('matchedTechniqueIds') as string[],
+    }));
+  } finally {
+    await session.close();
+  }
+}
+
 export async function listTechniquesUsedBy(intrusionSetId: string): Promise<AttackPatternRow[]> {
   const session = getSession();
   try {

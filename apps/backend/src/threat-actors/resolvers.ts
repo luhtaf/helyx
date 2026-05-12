@@ -3,6 +3,7 @@ import { assertAuthed } from '../auth/middleware.js';
 import {
   countThreatActors,
   findThreatActorById,
+  guessActorByTtps,
   listTechniquesUsedBy,
   listThreatActors,
   type ThreatActorRow,
@@ -30,6 +31,22 @@ export const threatActorResolvers = {
         countThreatActors(filters),
       ]);
       return { items, total, page, perPage };
+    },
+
+    guessActorByTtps: async (
+      _p: unknown,
+      args: { techniqueIds: string[]; limit?: number | null },
+      ctx: RequestContext,
+    ) => {
+      assertAuthed(ctx);
+      // Strict T-code regex at the boundary — empty/garbage input → [].
+      const valid = (args.techniqueIds ?? [])
+        .map((s) => String(s).trim().toUpperCase())
+        .filter((s) => /^T\d{4}(\.\d{3})?$/.test(s));
+      if (valid.length === 0) return [];
+      const limit = args.limit && Number.isInteger(args.limit) && args.limit > 0
+        ? Math.min(args.limit, 50) : 20;
+      return guessActorByTtps(valid, limit);
     },
   },
 
