@@ -2,8 +2,11 @@
 import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
+import { useQuery } from '@vue/apollo-composable';
+import gql from 'graphql-tag';
 import { useStakeholders } from '@/composables/useStakeholders';
 import { useCreateCase, type CaseInput } from '@/composables/useCases';
+import { useAuthStore } from '@/stores/auth';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 
@@ -31,7 +34,28 @@ const reportNo = ref('');
 const title = ref('');
 const trigger = ref('');
 const summary = ref('');
-// TODO: replace with user picker when users(orgId) query lands
+// Lead user dropdown — fetch active org's members. Default empty
+// (no lead). Uses existing Organization.members field, no new BE.
+const auth = useAuthStore();
+const ORG_MEMBERS = gql`
+  query OrgMembersForLead {
+    myOrganizations {
+      id
+      members { user { id email displayName } role }
+    }
+  }
+`;
+const { result: orgsResult } = useQuery<{ myOrganizations: Array<{ id: string; members: Array<{ user: { id: string; email: string; displayName: string | null }; role: string }> }> }>(
+  ORG_MEMBERS,
+  undefined,
+  () => ({ fetchPolicy: 'cache-first' as const }),
+);
+const orgMembers = computed(() => {
+  const orgId = auth.activeOrgId;
+  if (!orgId) return [];
+  const org = orgsResult.value?.myOrganizations?.find((o) => o.id === orgId);
+  return org?.members ?? [];
+});
 const leadUserId = ref('');
 // Stored as UTC midnight per project convention; displayed as date-only (slice(0,10))
 const deployedAt = ref(new Date().toISOString().slice(0, 10));
@@ -129,7 +153,18 @@ async function onSubmit(): Promise<void> {
           />
         </label>
         <!-- TODO: replace with user picker when users(orgId) query lands -->
-        <Input v-model="leadUserId" label="Lead User ID (optional, paste UUID)" placeholder="leave empty if no lead yet" />
+        <label class="block">
+          <span class="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-faint">Lead user (optional)</span>
+          <select
+            v-model="leadUserId"
+            class="block w-full rounded-md border border-rule-strong bg-surface p-3 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-signal/30"
+          >
+            <option value="">— no lead assigned —</option>
+            <option v-for="m in orgMembers" :key="m.user.id" :value="m.user.id">
+              {{ m.user.displayName || m.user.email }} · {{ m.role.toLowerCase() }}
+            </option>
+          </select>
+        </label>
         <label class="block">
           <span class="mb-1.5 block font-mono text-[11px] uppercase tracking-wider text-ink-faint">Deployed at</span>
           <input

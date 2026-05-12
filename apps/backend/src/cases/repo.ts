@@ -177,8 +177,12 @@ export async function createCase(tenantId: string, input: CaseInput): Promise<Ca
          })
          MERGE (c)-[:ASSESSED]->(k)
          WITH c
-         FOREACH (uid IN CASE WHEN $leadUserId IS NULL THEN [] ELSE [$leadUserId] END |
-           MATCH (u:User {id: uid}) MERGE (c)-[:LED_BY]->(u))
+         CALL {
+           WITH c
+           OPTIONAL MATCH (u:User {id: $leadUserId})
+           FOREACH (_ IN CASE WHEN u IS NULL THEN [] ELSE [1] END |
+             MERGE (c)-[:LED_BY]->(u))
+         }
          RETURN ${CASE_RETURN}`,
         {
           id,

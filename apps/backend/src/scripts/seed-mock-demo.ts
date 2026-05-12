@@ -501,7 +501,7 @@ async function seedStakeholderAndAssets(plan: OrgPlan, def: StakeholderDef): Pro
       await tx.run(
         `MERGE (s:Stakeholder {tenantId: $tenantId, slug: $slug})
          ON CREATE SET s.id = randomUUID(), s.createdAt = datetime(), s.status = 'ACTIVE',
-                       s.sensorStatus = 'NONE', s.sensorAgentCount = 0
+                       s.sensorAgentCount = 0
          SET s.name = $name, s.city = $city, s.aliases = $aliases, s.updatedAt = datetime()
          WITH s
          MATCH (sk:Sektor {id: $sektorId})
