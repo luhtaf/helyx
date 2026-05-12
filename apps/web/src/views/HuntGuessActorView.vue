@@ -2,11 +2,15 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useGuessActorByTtps } from '@/composables/useThreatActors';
+import { useCreateHunt } from '@/composables/useHunts';
+import { useToast } from '@/composables/useToast';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
 
 const router = useRouter();
+const { show: showToast } = useToast();
 const raw = ref('');
+const creatingForActorId = ref<string | null>(null);
 
 const TCODE_RE = /T\d{4}(?:\.\d{3})?/g;
 const parsedIds = computed(() => {
@@ -34,6 +38,34 @@ function openInMatrix(matchedIds: string[]): void {
   // multi-highlight when matrix supports it.
   if (matchedIds.length === 0) return;
   router.push({ path: '/techniques', query: { q: matchedIds[0] } });
+}
+
+const { submit: createHunt } = useCreateHunt();
+
+// C++ — Convert a guess result row into an actionable Hunt. Pre-populates
+// the new structured Hunt with this actor as the only target so analyst
+// goes from "this is who I think it is" to "let me investigate" in one
+// click. No asset scope — let analyst add inventory inside Hunt later.
+async function openAsHunt(actor: { id: string; name: string }): Promise<void> {
+  if (creatingForActorId.value) return;
+  creatingForActorId.value = actor.id;
+  try {
+    const hunt = await createHunt({
+      name: `${actor.name} — guessed from TTPs`,
+      targetActorIds: [actor.id],
+      scopedAssetIds: [],
+    });
+    if (!hunt) {
+      showToast('Hunt creation failed', 'error');
+      return;
+    }
+    showToast(`Hunt created: ${actor.name}`, 'success');
+    router.push(`/hunts/${hunt.id}`);
+  } catch (e) {
+    showToast(`Hunt creation failed: ${(e as Error).message}`, 'error');
+  } finally {
+    creatingForActorId.value = null;
+  }
 }
 </script>
 
@@ -78,16 +110,17 @@ function openInMatrix(matchedIds: string[]): void {
     </p>
 
     <section v-if="matches.length > 0" class="border border-rule-strong rounded-md overflow-hidden">
-      <header class="grid grid-cols-[3fr_120px_70px_2fr] gap-3 px-4 py-2 border-b border-rule font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+      <header class="grid grid-cols-[3fr_120px_70px_2fr_110px] gap-3 px-4 py-2 border-b border-rule font-mono text-[10px] uppercase tracking-wider text-ink-faint">
         <span>actor</span>
         <span class="text-right">match / actor ttps</span>
         <span class="text-right">score</span>
         <span>matched ttps</span>
+        <span class="text-right">action</span>
       </header>
       <div
         v-for="m in matches"
         :key="m.actor.id"
-        class="grid grid-cols-[3fr_120px_70px_2fr] gap-3 items-center px-4 py-3 border-b border-rule last:border-b-0 hover:bg-surface/50 transition"
+        class="grid grid-cols-[3fr_120px_70px_2fr_110px] gap-3 items-center px-4 py-3 border-b border-rule last:border-b-0 hover:bg-surface/50 transition"
       >
         <div class="min-w-0">
           <router-link :to="`/threat-actors/${m.actor.id}`" class="text-ink hover:underline truncate block">
@@ -119,6 +152,15 @@ function openInMatrix(matchedIds: string[]): void {
           <span v-if="m.matchedTechniqueIds.length > 6" class="font-mono text-[10px] text-ink-faint self-center">
             +{{ m.matchedTechniqueIds.length - 6 }}
           </span>
+        </div>
+        <div class="text-right">
+          <Button
+            variant="ghost"
+            size="sm"
+            :loading="creatingForActorId === m.actor.id"
+            :disabled="creatingForActorId !== null && creatingForActorId !== m.actor.id"
+            @click="openAsHunt(m.actor)"
+          >Open as Hunt</Button>
         </div>
       </div>
     </section>
