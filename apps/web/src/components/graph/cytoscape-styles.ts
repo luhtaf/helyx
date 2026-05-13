@@ -171,6 +171,20 @@ export const HELYX_STYLESHEET: StylesheetStyle[] = [
     },
   },
   {
+    // Hunt — operator-curated investigation. Diamond, signal-gold border
+    // to read as "campaign / collection" distinct from rules/indicators.
+    selector: 'node[type = "Hunt"]',
+    style: {
+      shape: 'diamond',
+      'background-color': C.surface,
+      'border-color': C.signal,
+      'border-width': 2,
+      width: 36,
+      height: 36,
+      color: C.signal,
+    },
+  },
+  {
     selector: 'node[type = "Artifact"]',
     style: {
       shape: 'cut-rectangle',

@@ -38,6 +38,15 @@ export const ruleTypeDefs = /* GraphQL */ `
     detectsTechniqueCount: Int!
     """Number of hunts that produced this rule via :GENERATED."""
     generatedByHuntCount: Int!
+    """Hunts that produced this rule (newest first). Cap 50."""
+    generatedByHunts(limit: Int = 25): [RuleHuntRef!]!
+  }
+
+  """Slim ref for graph transforms. Avoids the full HuntFindings tree."""
+  type RuleHuntRef {
+    id: ID!
+    name: String!
+    status: String!
   }
 
   type DetectionRulePage {

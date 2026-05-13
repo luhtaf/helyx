@@ -12,6 +12,7 @@ import {
   setRuleReleaseTier,
   unapproveRule,
   updateRule,
+  listHuntsThatGenerated,
 } from './repo.js';
 import {
   RULE_KINDS,
@@ -165,6 +166,21 @@ export const ruleResolvers = {
     unapproveRule: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {
       assertOrgRole(ctx, 'ANALYST');
       return encodeRow(await unapproveRule(ctx.activeOrgId, ctx.user.id, args.id));
+    },
+  },
+
+  DetectionRule: {
+    // G2 — graph transform target. Tenant-scoped via ctx.activeOrgId.
+    generatedByHunts: async (
+      parent: { id: string },
+      args: { limit?: number },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'VIEWER');
+      const limit = !args.limit || !Number.isInteger(args.limit) || args.limit <= 0
+        ? 25
+        : Math.min(args.limit, 50);
+      return listHuntsThatGenerated(ctx.activeOrgId, parent.id, limit);
     },
   },
 };

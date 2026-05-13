@@ -468,6 +468,137 @@ const tAttackPatternActors: Transform<AttackPatternActorsResp> = {
   },
 };
 
+// ─── AttackPattern → sub-techniques + parent ───────────────────────
+
+interface AttackPatternSubtechResp {
+  attackPattern: {
+    subtechniques: { id: string; name: string; isSubtechnique: boolean }[];
+  } | null;
+}
+const ATTACK_PATTERN_SUBTECH = gql`
+  query GraphAttackPatternSubtech($id: ID!, $limit: Int) {
+    attackPattern(id: $id) {
+      subtechniques(limit: $limit) { id name isSubtechnique }
+    }
+  }
+`;
+
+const tAttackPatternSubtech: Transform<AttackPatternSubtechResp> = {
+  id: 'attackPattern.subtechniques',
+  label: 'Show sub-techniques',
+  description: 'MITRE sub-techniques of this T-code (T1003 → T1003.001 / .002 / ...).',
+  appliesTo: 'AttackPattern',
+  cap: 50,
+  varyLimit: [10, 25, 50],
+  query: ATTACK_PATTERN_SUBTECH,
+  expand: (resp, parent) => {
+    const subs = resp.attackPattern?.subtechniques ?? [];
+    return {
+      nodes: subs.map((s) => ({
+        id: nodeId('AttackPattern', s.id),
+        entityId: s.id,
+        type: 'AttackPattern',
+        label: `${s.id} ${s.name}`,
+        data: { isSubtechnique: s.isSubtechnique },
+      })),
+      edges: subs.map((s) => ({
+        id: edgeId(parent.id, nodeId('AttackPattern', s.id), 'SUBTECHNIQUE_OF'),
+        source: parent.id,
+        target: nodeId('AttackPattern', s.id),
+        edgeType: 'SUBTECHNIQUE_OF',
+        label: 'parent of',
+      })),
+    };
+  },
+};
+
+interface AttackPatternParentResp {
+  attackPattern: {
+    parentTechnique: { id: string; name: string; isSubtechnique: boolean } | null;
+  } | null;
+}
+const ATTACK_PATTERN_PARENT = gql`
+  query GraphAttackPatternParent($id: ID!) {
+    attackPattern(id: $id) {
+      parentTechnique { id name isSubtechnique }
+    }
+  }
+`;
+
+const tAttackPatternParent: Transform<AttackPatternParentResp> = {
+  id: 'attackPattern.parent',
+  label: 'Show parent technique',
+  description: 'Roll up to the parent T-code (T1003.001 → T1003).',
+  appliesTo: 'AttackPattern',
+  cap: 1,
+  query: ATTACK_PATTERN_PARENT,
+  expand: (resp, parent) => {
+    const p = resp.attackPattern?.parentTechnique;
+    if (!p) return { nodes: [], edges: [] };
+    const pid = nodeId('AttackPattern', p.id);
+    return {
+      nodes: [{
+        id: pid,
+        entityId: p.id,
+        type: 'AttackPattern',
+        label: `${p.id} ${p.name}`,
+        data: { isSubtechnique: p.isSubtechnique },
+      }],
+      edges: [{
+        id: edgeId(pid, parent.id, 'SUBTECHNIQUE_OF'),
+        source: pid,
+        target: parent.id,
+        edgeType: 'SUBTECHNIQUE_OF',
+        label: 'parent of',
+      }],
+    };
+  },
+};
+
+// ─── DetectionRule → originating Hunts ─────────────────────────────
+
+interface RuleHuntsResp {
+  detectionRule: {
+    generatedByHunts: { id: string; name: string; status: string }[];
+  } | null;
+}
+const RULE_HUNTS = gql`
+  query GraphRuleHunts($id: ID!, $limit: Int) {
+    detectionRule(id: $id) {
+      generatedByHunts(limit: $limit) { id name status }
+    }
+  }
+`;
+
+const tRuleHunts: Transform<RuleHuntsResp> = {
+  id: 'rule.generatedByHunts',
+  label: 'Show originating hunts',
+  description: 'Hunts that produced this detection rule via :GENERATED.',
+  appliesTo: 'DetectionRule',
+  cap: 50,
+  varyLimit: [10, 25, 50],
+  query: RULE_HUNTS,
+  expand: (resp, parent) => {
+    const hunts = resp.detectionRule?.generatedByHunts ?? [];
+    return {
+      nodes: hunts.map((h) => ({
+        id: nodeId('Hunt', h.id),
+        entityId: h.id,
+        type: 'Hunt',
+        label: h.name,
+        data: { status: h.status },
+      })),
+      edges: hunts.map((h) => ({
+        id: edgeId(nodeId('Hunt', h.id), parent.id, 'GENERATED'),
+        source: nodeId('Hunt', h.id),
+        target: parent.id,
+        edgeType: 'GENERATED',
+        label: 'generated',
+      })),
+    };
+  },
+};
+
 // ─── Registry ──────────────────────────────────────────────────────
 
 export const TRANSFORMS: Transform[] = [
@@ -482,6 +613,9 @@ export const TRANSFORMS: Transform[] = [
   tCaseStakeholder as Transform,
   tActorTechniques as Transform,
   tAttackPatternActors as Transform,
+  tAttackPatternSubtech as Transform,
+  tAttackPatternParent as Transform,
+  tRuleHunts as Transform,
 ];
 
 /** Find the transforms applicable to a given node type. */

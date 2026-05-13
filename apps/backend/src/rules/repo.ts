@@ -284,6 +284,38 @@ export async function createRule(
   }
 }
 
+export interface RuleHuntRef {
+  id: string;
+  name: string;
+  status: string;
+}
+
+// Hunts that produced this rule via :GENERATED. Tenant-scoped via the
+// rule lookup (rule already validated by caller).
+export async function listHuntsThatGenerated(
+  tenantId: string,
+  ruleId: string,
+  limit: number,
+): Promise<RuleHuntRef[]> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (h:Hunt {tenantId: $tenantId})-[:GENERATED]->(r:DetectionRule {id: $ruleId, tenantId: $tenantId})
+       RETURN h.id AS id, h.name AS name, coalesce(h.status, 'ACTIVE') AS status
+       ORDER BY h.createdAt DESC
+       LIMIT toInteger($limit)`,
+      { tenantId, ruleId, limit: BigInt(limit) },
+    );
+    return r.records.map((rec) => ({
+      id: rec.get('id') as string,
+      name: rec.get('name') as string,
+      status: rec.get('status') as string,
+    }));
+  } finally {
+    await session.close();
+  }
+}
+
 export async function findRuleById(
   tenantId: string,
   id: string,

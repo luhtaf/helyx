@@ -18,7 +18,8 @@ export type NodeType =
   | 'ThreatActor'
   | 'DetectionRule'
   | 'Artifact'
-  | 'CtiIoc';
+  | 'CtiIoc'
+  | 'Hunt';
 
 export interface GraphNode {
   /** Unique cytoscape node id: `${type}:${entityId}`. Idempotent — same id

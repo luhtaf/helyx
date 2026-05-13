@@ -11,6 +11,18 @@ export const attackPatternTypeDefs = /* GraphQL */ `
     killChainPhases: [String!]!
     isSubtechnique: Boolean!
     threatActors(limit: Int = 25): [ThreatActorOnTechnique!]!
+    """Direct sub-techniques. Empty when isSubtechnique=true (no
+    grand-children in MITRE)."""
+    subtechniques(limit: Int = 50): [AttackPatternRef!]!
+    """Parent technique when isSubtechnique=true. Null otherwise."""
+    parentTechnique: AttackPatternRef
+  }
+
+  """Slim ref for graph transforms — no detection text, platforms, etc."""
+  type AttackPatternRef {
+    id: ID!
+    name: String!
+    isSubtechnique: Boolean!
   }
 
   type DataComponentRef {

@@ -95,4 +95,5 @@ export const resolvers = {
   Case: caseResolvers.Case,
   Artifact: artifactResolvers.Artifact,
   AuditEvent: auditResolvers.AuditEvent,
+  DetectionRule: ruleResolvers.DetectionRule,
 };

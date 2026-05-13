@@ -120,6 +120,69 @@ export async function listThreatActorsUsingTechnique(
   }
 }
 
+export interface AttackPatternRef {
+  id: string;
+  name: string;
+  isSubtechnique: boolean;
+}
+
+// Sub-techniques are derived from T-code naming convention (T1003 →
+// T1003.001/.002/...) — no SUBTECHNIQUE_OF edge in the schema. Match
+// by id prefix; cheap, deterministic, no extra storage.
+export async function listSubtechniquesOf(
+  attackPatternId: string,
+  limit: number,
+): Promise<AttackPatternRef[]> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (a:AttackPattern)
+       WHERE a.id STARTS WITH $prefix AND a.id <> $id
+       RETURN a.id AS id, a.name AS name,
+              coalesce(a.isSubtechnique, false) AS isSubtechnique
+       ORDER BY a.id ASC
+       LIMIT toInteger($limit)`,
+      { id: attackPatternId, prefix: `${attackPatternId}.`, limit: BigInt(limit) },
+    );
+    return r.records.map((rec) => ({
+      id: rec.get('id') as string,
+      name: rec.get('name') as string,
+      isSubtechnique: Boolean(rec.get('isSubtechnique')),
+    }));
+  } finally {
+    await session.close();
+  }
+}
+
+// Parent of a sub-technique. T1059.001 → T1059. Returns null for
+// top-level techniques (id has no '.') or when the parent node is
+// missing from the graph (data gap, not a bug).
+export async function getParentTechnique(
+  attackPatternId: string,
+): Promise<AttackPatternRef | null> {
+  const dotAt = attackPatternId.indexOf('.');
+  if (dotAt === -1) return null;
+  const parentId = attackPatternId.slice(0, dotAt);
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (a:AttackPattern {id: $parentId})
+       RETURN a.id AS id, a.name AS name,
+              coalesce(a.isSubtechnique, false) AS isSubtechnique`,
+      { parentId },
+    );
+    if (r.records.length === 0) return null;
+    const rec = r.records[0]!;
+    return {
+      id: rec.get('id') as string,
+      name: rec.get('name') as string,
+      isSubtechnique: Boolean(rec.get('isSubtechnique')),
+    };
+  } finally {
+    await session.close();
+  }
+}
+
 export interface AttackPatternSearchHit {
   id: string;
   name: string;
