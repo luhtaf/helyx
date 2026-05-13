@@ -104,6 +104,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'CTI redaction', requiresRole: 'ANALYST' },
   },
   {
+    path: '/admin/cti-egress',
+    name: 'cti-egress',
+    component: () => import('@/views/CtiEgressView.vue'),
+    meta: { title: 'PDN egress allowlist', requiresRole: 'ANALYST' },
+  },
+  {
     path: '/cases',
     name: 'cases',
     component: () => import('@/views/CasesView.vue'),

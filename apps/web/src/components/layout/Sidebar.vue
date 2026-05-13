@@ -66,6 +66,8 @@ const navItems = computed<NavItem[]>(() => {
   if (isOwner.value) items.push({ to: '/admin/cti-keys', label: 'cti keys' });
   // F3a — redaction profiles visible to ANALYST+ (catalog is non-destructive).
   items.push({ to: '/admin/cti-redaction', label: 'redaction' });
+  // F3b — PDN egress allowlist visible to ANALYST+ (read), OWNER writes.
+  items.push({ to: '/admin/cti-egress', label: 'egress' });
   return items;
 });
 

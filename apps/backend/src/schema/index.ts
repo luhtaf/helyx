@@ -18,6 +18,7 @@ import { otxTypeDefs } from '../sources/otx/schema.js';
 import { ctiKeypairTypeDefs } from '../cti/sign/schema.js';
 import { ctiRedactionTypeDefs } from '../cti/redaction/schema.js';
 import { noteTypeDefs } from '../notes/schema.js';
+import { ctiEgressTypeDefs } from '../cti/egress/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -54,4 +55,5 @@ export const typeDefs = [
   ctiKeypairTypeDefs,
   ctiRedactionTypeDefs,
   noteTypeDefs,
+  ctiEgressTypeDefs,
 ];

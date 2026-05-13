@@ -23,6 +23,7 @@ import { otxResolvers } from '../sources/otx/resolvers.js';
 import { ctiKeypairResolvers } from '../cti/sign/resolvers.js';
 import { ctiRedactionResolvers } from '../cti/redaction/resolvers.js';
 import { noteResolvers } from '../notes/resolvers.js';
+import { ctiEgressResolvers } from '../cti/egress/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -61,6 +62,7 @@ export const resolvers = {
     ...ctiKeypairResolvers.Query,
     ...ctiRedactionResolvers.Query,
     ...noteResolvers.Query,
+    ...ctiEgressResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -77,6 +79,7 @@ export const resolvers = {
     ...ctiKeypairResolvers.Mutation,
     ...ctiRedactionResolvers.Mutation,
     ...noteResolvers.Mutation,
+    ...ctiEgressResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,
