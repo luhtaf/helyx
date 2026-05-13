@@ -8,6 +8,7 @@ import MatrixColumn from '@/components/matrix/MatrixColumn.vue';
 import type { MatrixColumn as MatrixColumnShape } from '@/composables/useMatrix';
 import { signalHex } from '@/utils/severity';
 import { phaseTier, tierColor, tierLabel, type PhaseTier } from '@/utils/killChain';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 
 const TACTIC_ORDER: { shortname: string; name: string }[] = [
   { shortname: 'reconnaissance',       name: 'Reconnaissance' },
@@ -248,6 +249,10 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
         />
       </div>
       <p v-else class="text-[12px] text-ink-faint">no kill-chain phases mapped on this actor's techniques.</p>
+
+      <div class="mt-12">
+        <NotesPanel entity-type="ThreatActor" :entity-id="ta.id" />
+      </div>
     </template>
   </div>
 </template>

@@ -6,6 +6,7 @@ import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
@@ -265,6 +266,10 @@ const REASON_LABEL: Record<PushBlockReason, string> = {
           >{{ RELEASE_TIER_LABELS[t] }}</button>
         </div>
       </section>
+
+      <div class="mb-8">
+        <NotesPanel entity-type="DetectionRule" :entity-id="rule.id" />
+      </div>
 
       <footer class="border-t border-rule pt-4 font-mono text-[10px] text-ink-faint">
         created {{ rule.createdAt.slice(0, 10) }} · updated {{ rule.updatedAt.slice(0, 10) }}

@@ -12,6 +12,7 @@ import CaseStatusBadge from '@/components/case/CaseStatusBadge.vue';
 import CreateStakeholderSlide from '@/components/reconciliation/CreateStakeholderSlide.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
@@ -201,6 +202,10 @@ async function onUpdate(stakeholderId: string, input: StakeholderUpdateInput): P
         <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">notes</p>
         <p class="text-[13px] text-ink-dim leading-6 whitespace-pre-line max-w-[68ch]">{{ stakeholder.notes }}</p>
       </section>
+
+      <div class="mb-8">
+        <NotesPanel entity-type="Stakeholder" :entity-id="stakeholder.id" />
+      </div>
 
       <!-- Footer metadata -->
       <footer class="border-t border-rule pt-4 font-mono text-[10px] text-ink-faint">

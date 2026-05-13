@@ -6,6 +6,7 @@ import EntityGraph, { type GraphEdge, type GraphNode } from '@/components/graph/
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import { phaseTier, tierColor, tierLabel } from '@/utils/killChain';
 import { inkDimHex, signalHex } from '@/utils/severity';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
@@ -205,6 +206,10 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
         :layout="graphLayout"
         height="460px"
       />
+
+      <div class="mt-12">
+        <NotesPanel entity-type="AttackPattern" :entity-id="ap.id" />
+      </div>
     </template>
   </div>
 </template>

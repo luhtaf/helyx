@@ -8,6 +8,7 @@ import EntityGraph, { type GraphNode, type GraphEdge } from '@/components/graph/
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
 import SbomUploadDialog from '@/components/sbom/SbomUploadDialog.vue';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 import type { SbomIngestResult } from '@/composables/useSbomUpload';
 import { severityHex, severityBorderVar, inkDimHex, inkFaintHex, signalHex } from '@/utils/severity';
 
@@ -296,6 +297,10 @@ async function onIngested(_result: SbomIngestResult): Promise<void> {
         :layout="graphLayout"
         height="460px"
       />
+
+      <div class="mt-12">
+        <NotesPanel entity-type="Asset" :entity-id="asset.id" />
+      </div>
     </template>
   </div>
 </template>

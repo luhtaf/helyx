@@ -7,6 +7,7 @@ import SeverityWord from '@/components/ui/SeverityWord.vue';
 import Pagination from '@/components/ui/Pagination.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import { severityBorderVar } from '@/utils/severity';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 
 const props = defineProps<{ id: string }>();
 
@@ -116,6 +117,10 @@ function severityBorderColor(value: string | null | undefined): string {
           :total="cwe.cves.total"
           @update:page="setPage"
         />
+      </div>
+
+      <div class="mt-12">
+        <NotesPanel entity-type="CWE" :entity-id="cwe.id" />
       </div>
     </template>
   </div>

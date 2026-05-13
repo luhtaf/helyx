@@ -8,6 +8,7 @@ import CaseVerdictBadge from '@/components/case/CaseVerdictBadge.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
 import CloseCaseModal from '@/components/case/CloseCaseModal.vue';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
@@ -163,6 +164,10 @@ const labelMap: Record<string, string> = {
           </div>
         </div>
       </section>
+
+      <div class="mt-12">
+        <NotesPanel entity-type="Case" :entity-id="caseDetail.id" />
+      </div>
     </template>
 
     <CloseCaseModal
