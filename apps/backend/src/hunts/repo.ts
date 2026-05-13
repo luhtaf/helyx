@@ -22,7 +22,8 @@ const HUNT_RETURN = `
   size([(h)-[:SCOPED_TO]->(:Asset) | 1]) AS scopedAssetCount,
   h.graphSnapshot AS graphSnapshot,
   h.graphSeedType AS graphSeedType,
-  h.graphSeedId AS graphSeedId
+  h.graphSeedId AS graphSeedId,
+  h.redactionProfileId AS redactionProfileId
 `;
 
 function rowToHunt(rec: { get: (k: string) => unknown }): HuntRecord {
@@ -45,6 +46,7 @@ function rowToHunt(rec: { get: (k: string) => unknown }): HuntRecord {
     graphSnapshot: (rec.get('graphSnapshot') as string | null) ?? null,
     graphSeedType: (rec.get('graphSeedType') as string | null) ?? null,
     graphSeedId: (rec.get('graphSeedId') as string | null) ?? null,
+    redactionProfileId: (rec.get('redactionProfileId') as string | null) ?? null,
   };
 }
 

@@ -16,6 +16,8 @@ export const huntTypeDefs = /* GraphQL */ `
     status: HuntStatus!
     """F1 — release tier (defaults 'internal' for legacy hunts)."""
     releaseTier: ReleaseTier!
+    """F3a — id of the RedactionProfile applied at export. Null = full bundle."""
+    redactionProfileId: ID
     createdAt: String!
     updatedAt: String!
     targetActorCount: Int!

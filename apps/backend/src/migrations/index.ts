@@ -20,6 +20,7 @@ import { m018_cti_org_keypair } from './m018_cti_org_keypair.js';
 import { m019_stix_export } from './m019_stix_export.js';
 import { m020_cti_ioc_intel } from './m020_cti_ioc_intel.js';
 import { m021_cti_keypair_rotation } from './m021_cti_keypair_rotation.js';
+import { m022_redaction_profile } from './m022_redaction_profile.js';
 
 export const migrations: Migration[] = [
   m001_initial_schema,
@@ -43,4 +44,5 @@ export const migrations: Migration[] = [
   m019_stix_export,
   m020_cti_ioc_intel,
   m021_cti_keypair_rotation,
+  m022_redaction_profile,
 ];

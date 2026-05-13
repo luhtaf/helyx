@@ -98,6 +98,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'CTI signing keys', requiresRole: 'OWNER' },
   },
   {
+    path: '/admin/cti-redaction',
+    name: 'cti-redaction',
+    component: () => import('@/views/CtiRedactionView.vue'),
+    meta: { title: 'CTI redaction', requiresRole: 'ANALYST' },
+  },
+  {
     path: '/cases',
     name: 'cases',
     component: () => import('@/views/CasesView.vue'),

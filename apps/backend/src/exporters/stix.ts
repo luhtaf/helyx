@@ -15,6 +15,8 @@ import type { RuleKind } from '../rules/kinds.js';
 import { validateStixBundle } from './stix-validate.js';
 import { getActiveOrCreateOrgKeypair } from '../cti/sign/keypair.js';
 import { signBytes } from '../cti/sign/sign.js';
+import { getRedactionProfile, policiesOf } from '../cti/redaction/repo.js';
+import { applyRedaction } from '../cti/redaction/redact.js';
 
 // OASIS standard TLP marking-definition IDs (stable, well-known UUIDs).
 // See https://docs.oasis-open.org/cti/stix/v2.1/os/stix-v2.1-os.html#_yd3ar14ekwrs
@@ -62,6 +64,8 @@ interface BundleHunt {
   id: string;
   name: string;
   releaseTier: ReleaseTier;
+  /** F3a — null means no redaction (full bundle). */
+  redactionProfileId: string | null;
 }
 
 interface BundleOrg {
@@ -92,6 +96,7 @@ async function fetchBundleInputs(
        WITH h, o, r ORDER BY r.kind ASC, r.name ASC
        RETURN h.id AS huntId, h.name AS huntName,
               coalesce(h.releaseTier, 'internal') AS huntTier,
+              h.redactionProfileId AS redactionProfileId,
               o.id AS orgId, coalesce(o.name, 'Unknown Org') AS orgName,
               collect(CASE WHEN r IS NULL THEN null ELSE {
                 id: r.id, kind: r.kind, name: r.name,
@@ -109,6 +114,7 @@ async function fetchBundleInputs(
       id: rec.get('huntId') as string,
       name: rec.get('huntName') as string,
       releaseTier: rec.get('huntTier') as ReleaseTier,
+      redactionProfileId: (rec.get('redactionProfileId') as string | null) ?? null,
     };
     const org: BundleOrg = {
       id: (rec.get('orgId') as string | null) ?? tenantId,
@@ -176,6 +182,10 @@ export interface StixBundleResult {
     skippedStale: number;
     tlp: keyof typeof OASIS_TLP;
     tier: ReleaseTier;
+    /** F3a — null when no profile was applied. */
+    redactionProfileId: string | null;
+    redactionIndicatorsMasked: number;
+    redactionIdentityStripped: boolean;
   };
   /** Source DetectionRule ids that produced indicators in the bundle.
    *  Used by persistStixExport to wire :INCLUDES edges. */
@@ -227,16 +237,39 @@ export async function buildHuntStixBundle(
     objects.push(buildIndicator(r, identity.id as string, tlpId));
   }
 
-  const bundle: StixBundle = {
+  const fullBundle: StixBundle = {
     type: 'bundle',
     id: `bundle--${randomUUID()}`,
     objects,
   };
 
+  // F3a — apply redaction profile (if any) BEFORE validation + signing.
+  // What goes out the door is what we sign + validate. 'full' profile is
+  // a no-op fast path. Non-existent / cross-tenant profileId silently
+  // resolves to null (= no masking) — fail-open here is safer than
+  // failing closed (operator wouldn't know why export broke).
+  let redactionPolicies = null;
+  let redactionProfileId: string | null = null;
+  let redactionStats: { indicatorsMasked: number; identityStripped: boolean } | null = null;
+  if (hunt.redactionProfileId) {
+    const profile = await getRedactionProfile(tenantId, hunt.redactionProfileId);
+    if (profile) {
+      redactionPolicies = policiesOf(profile);
+      redactionProfileId = profile.id;
+    }
+  }
+  const redacted = applyRedaction(fullBundle, redactionPolicies);
+  const bundle = redacted.bundle as StixBundle;
+  redactionStats = {
+    indicatorsMasked: redacted.stats.indicatorsMasked,
+    identityStripped: redacted.stats.identityStripped,
+  };
+
   // H5b — fail loud on generator bugs. Validation against our focused
   // STIX 2.1 schema set runs every export so any future shape regression
   // (typo in pattern_type, missing valid_from, malformed id) surfaces
-  // immediately instead of breaking downstream consumers.
+  // immediately instead of breaking downstream consumers. Runs AFTER
+  // redaction so we validate what we actually ship.
   const validation = validateStixBundle(bundle);
   if (!validation.valid) {
     const detail = validation.errors.slice(0, 5)
@@ -266,6 +299,9 @@ export async function buildHuntStixBundle(
         skippedStale,
         tlp,
         tier: hunt.releaseTier,
+        redactionProfileId,
+        redactionIndicatorsMasked: redactionStats.indicatorsMasked,
+        redactionIdentityStripped: redactionStats.identityStripped,
       },
       sourceRuleIds: approved.map((r) => r.id),
     },
@@ -325,7 +361,10 @@ export async function persistStixExport(
            bundleId: $bundleId, indicatorCount: $indicatorCount,
            tlp: $tlp, releaseTier: $releaseTier,
            bytesSize: $bytesSize, contentHash: $contentHash,
-           signature: $signature, signatureAlgorithm: 'ed25519'
+           signature: $signature, signatureAlgorithm: 'ed25519',
+           redactionProfileId: $redactionProfileId,
+           redactionIndicatorsMasked: $redactionIndicatorsMasked,
+           redactionIdentityStripped: $redactionIdentityStripped
          })
          MERGE (e)-[:DERIVED_FROM]->(h)
          MERGE (e)-[:SIGNED_BY]->(k)
@@ -344,6 +383,9 @@ export async function persistStixExport(
           signature,
           keypairId: keypair.id,
           ruleIds: approvedRuleIds,
+          redactionProfileId: result.stats.redactionProfileId,
+          redactionIndicatorsMasked: result.stats.redactionIndicatorsMasked,
+          redactionIdentityStripped: result.stats.redactionIdentityStripped,
         },
       );
     });

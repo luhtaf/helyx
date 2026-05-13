@@ -452,7 +452,7 @@ export function useExportHuntAsStix() {
 const HUNT_GRAPH_DETAIL = gql`
   query HuntGraphDetail($id: ID!) {
     hunt(id: $id) {
-      id name kind status releaseTier createdAt updatedAt
+      id name kind status releaseTier redactionProfileId createdAt updatedAt
       graphSnapshot graphSeedType graphSeedId
     }
   }
@@ -464,6 +464,7 @@ export interface HuntGraphDetail {
   kind: 'STRUCTURED' | 'GRAPH';
   status: 'ACTIVE' | 'ARCHIVED';
   releaseTier: import('./useRules').ReleaseTier;  // F1b — re-use rule's tier type
+  redactionProfileId: string | null;               // F3a — null = full bundle
   createdAt: string;
   updatedAt: string;
   graphSnapshot: string | null;

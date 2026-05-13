@@ -64,6 +64,8 @@ const navItems = computed<NavItem[]>(() => {
   const items = [...baseNavItems];
   if (isAdminOrOwner.value) items.push({ to: '/admin/stakeholders/inbox', label: 'inbox' });
   if (isOwner.value) items.push({ to: '/admin/cti-keys', label: 'cti keys' });
+  // F3a — redaction profiles visible to ANALYST+ (catalog is non-destructive).
+  items.push({ to: '/admin/cti-redaction', label: 'redaction' });
   return items;
 });
 

@@ -21,6 +21,7 @@ import { useConfirm } from '@/composables/useConfirm';
 import { useAuthStore } from '@/stores/auth';
 import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, useDeleteHunt, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
+import { useRedactionProfiles, useSetHuntRedactionProfile } from '@/composables/useRedactionProfiles';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 
@@ -147,6 +148,22 @@ async function onChangeHuntTier(e: Event): Promise<void> {
     showToast(`Hunt release tier → ${RELEASE_TIER_LABELS[next]}`, 'success');
   } catch (err) {
     showToast(`Tier change failed: ${(err as Error).message}`, 'error');
+  }
+}
+
+// F3a — redaction profile picker. Empty value = clear (= full bundle).
+const { profiles: redactionProfiles } = useRedactionProfiles();
+const { submit: setRedaction, loading: settingRedaction } = useSetHuntRedactionProfile();
+async function onChangeRedaction(e: Event): Promise<void> {
+  const raw = (e.target as HTMLSelectElement).value;
+  const next: string | null = raw === '' ? null : raw;
+  if (!huntId.value || !hunt.value || next === hunt.value.redactionProfileId) return;
+  const ok = await setRedaction(huntId.value, next);
+  if (ok) {
+    const label = next ? (redactionProfiles.value.find((p) => p.id === next)?.name ?? next) : 'full (no mask)';
+    showToast(`Redaction → ${label}`, 'success');
+  } else {
+    showToast('Redaction change failed', 'error');
   }
 }
 
@@ -516,6 +533,18 @@ onMounted(() => { void plantSeed(); });
             @change="onChangeHuntTier"
           >
             <option v-for="t in RELEASE_TIERS" :key="t" :value="t">{{ RELEASE_TIER_LABELS[t] }}</option>
+          </select>
+          <!-- F3a — redaction profile picker. Empty = no mask. -->
+          <select
+            v-if="huntId && hunt"
+            :value="hunt.redactionProfileId ?? ''"
+            :disabled="settingRedaction"
+            class="bg-surface border border-rule-strong rounded-md px-2 py-1 text-[11px] text-ink-dim font-mono uppercase tracking-wider"
+            title="redaction profile — F3a field-mask applied at STIX export. Empty = full bundle."
+            @change="onChangeRedaction"
+          >
+            <option value="">no mask</option>
+            <option v-for="p in redactionProfiles" :key="p.id" :value="p.id">redact: {{ p.slug }}</option>
           </select>
           <Button v-if="huntId" variant="ghost" :loading="generatingRules" @click="onGenerateRules">
             Generate rules

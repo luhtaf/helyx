@@ -19,6 +19,8 @@ export interface HuntRecord {
   graphSnapshot: string | null;
   graphSeedType: string | null;
   graphSeedId: string | null;
+  /** F3a — null when no profile pinned (full bundle on export). */
+  redactionProfileId: string | null;
 }
 
 export interface SearchEntityResult {

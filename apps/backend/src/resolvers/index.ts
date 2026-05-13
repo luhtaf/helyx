@@ -21,6 +21,7 @@ import { ctiIocsResolvers } from '../cti/iocs/resolvers.js';
 import { auditResolvers } from '../audits/resolvers.js';
 import { otxResolvers } from '../sources/otx/resolvers.js';
 import { ctiKeypairResolvers } from '../cti/sign/resolvers.js';
+import { ctiRedactionResolvers } from '../cti/redaction/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -57,6 +58,7 @@ export const resolvers = {
     ...auditResolvers.Query,
     ...otxResolvers.Query,
     ...ctiKeypairResolvers.Query,
+    ...ctiRedactionResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -71,6 +73,7 @@ export const resolvers = {
     ...ruleResolvers.Mutation,
     ...ctiIocsResolvers.Mutation,
     ...ctiKeypairResolvers.Mutation,
+    ...ctiRedactionResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,
