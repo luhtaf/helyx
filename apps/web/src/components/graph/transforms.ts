@@ -599,6 +599,91 @@ const tRuleHunts: Transform<RuleHuntsResp> = {
   },
 };
 
+// ─── Asset hierarchy traversal (CONTAINS) ──────────────────────────
+
+interface AssetParentResp {
+  asset: { parent: { id: string; name: string; kind: string } | null } | null;
+}
+const ASSET_PARENT = gql`
+  query GraphAssetParent($id: ID!) {
+    asset(id: $id) {
+      parent { id name kind }
+    }
+  }
+`;
+
+const tAssetParent: Transform<AssetParentResp> = {
+  id: 'asset.parent',
+  label: 'Show parent (containing) asset',
+  description: 'Tier-up via CONTAINS edge — container → host, VM → hypervisor, etc.',
+  appliesTo: 'Asset',
+  cap: 1,
+  query: ASSET_PARENT,
+  expand: (resp, parent) => {
+    const p = resp.asset?.parent;
+    if (!p) return { nodes: [], edges: [] };
+    const pid = nodeId('Asset', p.id);
+    return {
+      nodes: [{
+        id: pid,
+        entityId: p.id,
+        type: 'Asset',
+        label: p.name,
+        data: { kind: p.kind },
+      }],
+      edges: [{
+        id: edgeId(pid, parent.id, 'CONTAINS'),
+        source: pid,
+        target: parent.id,
+        edgeType: 'CONTAINS',
+        label: 'contains',
+      }],
+    };
+  },
+};
+
+interface AssetChildrenResp {
+  asset: { children: { id: string; name: string; kind: string }[] } | null;
+}
+const ASSET_CHILDREN = gql`
+  query GraphAssetChildren($id: ID!) {
+    asset(id: $id) {
+      children { id name kind }
+    }
+  }
+`;
+
+const tAssetChildren: Transform<AssetChildrenResp> = {
+  id: 'asset.children',
+  label: 'Show contained assets',
+  description: 'Tier-down via CONTAINS — host → VMs, VM → containers, etc.',
+  appliesTo: 'Asset',
+  cap: 100,
+  varyLimit: [10, 25, 50],
+  query: ASSET_CHILDREN,
+  expand: (resp, parent, limit) => {
+    const all = resp.asset?.children ?? [];
+    const kids = limit && limit < all.length ? all.slice(0, limit) : all;
+    return {
+      nodes: kids.map((c) => ({
+        id: nodeId('Asset', c.id),
+        entityId: c.id,
+        type: 'Asset',
+        label: c.name,
+        data: { kind: c.kind },
+      })),
+      edges: kids.map((c) => ({
+        id: edgeId(parent.id, nodeId('Asset', c.id), 'CONTAINS'),
+        source: parent.id,
+        target: nodeId('Asset', c.id),
+        edgeType: 'CONTAINS',
+        label: 'contains',
+      })),
+      totalAvailable: all.length,
+    };
+  },
+};
+
 // ─── Hunt → targetActors + scopedAssets ───────────────────────────
 
 interface HuntActorsResp {
@@ -786,6 +871,8 @@ export const TRANSFORMS: Transform[] = [
   tHuntAssets as Transform,
   tIocActor as Transform,
   tIocTechnique as Transform,
+  tAssetParent as Transform,
+  tAssetChildren as Transform,
 ];
 
 /** Find the transforms applicable to a given node type. */
