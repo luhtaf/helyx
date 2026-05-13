@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { RequestContext } from '../../auth/context.js';
 import { assertOrgRole } from '../../auth/middleware.js';
-import { addIndicatorForActorTtp, addIndicatorsBulk, deleteCtiIoc, listIndicatorsForActorTtp, type BulkAddResult, type CtiIocRow } from './repo.js';
+import { addIndicatorForActorTtp, addIndicatorsBulk, deleteCtiIoc, getCtiIoc, listIndicatorsForActorTtp, type BulkAddResult, type CtiIocRow } from './repo.js';
 import { IOC_TYPES, type IocType } from '../kinds.js';
 
 const TCODE = /^T\d{4}(\.\d{3})?$/;
@@ -34,6 +34,15 @@ export const ctiIocsResolvers = {
       assertOrgRole(ctx, 'VIEWER');
       if (!TCODE.test(args.techniqueId)) return [];
       return listIndicatorsForActorTtp(ctx.activeOrgId, args.actorId, args.techniqueId);
+    },
+
+    ctiIoc: async (
+      _p: unknown,
+      args: { id: string },
+      ctx: RequestContext,
+    ): Promise<CtiIocRow | null> => {
+      assertOrgRole(ctx, 'ANALYST');
+      return getCtiIoc(ctx.activeOrgId, args.id);
     },
   },
 

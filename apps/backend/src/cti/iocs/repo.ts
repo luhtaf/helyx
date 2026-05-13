@@ -34,6 +34,47 @@ export interface CreateCtiIocInput {
   techniqueId: string;   // :AttackPattern.id (T-code)
 }
 
+// Single IOC by id — used by graph transforms (ioc.actor, ioc.technique)
+// to resolve attribution edges into ThreatActor + AttackPattern nodes.
+// Tenant-scoped.
+export async function getCtiIoc(
+  tenantId: string,
+  id: string,
+): Promise<CtiIocRow | null> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (i:CtiIoc {tenantId: $tenantId, id: $id})
+       OPTIONAL MATCH (i)-[:ATTRIBUTED_TO]->(a:IntrusionSet)
+       OPTIONAL MATCH (i)-[:HINTS_AT_TTP]->(t:AttackPattern)
+       RETURN i.id AS id, i.tenantId AS tenantId, i.iocType AS iocType, i.value AS value,
+              i.notes AS notes, i.source AS source, i.addedByUserId AS addedByUserId,
+              toString(i.addedAt) AS addedAt,
+              a.id AS actorId, coalesce(a.name, '—') AS actorName,
+              t.id AS techniqueId, coalesce(t.name, '—') AS techniqueName`,
+      { tenantId, id },
+    );
+    if (r.records.length === 0) return null;
+    const rec = r.records[0]!;
+    return {
+      id: rec.get('id') as string,
+      tenantId: rec.get('tenantId') as string,
+      iocType: rec.get('iocType') as IocType,
+      value: rec.get('value') as string,
+      notes: (rec.get('notes') as string | null) ?? null,
+      source: (rec.get('source') as string | null) ?? null,
+      addedByUserId: rec.get('addedByUserId') as string,
+      addedAt: rec.get('addedAt') as string,
+      actorId: (rec.get('actorId') as string | null) ?? '',
+      actorName: rec.get('actorName') as string,
+      techniqueId: (rec.get('techniqueId') as string | null) ?? '',
+      techniqueName: rec.get('techniqueName') as string,
+    };
+  } finally {
+    await session.close();
+  }
+}
+
 // Indicators for a specific (actor, technique) pair within a tenant.
 // Sorted newest-first so the panel surfaces fresh intel at the top.
 export async function listIndicatorsForActorTtp(

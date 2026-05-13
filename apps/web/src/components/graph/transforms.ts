@@ -599,6 +599,172 @@ const tRuleHunts: Transform<RuleHuntsResp> = {
   },
 };
 
+// ─── Hunt → targetActors + scopedAssets ───────────────────────────
+
+interface HuntActorsResp {
+  hunt: {
+    targetActors: { id: string; name: string; techniqueCount: number }[];
+  } | null;
+}
+const HUNT_ACTORS = gql`
+  query GraphHuntActors($id: ID!) {
+    hunt(id: $id) {
+      targetActors { id name techniqueCount }
+    }
+  }
+`;
+
+const tHuntActors: Transform<HuntActorsResp> = {
+  id: 'hunt.targetActors',
+  label: 'Show targeted actors',
+  description: 'IntrusionSets this hunt is investigating.',
+  appliesTo: 'Hunt',
+  cap: 50,
+  varyLimit: [10, 25, 50],
+  query: HUNT_ACTORS,
+  expand: (resp, parent, limit) => {
+    const all = resp.hunt?.targetActors ?? [];
+    const actors = limit && limit < all.length ? all.slice(0, limit) : all;
+    return {
+      nodes: actors.map((a) => ({
+        id: nodeId('ThreatActor', a.id),
+        entityId: a.id,
+        type: 'ThreatActor',
+        label: a.name,
+        data: { techniqueCount: a.techniqueCount },
+      })),
+      edges: actors.map((a) => ({
+        id: edgeId(parent.id, nodeId('ThreatActor', a.id), 'TARGETS'),
+        source: parent.id,
+        target: nodeId('ThreatActor', a.id),
+        edgeType: 'TARGETS',
+        label: 'targets',
+      })),
+      totalAvailable: all.length,
+    };
+  },
+};
+
+interface HuntAssetsResp {
+  hunt: {
+    scopedAssets: { id: string; name: string; kind: string }[];
+  } | null;
+}
+const HUNT_ASSETS = gql`
+  query GraphHuntAssets($id: ID!) {
+    hunt(id: $id) {
+      scopedAssets { id name kind }
+    }
+  }
+`;
+
+const tHuntAssets: Transform<HuntAssetsResp> = {
+  id: 'hunt.scopedAssets',
+  label: 'Show scoped assets',
+  description: 'Inventory this hunt covers.',
+  appliesTo: 'Hunt',
+  cap: 100,
+  varyLimit: [10, 25, 50],
+  query: HUNT_ASSETS,
+  expand: (resp, parent, limit) => {
+    const all = resp.hunt?.scopedAssets ?? [];
+    const assets = limit && limit < all.length ? all.slice(0, limit) : all;
+    return {
+      nodes: assets.map((a) => ({
+        id: nodeId('Asset', a.id),
+        entityId: a.id,
+        type: 'Asset',
+        label: a.name,
+        data: { kind: a.kind },
+      })),
+      edges: assets.map((a) => ({
+        id: edgeId(parent.id, nodeId('Asset', a.id), 'SCOPED_TO'),
+        source: parent.id,
+        target: nodeId('Asset', a.id),
+        edgeType: 'SCOPED_TO',
+        label: 'scope',
+      })),
+      totalAvailable: all.length,
+    };
+  },
+};
+
+// ─── CtiIoc → actor + technique attribution ────────────────────────
+
+interface IocAttributionResp {
+  ctiIoc: {
+    actorId: string;
+    actorName: string;
+    techniqueId: string;
+    techniqueName: string;
+  } | null;
+}
+const IOC_ATTRIBUTION = gql`
+  query GraphIocAttribution($id: ID!) {
+    ctiIoc(id: $id) {
+      actorId actorName techniqueId techniqueName
+    }
+  }
+`;
+
+const tIocActor: Transform<IocAttributionResp> = {
+  id: 'ioc.actor',
+  label: 'Show attributed actor',
+  description: 'IntrusionSet this indicator was attributed to (W2.5).',
+  appliesTo: 'CtiIoc',
+  cap: 1,
+  query: IOC_ATTRIBUTION,
+  expand: (resp, parent) => {
+    const i = resp.ctiIoc;
+    if (!i || !i.actorId) return { nodes: [], edges: [] };
+    const aid = nodeId('ThreatActor', i.actorId);
+    return {
+      nodes: [{
+        id: aid,
+        entityId: i.actorId,
+        type: 'ThreatActor',
+        label: i.actorName,
+      }],
+      edges: [{
+        id: edgeId(parent.id, aid, 'ATTRIBUTED_TO'),
+        source: parent.id,
+        target: aid,
+        edgeType: 'ATTRIBUTED_TO',
+        label: 'attributed to',
+      }],
+    };
+  },
+};
+
+const tIocTechnique: Transform<IocAttributionResp> = {
+  id: 'ioc.technique',
+  label: 'Show attributed technique',
+  description: 'MITRE T-code this indicator hints at (W2.5).',
+  appliesTo: 'CtiIoc',
+  cap: 1,
+  query: IOC_ATTRIBUTION,
+  expand: (resp, parent) => {
+    const i = resp.ctiIoc;
+    if (!i || !i.techniqueId) return { nodes: [], edges: [] };
+    const tid = nodeId('AttackPattern', i.techniqueId);
+    return {
+      nodes: [{
+        id: tid,
+        entityId: i.techniqueId,
+        type: 'AttackPattern',
+        label: `${i.techniqueId} ${i.techniqueName}`,
+      }],
+      edges: [{
+        id: edgeId(parent.id, tid, 'HINTS_AT_TTP'),
+        source: parent.id,
+        target: tid,
+        edgeType: 'HINTS_AT_TTP',
+        label: 'hints at',
+      }],
+    };
+  },
+};
+
 // ─── Registry ──────────────────────────────────────────────────────
 
 export const TRANSFORMS: Transform[] = [
@@ -616,6 +782,10 @@ export const TRANSFORMS: Transform[] = [
   tAttackPatternSubtech as Transform,
   tAttackPatternParent as Transform,
   tRuleHunts as Transform,
+  tHuntActors as Transform,
+  tHuntAssets as Transform,
+  tIocActor as Transform,
+  tIocTechnique as Transform,
 ];
 
 /** Find the transforms applicable to a given node type. */

@@ -39,6 +39,9 @@ export const ctiIocsTypeDefs = /* GraphQL */ `
   extend type Query {
     """W2.5 — Indicators for a specific (Actor × TTP) pair within current tenant."""
     indicatorsForActorTtp(actorId: ID!, techniqueId: String!): [CtiIoc!]!
+    """Single IOC fetch for graph transforms (ioc.actor / ioc.technique).
+    Returns null when not found or in a different tenant. ANALYST role."""
+    ctiIoc(id: ID!): CtiIoc
   }
 
   input AddCtiIocsBulkInput {
