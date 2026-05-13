@@ -5,6 +5,7 @@ import SectionRule from '@/components/ui/SectionRule.vue';
 import SeverityWord from '@/components/ui/SeverityWord.vue';
 import EntityGraph, { type GraphNode, type GraphEdge } from '@/components/graph/EntityGraph.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 import { severityHex, severityBorderVar, inkDimHex, inkFaintHex } from '@/utils/severity';
 
 const props = defineProps<{ id: string }>();
@@ -228,6 +229,10 @@ const graphLayout = computed<'concentric' | 'cose'>(() =>
         :layout="graphLayout"
         height="420px"
       />
+
+      <div class="mt-12">
+        <NotesPanel entity-type="CVE" :entity-id="cve.id" />
+      </div>
     </template>
   </div>
 </template>

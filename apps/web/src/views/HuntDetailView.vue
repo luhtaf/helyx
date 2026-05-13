@@ -9,6 +9,7 @@ import SeverityWord from '@/components/ui/SeverityWord.vue';
 import EntityGraph, { type GraphEdge, type GraphNode } from '@/components/graph/EntityGraph.vue';
 import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
+import NotesPanel from '@/components/notes/NotesPanel.vue';
 import { severityHex, severityBorderVar, inkDimHex, signalHex } from '@/utils/severity';
 import { phaseTier, tierColor, tierLabel } from '@/utils/killChain';
 
@@ -190,6 +191,10 @@ const graph = computed<{ nodes: GraphNode[]; edges: GraphEdge[] }>(() => {
         layout="cose"
         height="520px"
       />
+
+      <div class="mt-12">
+        <NotesPanel entity-type="Hunt" :entity-id="hunt.id" />
+      </div>
     </template>
   </div>
 </template>
