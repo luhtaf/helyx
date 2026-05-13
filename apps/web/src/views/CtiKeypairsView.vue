@@ -13,6 +13,7 @@
 import { ref } from 'vue';
 import {
   useCtiKeypairs, useRotateKeypair, useRevokeKeypair,
+  useCtiKeypairRotations, downloadPublicKey,
   type CtiOrgKeypair,
 } from '@/composables/useCtiKeypairs';
 import { useToast } from '@/composables/useToast';
@@ -21,6 +22,7 @@ import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
 
 const { active, previous, revoked, loading, error, refetch } = useCtiKeypairs();
+const { rotations, refetch: refetchRotations } = useCtiKeypairRotations();
 const { submit: rotate, loading: rotating } = useRotateKeypair();
 const { submit: revoke, loading: revoking } = useRevokeKeypair();
 const { show: showToast } = useToast();
@@ -50,10 +52,15 @@ async function onRotate(): Promise<void> {
   if (next) {
     showToast(`New active keypair · ${next.fingerprint}`, 'success');
     rotateReason.value = '';
-    await refetch();
+    await Promise.all([refetch(), refetchRotations()]);
   } else {
     showToast('Rotation failed', 'error');
   }
+}
+
+function onDownloadPem(k: CtiOrgKeypair): void {
+  downloadPublicKey(k.publicKeyPem, k.fingerprint);
+  showToast(`Saved helyx-cti-public-${k.fingerprint}.pem`, 'success');
 }
 
 async function onRevoke(k: CtiOrgKeypair): Promise<void> {
@@ -125,7 +132,10 @@ function fmtDate(s: string | null | undefined): string {
               <span class="font-mono text-[13px] text-signal tabular-nums">{{ active.fingerprint }}</span>
               <span class="font-mono text-[10px] uppercase tracking-wider text-sev-low">{{ active.algorithm }}</span>
             </div>
-            <span class="font-mono text-[10px] text-ink-faint">created {{ fmtDate(active.createdAt) }}</span>
+            <div class="flex items-center gap-3">
+              <span class="font-mono text-[10px] text-ink-faint">created {{ fmtDate(active.createdAt) }}</span>
+              <Button variant="ghost" size="sm" @click="onDownloadPem(active)">⤓ public key</Button>
+            </div>
           </div>
           <details class="text-[11px]">
             <summary class="cursor-pointer text-ink-dim hover:text-ink transition select-none">show public key (PEM)</summary>
@@ -178,9 +188,16 @@ function fmtDate(s: string | null | undefined): string {
                 <span class="font-mono text-[12px] text-ink tabular-nums">{{ k.fingerprint }}</span>
                 <span class="font-mono text-[10px] uppercase tracking-wider text-ink-dim">{{ k.algorithm }}</span>
               </div>
-              <span class="font-mono text-[10px] text-ink-faint">
-                created {{ fmtDate(k.createdAt) }} · rotated {{ fmtDate(k.rotatedAt) }}
-              </span>
+              <div class="flex items-center gap-3">
+                <span class="font-mono text-[10px] text-ink-faint">
+                  created {{ fmtDate(k.createdAt) }} · rotated {{ fmtDate(k.rotatedAt) }}
+                </span>
+                <button
+                  type="button"
+                  class="font-mono text-[10px] uppercase tracking-wider text-ink-dim hover:text-ink transition"
+                  @click="onDownloadPem(k)"
+                >⤓ pem</button>
+              </div>
             </div>
             <div class="flex items-center gap-2">
               <input
@@ -222,15 +239,52 @@ function fmtDate(s: string | null | undefined): string {
                 <span class="font-mono text-[12px] text-ink-dim line-through tabular-nums">{{ k.fingerprint }}</span>
                 <span class="font-mono text-[10px] uppercase tracking-wider text-sev-crit">revoked</span>
               </div>
-              <span class="font-mono text-[10px] text-ink-faint">
-                revoked {{ fmtDate(k.revokedAt) }}
-              </span>
+              <div class="flex items-center gap-3">
+                <span class="font-mono text-[10px] text-ink-faint">
+                  revoked {{ fmtDate(k.revokedAt) }}
+                </span>
+                <button
+                  type="button"
+                  class="font-mono text-[10px] uppercase tracking-wider text-ink-dim hover:text-ink transition"
+                  @click="onDownloadPem(k)"
+                  title="Download public key — kept so verifiers can check old bundles (signatures stay valid, status flag warns them)."
+                >⤓ pem</button>
+              </div>
             </div>
             <p v-if="k.revokedReason" class="text-[12px] text-ink-mid italic leading-snug">
               {{ k.revokedReason }}
             </p>
           </li>
         </ul>
+      </section>
+
+      <!-- Rotation history — append-only ledger from :KeypairRotation -->
+      <section v-if="rotations.length" class="mb-12">
+        <div class="flex items-baseline gap-4 mb-4">
+          <h2 class="font-mono text-[10px] uppercase tracking-wider text-ink-dim">rotation history · {{ rotations.length }}</h2>
+          <div class="flex-1 border-b border-rule-strong" />
+        </div>
+
+        <ol class="space-y-3">
+          <li
+            v-for="r in rotations"
+            :key="r.id"
+            class="border border-rule rounded-md p-4 bg-surface/20"
+          >
+            <div class="flex items-baseline justify-between gap-4 mb-2">
+              <div class="flex items-baseline gap-2 font-mono text-[11px] tabular-nums">
+                <span v-if="r.oldFingerprint" class="text-ink-dim">{{ r.oldFingerprint }}</span>
+                <span v-else class="text-ink-faint italic">∅ initial</span>
+                <span class="text-ink-faint">→</span>
+                <span class="text-signal">{{ r.newFingerprint }}</span>
+              </div>
+              <span class="font-mono text-[10px] text-ink-faint">
+                {{ fmtDate(r.ts) }} · {{ r.actorEmail ?? r.actorUserId.slice(0, 8) }}
+              </span>
+            </div>
+            <p class="text-[12px] text-ink-mid italic leading-snug">{{ r.reason }}</p>
+          </li>
+        </ol>
       </section>
     </template>
   </div>

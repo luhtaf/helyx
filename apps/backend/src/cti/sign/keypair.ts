@@ -265,6 +265,62 @@ export async function getKeypairSummary(tenantId: string, id: string): Promise<O
   return row ? rowToSummary(row, tenantId) : null;
 }
 
+export interface KeypairRotationRow {
+  id: string;
+  ts: string;
+  actorUserId: string;
+  actorEmail: string | null;
+  oldKeypairId: string | null;
+  oldFingerprint: string | null;
+  newKeypairId: string;
+  newFingerprint: string;
+  reason: string;
+}
+
+// Read the rotation ledger for the tenant, enriched with actor email
+// (best-effort via OPTIONAL MATCH) + fingerprints of the old/new keys
+// (computed via sha256(publicKeyPem) at query-time — cheap, no storage).
+// Newest first.
+export async function listOrgKeypairRotations(tenantId: string): Promise<KeypairRotationRow[]> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (r:KeypairRotation {tenantId: $tenantId})
+       OPTIONAL MATCH (u:User {id: r.actorUserId})
+       OPTIONAL MATCH (oldK:CtiOrgKeypair {id: r.oldKeypairId, tenantId: $tenantId})
+       OPTIONAL MATCH (newK:CtiOrgKeypair {id: r.newKeypairId, tenantId: $tenantId})
+       RETURN r.id AS id,
+              toString(r.ts) AS ts,
+              r.actorUserId AS actorUserId,
+              u.email AS actorEmail,
+              r.oldKeypairId AS oldKeypairId,
+              oldK.publicKeyPem AS oldPem,
+              r.newKeypairId AS newKeypairId,
+              newK.publicKeyPem AS newPem,
+              r.reason AS reason
+       ORDER BY r.ts DESC`,
+      { tenantId },
+    );
+    return r.records.map((rec) => {
+      const oldPem = rec.get('oldPem') as string | null;
+      const newPem = rec.get('newPem') as string | null;
+      return {
+        id: rec.get('id') as string,
+        ts: rec.get('ts') as string,
+        actorUserId: rec.get('actorUserId') as string,
+        actorEmail: (rec.get('actorEmail') as string | null) ?? null,
+        oldKeypairId: (rec.get('oldKeypairId') as string | null) ?? null,
+        oldFingerprint: oldPem ? fingerprintOf(oldPem) : null,
+        newKeypairId: rec.get('newKeypairId') as string,
+        newFingerprint: newPem ? fingerprintOf(newPem) : '—',
+        reason: rec.get('reason') as string,
+      };
+    });
+  } finally {
+    await session.close();
+  }
+}
+
 export async function listOrgKeypairs(tenantId: string): Promise<OrgKeypairSummary[]> {
   const session = getSession();
   try {

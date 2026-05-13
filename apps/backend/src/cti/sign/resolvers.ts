@@ -3,9 +3,11 @@ import { assertOrgRole } from '../../auth/middleware.js';
 import type { RequestContext } from '../../auth/context.js';
 import {
   listOrgKeypairs,
+  listOrgKeypairRotations,
   rotateOrgKeypair,
   revokeOrgKeypair,
   type OrgKeypairSummary,
+  type KeypairRotationRow,
 } from './keypair.js';
 
 // Resolvers stay thin — repo functions take primitives. Auth is OWNER for
@@ -24,6 +26,13 @@ export const ctiKeypairResolvers = {
     async ctiOrgKeypairs(_p: unknown, _a: unknown, ctx: RequestContext): Promise<OrgKeypairSummary[]> {
       assertOrgRole(ctx, 'ANALYST');
       return listOrgKeypairs(ctx.activeOrgId);
+    },
+
+    async ctiKeypairRotations(
+      _p: unknown, _a: unknown, ctx: RequestContext,
+    ): Promise<KeypairRotationRow[]> {
+      assertOrgRole(ctx, 'ANALYST');
+      return listOrgKeypairRotations(ctx.activeOrgId);
     },
   },
   Mutation: {

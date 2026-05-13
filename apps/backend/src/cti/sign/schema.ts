@@ -26,9 +26,31 @@ export const ctiKeypairTypeDefs = /* GraphQL */ `
     revokedReason: String
   }
 
+  """One entry in the per-tenant rotation ledger. Created every time
+  rotateCtiKeypair runs."""
+  type CtiKeypairRotation {
+    id: ID!
+    ts: String!
+    actorUserId: ID!
+    """Email of the user who triggered the rotation. Null if account deleted."""
+    actorEmail: String
+    """Id of the demoted keypair. Null on the tenant's very first rotation
+    (no prior active keypair existed)."""
+    oldKeypairId: ID
+    """Fingerprint of the demoted keypair (sha256 of public key, first 16
+    hex chars). Null when oldKeypairId is null or when the prior key was
+    revoked + cleaned up."""
+    oldFingerprint: String
+    newKeypairId: ID!
+    newFingerprint: String!
+    reason: String!
+  }
+
   extend type Query {
     """All keypairs for the active org, newest first. ANALYST role."""
     ctiOrgKeypairs: [CtiOrgKeypair!]!
+    """Per-tenant rotation ledger entries, newest first. ANALYST role."""
+    ctiKeypairRotations: [CtiKeypairRotation!]!
   }
 
   extend type Mutation {

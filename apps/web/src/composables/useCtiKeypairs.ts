@@ -2,7 +2,7 @@
 // (mints new active + demotes current), revoke (marks compromised key
 // untrusted). Rotate + revoke are OWNER-only mutations.
 
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useApolloClient, useQuery } from '@vue/apollo-composable';
 import gql from 'graphql-tag';
 
@@ -67,6 +67,57 @@ export function useCtiKeypairs() {
     () => keypairs.value.filter((k) => k.status === 'revoked'),
   );
   return { keypairs, active, previous, revoked, loading, error, refetch };
+}
+
+export interface CtiKeypairRotation {
+  id: string;
+  ts: string;
+  actorUserId: string;
+  actorEmail: string | null;
+  oldKeypairId: string | null;
+  oldFingerprint: string | null;
+  newKeypairId: string;
+  newFingerprint: string;
+  reason: string;
+}
+
+const ROTATIONS_QUERY = gql`
+  query CtiKeypairRotations {
+    ctiKeypairRotations {
+      id ts actorUserId actorEmail
+      oldKeypairId oldFingerprint
+      newKeypairId newFingerprint
+      reason
+    }
+  }
+`;
+
+export function useCtiKeypairRotations() {
+  const { result, loading, error, refetch } = useQuery<{ ctiKeypairRotations: CtiKeypairRotation[] }>(
+    ROTATIONS_QUERY,
+    null,
+    { fetchPolicy: 'cache-and-network' },
+  );
+  const rotations = computed<CtiKeypairRotation[]>(() => result.value?.ctiKeypairRotations ?? []);
+  return { rotations, loading, error, refetch };
+}
+
+/**
+ * Trigger a client-side download of a public key as a .pem file. Uses
+ * a Blob + dynamic <a download> link — no server roundtrip, no extra
+ * route. Filename includes the fingerprint so an operator with several
+ * keys side-by-side can tell them apart.
+ */
+export function downloadPublicKey(pem: string, fingerprint: string): void {
+  const blob = new Blob([pem], { type: 'application/x-pem-file' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `helyx-cti-public-${fingerprint}.pem`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export function useRotateKeypair() {
