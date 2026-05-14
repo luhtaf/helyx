@@ -16,6 +16,7 @@ import { readSessionCookie, readCsrfCookie } from './auth/cookie.js';
 import { loadCsrfToken, safeEqual } from './auth/csrf.js';
 import { verifyAccessToken } from './auth/jwt.js';
 import { startScheduler } from './scheduler/index.js';
+import { scannerIngestHandler } from './scanners/ingest.js';
 
 // ---------------------------------------------------------------------------
 // CSRF guard — AST-based mutation detection
@@ -132,6 +133,11 @@ async function main(): Promise<void> {
     allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Helyx-Org', 'Authorization'],
     exposedHeaders: ['X-Helyx-Auth-Deprecation'],
   }));
+
+  // Scanner ingest — Bearer-token auth, NOT cookie-bound. Mounted
+  // before csrfGuard so the scanner agent doesn't need CSRF token.
+  // The endpoint validates its own bearer token internally.
+  app.post('/api/v1/scanner/ingest', scannerIngestHandler);
 
   // Order: cors → cookieParser → apiLimiter → csrfGuard → /graphql
   app.use('/graphql', apiLimiter);

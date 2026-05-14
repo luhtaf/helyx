@@ -20,6 +20,7 @@ import { ctiRedactionTypeDefs } from '../cti/redaction/schema.js';
 import { noteTypeDefs } from '../notes/schema.js';
 import { ctiEgressTypeDefs } from '../cti/egress/schema.js';
 import { ctiPushTypeDefs } from '../cti/push/schema.js';
+import { scannerTypeDefs } from '../scanners/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -58,4 +59,5 @@ export const typeDefs = [
   noteTypeDefs,
   ctiEgressTypeDefs,
   ctiPushTypeDefs,
+  scannerTypeDefs,
 ];
