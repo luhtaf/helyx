@@ -4,6 +4,7 @@ import { buildHuntStixBundle } from '../../exporters/stix.js';
 import { isHostnameAllowed } from '../egress/repo.js';
 import { logAudit } from '../../audits/log.js';
 import { fetchHuntName, getPushTarget, recordPushAttempt } from './repo.js';
+import { uploadStixToMisp } from './misp/client.js';
 import type { CtiPushAttempt, CtiPushTarget, PushOutcome } from './types.js';
 
 // H7/H9 — push pipeline orchestration. Threads through every gate
@@ -181,9 +182,33 @@ export async function pushHuntToTarget(
     return { attempt: a, bundleContentHash };
   }
 
-  // v1: real HTTP not implemented yet — flip the rail and surface a
-  // friendly error. Lands in failed_http so the audit history
-  // distinguishes a real network failure from a dry-run.
+  // Real HTTP push. Each kind has its own client; switch dispatches.
+  if (target.kind === 'MISP') {
+    const r = await uploadStixToMisp(target.url, target.apiKey, result.json);
+    if (r.ok) {
+      const a = await recordAndAudit(
+        tenantId, actorUserId, target, huntId, huntName, 'success',
+        {
+          bundleContentHash,
+          indicatorCount: result.stats.indicatorCount,
+          errorDetail: r.eventId ? `MISP event id: ${r.eventId}` : null,
+        },
+      );
+      return { attempt: a, bundleContentHash };
+    }
+    const a = await recordAndAudit(
+      tenantId, actorUserId, target, huntId, huntName, 'failed_http',
+      {
+        bundleContentHash,
+        indicatorCount: result.stats.indicatorCount,
+        errorDetail: r.errorDetail ?? `MISP HTTP ${r.status}`,
+      },
+    );
+    return { attempt: a, bundleContentHash };
+  }
+
+  // OPENCTI / TAXII / ECLECTICIQ live clients still pending. Friendly
+  // error so operator knows to use dryRun for these kinds.
   const a = await recordAndAudit(
     tenantId, actorUserId, target, huntId, huntName, 'failed_http',
     {
