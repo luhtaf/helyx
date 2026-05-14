@@ -2,7 +2,8 @@
 import { computed, ref, toRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStakeholder } from '@/composables/useStakeholder';
-import { useUpdateStakeholder, type StakeholderUpdateInput } from '@/composables/useStakeholders';
+import { useUpdateStakeholder, useSetStakeholderSensor, type StakeholderUpdateInput, type SensorInput } from '@/composables/useStakeholders';
+import SensorInputModal from '@/components/stakeholder/SensorInputModal.vue';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
 import { severityClass } from '@/utils/severity';
@@ -24,6 +25,18 @@ const { stakeholder, loading, error, refetch } = useStakeholder(() => idRef.valu
 const canEdit = computed(() => auth.hasMinRole('ANALYST'));
 const editOpen = ref(false);
 const { submit: updateStakeholder, loading: updating } = useUpdateStakeholder();
+const { submit: setSensor, loading: settingSensor } = useSetStakeholderSensor();
+const sensorOpen = ref(false);
+async function onSetSensor(input: SensorInput): Promise<void> {
+  if (!stakeholder.value) return;
+  const r = await setSensor(stakeholder.value.id, input);
+  if (r) {
+    showToast('Sensor coverage updated', 'success');
+    sensorOpen.value = false;
+  } else {
+    showToast('Update failed', 'error');
+  }
+}
 
 async function onUpdate(stakeholderId: string, input: StakeholderUpdateInput): Promise<void> {
   try {
@@ -103,7 +116,15 @@ async function onUpdate(stakeholderId: string, input: StakeholderUpdateInput): P
 
       <!-- Sensor deployment summary -->
       <section class="mb-8 border-t border-rule pt-6">
-        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-3">sensor deployment</p>
+        <div class="flex items-baseline justify-between mb-3">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">sensor deployment</p>
+          <button
+            v-if="canEdit"
+            type="button"
+            class="font-mono text-[10px] uppercase tracking-wider text-ink-faint hover:text-ink transition"
+            @click="sensorOpen = true"
+          >configure ↗</button>
+        </div>
         <div class="grid grid-cols-4 gap-x-8 gap-y-3">
           <div>
             <p class="font-mono text-[10px] text-ink-faint">stack</p>
@@ -212,6 +233,14 @@ async function onUpdate(stakeholderId: string, input: StakeholderUpdateInput): P
         created {{ stakeholder.createdAt.slice(0, 10) }} · updated {{ stakeholder.updatedAt.slice(0, 10) }}
       </footer>
     </template>
+
+    <SensorInputModal
+      :open="sensorOpen"
+      :loading="settingSensor"
+      :existing="stakeholder?.sensor ?? null"
+      @submit="onSetSensor"
+      @cancel="sensorOpen = false"
+    />
 
     <CreateStakeholderSlide
       :raw="null"

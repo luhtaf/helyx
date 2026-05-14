@@ -173,3 +173,38 @@ export function useUpdateStakeholder(): {
   }
   return { submit, loading, error };
 }
+
+// ─── Sensor input (per-stakeholder) ────────────────────────────────
+// SensorStack/SensorStatus already imported at top of file.
+
+export interface SensorInput {
+  stack?: SensorStack | null;
+  status?: SensorStatus | null;
+  agentCount?: number | null;
+  deployedAt?: string | null;
+  notes?: string | null;
+}
+
+const SET_STAKEHOLDER_SENSOR = gql`
+  mutation SetStakeholderSensor($id: ID!, $input: SensorInput!) {
+    setStakeholderSensor(id: $id, input: $input) {
+      id
+      sensor { stack status agentCount deployedAt notes }
+    }
+  }
+`;
+
+export function useSetStakeholderSensor() {
+  const { mutate, loading, error } = useMutation<
+    { setStakeholderSensor: Stakeholder },
+    { id: string; input: SensorInput }
+  >(SET_STAKEHOLDER_SENSOR, () => ({
+    refetchQueries: ['Stakeholders', 'Stakeholder'],
+    awaitRefetchQueries: true,
+  }));
+  async function submit(id: string, input: SensorInput): Promise<Stakeholder | null> {
+    const r = await mutate({ id, input });
+    return r?.data?.setStakeholderSensor ?? null;
+  }
+  return { submit, loading, error };
+}
