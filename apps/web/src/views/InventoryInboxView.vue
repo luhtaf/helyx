@@ -13,7 +13,7 @@
 import { ref, computed, watch } from 'vue';
 import {
   useScanReports, useDiscoveredAssets, useDiscoveredMutations,
-  useUploadManualScan, useBulkAcceptReport,
+  useUploadManualScan, useBulkAcceptReport, useBulkRejectReport,
   type ScanReport, type DiscoveredAsset, type ScanReportStatus,
 } from '@/composables/useScanners';
 import { useAssetAutocomplete, type AssetAutocompleteHit } from '@/composables/useAssets';
@@ -134,6 +134,24 @@ async function onBulkAccept(): Promise<void> {
   const r = await bulkAccept(selectedReportId.value);
   if (r != null) showToast(`Accepted ${r} item${r === 1 ? '' : 's'}`, 'success');
   else showToast('Bulk accept failed', 'error');
+}
+
+// Bulk reject all pending in selected report — symmetrical to bulk accept.
+// Operator move when whole batch is noise (e.g. scanner found a noisy /24 of
+// off-scope hosts). Audit row notes total + reason.
+const { submit: bulkReject, submitting: bulkRejecting } = useBulkRejectReport();
+async function onBulkReject(): Promise<void> {
+  if (!selectedReportId.value || pendingItems.value.length === 0) return;
+  const ok = await confirm({
+    title: `Reject all ${pendingItems.value.length} pending items?`,
+    message: 'Whole batch marked rejected. Audit chain preserved. Cannot be undone individually.',
+    variant: 'danger',
+    confirmLabel: `Reject all ${pendingItems.value.length}`,
+  });
+  if (!ok) return;
+  const r = await bulkReject(selectedReportId.value, null);
+  if (r != null) showToast(`Rejected ${r} item${r === 1 ? '' : 's'}`, 'success');
+  else showToast('Bulk reject failed', 'error');
 }
 
 async function onUpload(): Promise<void> {
@@ -272,13 +290,20 @@ function discoveredStatusLabel(s: DiscoveredAsset['status']): string {
             <template v-else>select a report</template>
           </h2>
           <div class="flex-1 border-b border-rule" />
-          <Button
-            v-if="selectedReportId && pendingItems.length > 0"
-            variant="ghost"
-            size="sm"
-            :loading="bulkAccepting"
-            @click="onBulkAccept"
-          >Accept all {{ pendingItems.length }}</Button>
+          <template v-if="selectedReportId && pendingItems.length > 0">
+            <button
+              type="button"
+              class="font-mono text-[10px] uppercase tracking-wider text-ink-faint hover:text-sev-crit transition disabled:opacity-50"
+              :disabled="bulkRejecting"
+              @click="onBulkReject"
+            >reject all {{ pendingItems.length }}</button>
+            <Button
+              variant="ghost"
+              size="sm"
+              :loading="bulkAccepting"
+              @click="onBulkAccept"
+            >Accept all {{ pendingItems.length }}</Button>
+          </template>
         </div>
 
         <p v-if="!selectedReportId" class="text-[12px] text-ink-faint italic">pick a report from the left.</p>

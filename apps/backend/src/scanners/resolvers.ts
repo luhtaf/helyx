@@ -282,6 +282,34 @@ export const scannerResolvers = {
       return accepted;
     },
 
+    async bulkRejectReport(
+      _p: unknown, args: { reportId: string; reason?: string | null }, ctx: RequestContext,
+    ): Promise<number> {
+      assertOrgRole(ctx, 'ANALYST');
+      const ids = await listPendingDiscoveredIds(ctx.activeOrgId, args.reportId);
+      if (ids.length === 0) return 0;
+      let rejected = 0;
+      for (const id of ids) {
+        try {
+          const r = await setDiscoveredStatus(ctx.activeOrgId, id, 'rejected', null);
+          if (r) rejected++;
+        } catch {
+          // per-item failure shouldn't block the batch
+        }
+      }
+      if (await isReportFullyReviewed(ctx.activeOrgId, args.reportId)) {
+        await markReportReviewed(ctx.activeOrgId, args.reportId, ctx.user.id);
+      }
+      await logAudit(
+        ctx.activeOrgId, ctx.user.id,
+        'inventory.bulk_reject',
+        { type: 'ScanReport', id: args.reportId },
+        null,
+        { rejected, total: ids.length, reason: args.reason ?? null },
+      );
+      return rejected;
+    },
+
     async rejectDiscovered(
       _p: unknown, args: { discoveredId: string; reason?: string | null }, ctx: RequestContext,
     ): Promise<DiscoveredAsset> {

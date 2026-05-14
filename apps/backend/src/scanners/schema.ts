@@ -116,5 +116,10 @@ export const scannerTypeDefs = /* GraphQL */ `
     Asset. Operator says 'I trust this whole batch'. Returns count of
     items accepted. ANALYST role."""
     bulkAcceptReport(reportId: ID!): Int!
+
+    """Reject every still-pending discovered item in a report. Operator
+    says 'this whole batch is noise / off-scope'. Returns count of
+    items rejected. ANALYST role."""
+    bulkRejectReport(reportId: ID!, reason: String): Int!
   }
 `;

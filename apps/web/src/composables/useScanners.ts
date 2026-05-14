@@ -149,6 +149,12 @@ const BULK_ACCEPT_REPORT = gql`
   }
 `;
 
+const BULK_REJECT_REPORT = gql`
+  mutation BulkRejectReport($reportId: ID!, $reason: String) {
+    bulkRejectReport(reportId: $reportId, reason: $reason)
+  }
+`;
+
 // ─── Queries ────────────────────────────────────────────────────────
 
 export function useScanners() {
@@ -264,6 +270,27 @@ export function useBulkAcceptReport() {
         awaitRefetchQueries: true,
       });
       return r.data?.bulkAcceptReport ?? null;
+    } catch (e) { error.value = e as Error; return null; }
+    finally { submitting.value = false; }
+  }
+
+  return { submit, submitting, error };
+}
+
+export function useBulkRejectReport() {
+  const { client } = useApolloClient();
+  const submitting = ref(false);
+  const error = ref<Error | null>(null);
+
+  async function submit(reportId: string, reason: string | null): Promise<number | null> {
+    submitting.value = true; error.value = null;
+    try {
+      const r = await client.mutate<{ bulkRejectReport: number }>({
+        mutation: BULK_REJECT_REPORT, variables: { reportId, reason },
+        refetchQueries: ['DiscoveredAssetsForReport', 'ScanReports'],
+        awaitRefetchQueries: true,
+      });
+      return r.data?.bulkRejectReport ?? null;
     } catch (e) { error.value = e as Error; return null; }
     finally { submitting.value = false; }
   }
