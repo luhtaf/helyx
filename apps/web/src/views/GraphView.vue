@@ -22,6 +22,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, useDeleteHunt, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import { useRedactionProfiles, useSetHuntRedactionProfile } from '@/composables/useRedactionProfiles';
+import { useCtiPushTargets, useCtiPushMutations, PUSH_OUTCOME_LABELS } from '@/composables/useCtiPushTargets';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
 
@@ -149,6 +150,29 @@ async function onChangeHuntTier(e: Event): Promise<void> {
   } catch (err) {
     showToast(`Tier change failed: ${(err as Error).message}`, 'error');
   }
+}
+
+// H7/H9 — push target picker. Selecting a target triggers the push
+// pipeline; outcome surfaces via toast (success/dry_run/denied/failed).
+const { active: pushTargets } = useCtiPushTargets();
+const { push: doPushHunt, submitting: pushing } = useCtiPushMutations();
+async function onPushHunt(e: Event): Promise<void> {
+  const targetId = (e.target as HTMLSelectElement).value;
+  if (!targetId || !huntId.value) return;
+  // Reset select so operator can re-trigger same target later.
+  (e.target as HTMLSelectElement).value = '';
+  const r = await doPushHunt(huntId.value, targetId);
+  if (!r) {
+    showToast('Push failed', 'error');
+    return;
+  }
+  const o = r.attempt.outcome;
+  const label = PUSH_OUTCOME_LABELS[o];
+  const tone = o === 'success' || o === 'dry_run' ? 'success' : 'error';
+  const detail = r.attempt.errorDetail
+    ? `${label} — ${r.attempt.errorDetail.slice(0, 80)}`
+    : `${label}${r.attempt.indicatorCount != null ? ` · ${r.attempt.indicatorCount} indicators` : ''}`;
+  showToast(detail, tone);
 }
 
 // F3a — redaction profile picker. Empty value = clear (= full bundle).
@@ -561,6 +585,20 @@ onMounted(() => { void plantSeed(); });
           >
             Export STIX
           </Button>
+          <!-- H7/H9 — push to configured target. Empty when no targets / non-OWNER. -->
+          <select
+            v-if="huntId && pushTargets.length"
+            :disabled="pushing"
+            value=""
+            class="bg-surface border border-rule-strong rounded-md px-2 py-1 text-[11px] text-ink-dim font-mono uppercase tracking-wider"
+            title="Push hunt to a configured target. Runs F1+F2+F3a+F3b gates pre-flight."
+            @change="onPushHunt"
+          >
+            <option value="">push…</option>
+            <option v-for="t in pushTargets" :key="t.id" :value="t.id">
+              {{ t.kind }} · {{ t.label }}{{ t.dryRun ? ' (dry)' : '' }}
+            </option>
+          </select>
           <Button v-if="!huntId" variant="ghost" @click="saveOpen = true">Save as Hunt…</Button>
           <Button variant="ghost" @click="graphRef?.relayoutAll()">Re-layout</Button>
           <Button

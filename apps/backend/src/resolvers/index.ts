@@ -24,6 +24,7 @@ import { ctiKeypairResolvers } from '../cti/sign/resolvers.js';
 import { ctiRedactionResolvers } from '../cti/redaction/resolvers.js';
 import { noteResolvers } from '../notes/resolvers.js';
 import { ctiEgressResolvers } from '../cti/egress/resolvers.js';
+import { ctiPushResolvers } from '../cti/push/resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -63,6 +64,7 @@ export const resolvers = {
     ...ctiRedactionResolvers.Query,
     ...noteResolvers.Query,
     ...ctiEgressResolvers.Query,
+    ...ctiPushResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -80,6 +82,7 @@ export const resolvers = {
     ...ctiRedactionResolvers.Mutation,
     ...noteResolvers.Mutation,
     ...ctiEgressResolvers.Mutation,
+    ...ctiPushResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,

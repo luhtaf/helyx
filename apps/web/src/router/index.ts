@@ -110,6 +110,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'PDN egress allowlist', requiresRole: 'ANALYST' },
   },
   {
+    path: '/admin/cti-push',
+    name: 'cti-push',
+    component: () => import('@/views/CtiPushView.vue'),
+    meta: { title: 'CTI push targets', requiresRole: 'ANALYST' },
+  },
+  {
     path: '/cases',
     name: 'cases',
     component: () => import('@/views/CasesView.vue'),

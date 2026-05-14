@@ -68,6 +68,8 @@ const navItems = computed<NavItem[]>(() => {
   items.push({ to: '/admin/cti-redaction', label: 'redaction' });
   // F3b — PDN egress allowlist visible to ANALYST+ (read), OWNER writes.
   items.push({ to: '/admin/cti-egress', label: 'egress' });
+  // H7/H9 — push targets visible to ANALYST+, push trigger OWNER-only.
+  items.push({ to: '/admin/cti-push', label: 'push' });
   return items;
 });
 

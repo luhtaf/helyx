@@ -23,6 +23,7 @@ import { m021_cti_keypair_rotation } from './m021_cti_keypair_rotation.js';
 import { m022_redaction_profile } from './m022_redaction_profile.js';
 import { m023_notes } from './m023_notes.js';
 import { m024_pdn_egress } from './m024_pdn_egress.js';
+import { m025_cti_push } from './m025_cti_push.js';
 
 export const migrations: Migration[] = [
   m001_initial_schema,
@@ -49,4 +50,5 @@ export const migrations: Migration[] = [
   m022_redaction_profile,
   m023_notes,
   m024_pdn_egress,
+  m025_cti_push,
 ];
