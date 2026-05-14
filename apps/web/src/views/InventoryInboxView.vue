@@ -13,6 +13,7 @@
 import { ref, computed, watch } from 'vue';
 import {
   useScanReports, useDiscoveredAssets, useDiscoveredMutations,
+  useUploadManualScan,
   type ScanReport, type DiscoveredAsset, type ScanReportStatus,
 } from '@/composables/useScanners';
 import { useAssetAutocomplete, type AssetAutocompleteHit } from '@/composables/useAssets';
@@ -100,6 +101,39 @@ function fmtDate(s: string | null | undefined): string {
   return s.slice(0, 19).replace('T', ' ');
 }
 
+// Manual upload (modal)
+const uploadOpen = ref(false);
+const uploadJson = ref('');
+const { submit: uploadManual, submitting: uploading } = useUploadManualScan();
+
+const SAMPLE_PAYLOAD = `{
+  "format": "helyx-discovery-v1",
+  "items": [
+    { "kind": "HOST", "name": "srv-01.acme.local", "ipAddresses": ["10.0.0.5"] },
+    { "kind": "VM", "name": "vm-app-01", "parentName": "srv-01.acme.local" },
+    { "kind": "CONTAINER", "name": "nginx", "parentName": "vm-app-01" }
+  ]
+}`;
+
+function openUpload(): void {
+  uploadJson.value = SAMPLE_PAYLOAD;
+  uploadOpen.value = true;
+}
+
+async function onUpload(): Promise<void> {
+  const json = uploadJson.value.trim();
+  if (!json) return;
+  const r = await uploadManual(json);
+  if (r) {
+    showToast(`Uploaded ${r.itemsAccepted} item${r.itemsAccepted === 1 ? '' : 's'}`, 'success');
+    uploadOpen.value = false;
+    uploadJson.value = '';
+    selectedReportId.value = r.reportId;
+  } else {
+    showToast('Upload failed — check JSON shape', 'error');
+  }
+}
+
 function reportStatusTone(s: ScanReportStatus): string {
   if (s === 'pending') return 'text-signal';
   if (s === 'reviewed') return 'text-sev-low';
@@ -135,13 +169,43 @@ function discoveredStatusLabel(s: DiscoveredAsset['status']): string {
       <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-1">
         inventory · review queue
       </p>
-      <h1 class="text-[26px] font-medium tracking-tight text-ink">Inventory inbox</h1>
-      <p class="mt-3 text-[13px] text-ink-dim leading-relaxed max-w-[720px]">
-        Discovered assets from <RouterLink to="/admin/scanners" class="text-signal hover:underline">scanner agents</RouterLink>
-        await review. Merge to an existing asset, accept as new (creates a real
-        Asset row), or reject. Reports auto-mark reviewed when no items remain pending.
-      </p>
+      <div class="flex items-baseline justify-between gap-4">
+        <div>
+          <h1 class="text-[26px] font-medium tracking-tight text-ink">Inventory inbox</h1>
+          <p class="mt-3 text-[13px] text-ink-dim leading-relaxed max-w-[720px]">
+            Discovered assets from <RouterLink to="/admin/scanners" class="text-signal hover:underline">scanner agents</RouterLink>
+            await review. Merge to an existing asset, accept as new (creates a real
+            Asset row), or reject. Reports auto-mark reviewed when no items remain pending.
+          </p>
+        </div>
+        <Button variant="primary" size="sm" @click="openUpload">+ Upload scan</Button>
+      </div>
     </header>
+
+    <!-- Manual upload modal -->
+    <Teleport to="body">
+      <div v-if="uploadOpen" class="fixed inset-0 z-[60] bg-base/70 backdrop-blur-sm flex items-center justify-center px-4" @click="uploadOpen = false">
+        <div class="w-[640px] bg-base border border-rule-strong rounded-md shadow-2xl p-6" @click.stop>
+          <header class="mb-4">
+            <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-1">manual scan upload</p>
+            <h3 class="text-[16px] text-ink">Paste helyx-discovery-v1 payload</h3>
+          </header>
+          <p class="text-[12px] text-ink-dim mb-3 leading-relaxed">
+            Same JSON shape as the scanner agent ingest endpoint. Lands in inbox with
+            <code class="font-mono text-[11px] text-signal">source='manual'</code> — no scanner attribution.
+          </p>
+          <textarea
+            v-model="uploadJson"
+            class="w-full min-h-[280px] px-3 py-2 bg-surface border border-rule-strong rounded text-[11px] font-mono text-ink-mid focus:outline-none focus:border-signal/40 transition resize-y"
+            placeholder='{"format":"helyx-discovery-v1","items":[…]}'
+          />
+          <footer class="mt-4 flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" @click="uploadOpen = false">Cancel</Button>
+            <Button variant="primary" size="sm" :loading="uploading" :disabled="!uploadJson.trim()" @click="onUpload">Upload</Button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Filter -->
     <div class="mb-6 flex items-center gap-3 font-mono text-[11px]">

@@ -217,10 +217,13 @@ interface CreateReportResult {
 
 /** Create a :ScanReport + N :DiscoveredAsset rows in one tx. Resolves
  *  parentName against same-report items so a payload `host → vm → ctr`
- *  chain lands as a connected hierarchy in the inbox. */
+ *  chain lands as a connected hierarchy in the inbox.
+ *
+ *  scannerId is nullable: 'manual' source uploads have no agent. The
+ *  list query handles null scannerLabel via OPTIONAL MATCH already. */
 export async function createScanReport(
   tenantId: string,
-  scannerId: string,
+  scannerId: string | null,
   source: 'token' | 'manual',
   format: ScanFormat,
   payload: HelyxDiscoveryV1Payload,

@@ -81,10 +81,21 @@ export const scannerTypeDefs = /* GraphQL */ `
     discoveredAssetsForReport(reportId: ID!): [DiscoveredAsset!]!
   }
 
+  type ManualUploadResult {
+    reportId: ID!
+    itemsAccepted: Int!
+  }
+
   extend type Mutation {
     """Register a new scanner. Returns the plaintext token ONCE.
     OWNER role."""
     createScanner(input: CreateScannerInput!): ScannerCreated!
+
+    """Operator-driven scan upload — same path as scanner agent ingest
+    but no token. Lands in inventory inbox with source='manual'.
+    payloadJson must be a serialized helyx-discovery-v1 envelope.
+    ANALYST role."""
+    uploadManualScanReport(payloadJson: String!): ManualUploadResult!
     """Mint a fresh token for an existing scanner. Returns plaintext
     ONCE. OWNER role."""
     rotateScannerToken(id: ID!): ScannerCreated!

@@ -135,6 +135,14 @@ const REJECT_DISCOVERED = gql`
   }
 `;
 
+const UPLOAD_MANUAL = gql`
+  mutation UploadManualScanReport($payloadJson: String!) {
+    uploadManualScanReport(payloadJson: $payloadJson) {
+      reportId itemsAccepted
+    }
+  }
+`;
+
 // ─── Queries ────────────────────────────────────────────────────────
 
 export function useScanners() {
@@ -234,6 +242,27 @@ export function useScannerMutations() {
   }
 
   return { create, rotate, disable, enable, submitting, error };
+}
+
+export function useUploadManualScan() {
+  const { client } = useApolloClient();
+  const submitting = ref(false);
+  const error = ref<Error | null>(null);
+
+  async function submit(payloadJson: string): Promise<{ reportId: string; itemsAccepted: number } | null> {
+    submitting.value = true; error.value = null;
+    try {
+      const r = await client.mutate<{ uploadManualScanReport: { reportId: string; itemsAccepted: number } }>({
+        mutation: UPLOAD_MANUAL, variables: { payloadJson },
+        refetchQueries: ['ScanReports'],
+        awaitRefetchQueries: true,
+      });
+      return r.data?.uploadManualScanReport ?? null;
+    } catch (e) { error.value = e as Error; return null; }
+    finally { submitting.value = false; }
+  }
+
+  return { submit, submitting, error };
 }
 
 export function useDiscoveredMutations() {

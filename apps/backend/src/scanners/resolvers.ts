@@ -5,8 +5,10 @@ import { logAudit } from '../audits/log.js';
 import {
   listScanners, getScanner, createScanner, rotateScannerToken, setScannerStatus,
   listScanReports, listDiscoveredAssets, setDiscoveredStatus,
-  markReportReviewed, isReportFullyReviewed,
+  markReportReviewed, isReportFullyReviewed, createScanReport,
 } from './repo.js';
+import { z } from 'zod';
+import { ASSET_KINDS } from '../assets/types.js';
 import { createAsset } from '../assets/assets.repo.js';
 import type { AssetKind } from '../assets/types.js';
 import type {
@@ -41,6 +43,52 @@ export const scannerResolvers = {
   },
 
   Mutation: {
+    async uploadManualScanReport(
+      _p: unknown,
+      args: { payloadJson: string },
+      ctx: RequestContext,
+    ): Promise<{ reportId: string; itemsAccepted: number }> {
+      assertOrgRole(ctx, 'ANALYST');
+      // Parse + validate the same payload shape that scanner agents POST.
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(args.payloadJson);
+      } catch {
+        throw new GraphQLError('payload is not valid JSON', {
+          extensions: { code: 'BAD_INPUT', field: 'payloadJson' },
+        });
+      }
+      const KIND_VALUES = [...ASSET_KINDS] as [string, ...string[]];
+      const ItemSchema = z.object({
+        kind: z.enum(KIND_VALUES),
+        name: z.string().trim().min(1).max(255),
+        hostname: z.string().trim().max(255).optional(),
+        ipAddresses: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
+        parentName: z.string().trim().min(1).max(255).optional(),
+      });
+      const PayloadSchema = z.object({
+        format: z.literal('helyx-discovery-v1'),
+        items: z.array(ItemSchema).min(1).max(5000),
+      });
+      const r = PayloadSchema.safeParse(parsed);
+      if (!r.success) {
+        throw new GraphQLError(`invalid payload: ${r.error.issues[0]?.message ?? 'unknown'}`, {
+          extensions: { code: 'BAD_INPUT', issues: r.error.issues.slice(0, 5) },
+        });
+      }
+      const result = await createScanReport(
+        ctx.activeOrgId, null, 'manual', r.data.format, r.data, args.payloadJson,
+      );
+      await logAudit(
+        ctx.activeOrgId, ctx.user.id,
+        'scan_report.manual_upload',
+        { type: 'ScanReport', id: result.reportId },
+        null,
+        { itemCount: result.itemsAccepted, format: r.data.format },
+      );
+      return result;
+    },
+
     async createScanner(
       _p: unknown,
       args: { input: { label: string; scope: string; expiresAt?: string | null } },
