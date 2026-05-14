@@ -9,6 +9,8 @@ import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
 import CloseCaseModal from '@/components/case/CloseCaseModal.vue';
 import NotesPanel from '@/components/notes/NotesPanel.vue';
+import AddIocArtifactModal from '@/components/case/AddIocArtifactModal.vue';
+import { useCreateIocArtifact, type IocArtifactInput } from '@/composables/useArtifacts';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
@@ -27,6 +29,21 @@ async function onCloseCase(verdict: CloseVerdict): Promise<void> {
     refetch();
   } else {
     showToast(r.error ?? 'close failed', 'error');
+  }
+}
+
+// Add IOC artifact (single, manual). Bulk-paste covers many; this is
+// the 1-at-a-time form.
+const addIocOpen = ref(false);
+const { submit: createIoc, submitting: creatingIoc } = useCreateIocArtifact();
+async function onAddIoc(input: IocArtifactInput): Promise<void> {
+  if (!caseDetail.value) return;
+  const r = await createIoc(caseDetail.value.id, input);
+  if (r) {
+    showToast(`Added IOC ${r.value}`, 'success');
+    addIocOpen.value = false;
+  } else {
+    showToast('Add IOC failed', 'error');
   }
 }
 
@@ -85,6 +102,9 @@ const labelMap: Record<string, string> = {
             :to="{ name: 'graph', query: { seed: `case:${caseDetail.id}` } }"
             class="font-mono text-[11px] text-signal hover:underline ml-1"
           >Open in graph →</RouterLink>
+          <Button v-if="caseDetail.status === 'ACTIVE'" variant="ghost" @click="addIocOpen = true">
+            + Add IOC
+          </Button>
           <Button v-if="caseDetail.status === 'ACTIVE'" variant="primary" @click="closeOpen = true">
             Close case
           </Button>
@@ -169,6 +189,13 @@ const labelMap: Record<string, string> = {
         <NotesPanel entity-type="Case" :entity-id="caseDetail.id" />
       </div>
     </template>
+
+    <AddIocArtifactModal
+      :open="addIocOpen"
+      :loading="creatingIoc"
+      @submit="onAddIoc"
+      @cancel="addIocOpen = false"
+    />
 
     <CloseCaseModal
       :open="closeOpen"

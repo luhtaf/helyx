@@ -232,10 +232,12 @@ export async function createArtifactNode(
              a += $typeFields
          MERGE (c)-[:HAS_ARTIFACT]->(a)
          WITH a, $hostAssetId AS hostId
-         FOREACH (h IN CASE WHEN hostId IS NULL THEN [] ELSE [hostId] END |
-           MATCH (asset:Asset {id: h})
-           WHERE asset.tenantId = $tenantId
-           MERGE (a)-[:ON_HOST]->(asset))
+         CALL {
+           WITH a, hostId
+           OPTIONAL MATCH (asset:Asset {id: hostId, tenantId: $tenantId})
+           FOREACH (_ IN CASE WHEN asset IS NULL THEN [] ELSE [1] END |
+             MERGE (a)-[:ON_HOST]->(asset))
+         }
          RETURN ${ARTIFACT_RETURN}`,
         {
           id,
