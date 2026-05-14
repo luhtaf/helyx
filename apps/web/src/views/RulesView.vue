@@ -2,7 +2,11 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
-import { useRules, type RuleFilter } from '@/composables/useRules';
+import { useRules, useCreateRule, type RuleFilter, type CreateRuleInput } from '@/composables/useRules';
+import { useAuthStore } from '@/stores/auth';
+import { useToast } from '@/composables/useToast';
+import Button from '@/components/ui/Button.vue';
+import AddRuleSlide from '@/components/rule/AddRuleSlide.vue';
 import {
   KIND_CLASSES,
   RULE_KINDS,
@@ -63,6 +67,24 @@ const statusClass = (s: RuleStatus): string => STATUS_CLASSES[s];
 const KIND_OPTIONS = RULE_KINDS;
 const STATUS_OPTIONS = RULE_STATUSES;
 const SOURCE_OPTIONS = RULE_SOURCES;
+
+// Manual rule add — operator workflow gap. Generated rules come from
+// hunts; this is the by-hand path (custom YARA, ad-hoc Sigma, etc).
+const auth = useAuthStore();
+const canCreate = computed(() => auth.hasMinRole('ANALYST'));
+const addOpen = ref(false);
+const { submit: createRule, loading: creating } = useCreateRule();
+const { show: showToast } = useToast();
+async function onCreate(input: CreateRuleInput): Promise<void> {
+  const r = await createRule(input);
+  if (r) {
+    showToast(`Created rule ${r.name}`, 'success');
+    addOpen.value = false;
+    router.push({ name: 'rule-detail', params: { id: r.id } });
+  } else {
+    showToast('Create failed — check inputs', 'error');
+  }
+}
 </script>
 
 <template>
@@ -73,11 +95,21 @@ const SOURCE_OPTIONS = RULE_SOURCES;
           <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">detection</p>
           <h1 class="text-[22px] font-medium text-ink mt-1">Rules</h1>
         </div>
-        <p class="font-mono text-[11px] text-ink-dim tabular-nums">
-          {{ loading && !data ? '…' : `${data?.total ?? 0} rules` }}
-        </p>
+        <div class="flex items-baseline gap-4">
+          <p class="font-mono text-[11px] text-ink-dim tabular-nums">
+            {{ loading && !data ? '…' : `${data?.total ?? 0} rules` }}
+          </p>
+          <Button v-if="canCreate" variant="primary" size="sm" @click="addOpen = true">+ New rule</Button>
+        </div>
       </div>
     </header>
+
+    <AddRuleSlide
+      :open="addOpen"
+      :loading="creating"
+      @submit="onCreate"
+      @cancel="addOpen = false"
+    />
 
     <div
       v-if="error"
