@@ -11,16 +11,33 @@
 // link fields (artifacts, techniques) defer to a follow-up — they
 // need their own pickers.
 
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue';
 import { RULE_KINDS, type RuleKind } from '@/composables/rule-kinds';
-import type { CreateRuleInput } from '@/composables/useRules';
+import type { CreateRuleInput, UpdateRuleInput } from '@/composables/useRules';
 import Button from '@/components/ui/Button.vue';
 
-const props = defineProps<{ open: boolean; loading: boolean }>();
+interface ExistingRule {
+  id: string;
+  kind: RuleKind;
+  name: string;
+  description: string | null;
+  content: string;
+  tags: string[];
+}
+
+const props = defineProps<{
+  open: boolean;
+  loading: boolean;
+  /** Pre-fill from existing rule (edit mode); null = fresh create. */
+  existing?: ExistingRule | null;
+}>();
 const emit = defineEmits<{
   (e: 'submit', input: CreateRuleInput): void;
+  (e: 'update', id: string, input: UpdateRuleInput): void;
   (e: 'cancel'): void;
 }>();
+
+const isEdit = computed(() => Boolean(props.existing));
 
 const kind = ref<RuleKind>('YARA');
 const name = ref('');
@@ -52,11 +69,19 @@ detection:
 };
 
 function reset(): void {
-  kind.value = 'YARA';
-  name.value = '';
-  description.value = '';
-  content.value = SAMPLE.YARA;
-  tagsRaw.value = '';
+  if (props.existing) {
+    kind.value = props.existing.kind;
+    name.value = props.existing.name;
+    description.value = props.existing.description ?? '';
+    content.value = props.existing.content;
+    tagsRaw.value = props.existing.tags.join(', ');
+  } else {
+    kind.value = 'YARA';
+    name.value = '';
+    description.value = '';
+    content.value = SAMPLE.YARA;
+    tagsRaw.value = '';
+  }
 }
 
 watch(() => props.open, (isOpen) => { if (isOpen) reset(); });
@@ -79,13 +104,24 @@ function onSubmit(): void {
   if (!name.value.trim() || !content.value.trim()) return;
   const tags = tagsRaw.value
     .split(',').map((t) => t.trim()).filter((t) => t.length > 0);
-  emit('submit', {
-    kind: kind.value,
-    name: name.value.trim(),
-    description: description.value.trim() || undefined,
-    content: content.value,
-    tags: tags.length > 0 ? tags : undefined,
-  });
+  if (props.existing) {
+    // Edit mode — kind is immutable (different parsers, dangerous to switch).
+    // UpdateRuleInput omits kind by design.
+    emit('update', props.existing.id, {
+      name: name.value.trim(),
+      description: description.value.trim() || null,
+      content: content.value,
+      tags,
+    });
+  } else {
+    emit('submit', {
+      kind: kind.value,
+      name: name.value.trim(),
+      description: description.value.trim() || undefined,
+      content: content.value,
+      tags: tags.length > 0 ? tags : undefined,
+    });
+  }
 }
 </script>
 
@@ -107,17 +143,25 @@ function onSubmit(): void {
         >
           <aside class="fixed top-0 right-0 bottom-0 w-[640px] bg-base border-l border-rule-strong shadow-2xl flex flex-col" @click.stop>
             <header class="px-6 py-5 border-b border-rule-strong">
-              <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-1">detection · manual add</p>
-              <h2 class="text-[18px] text-ink font-medium tracking-tight">New detection rule</h2>
+              <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-1">
+                detection · {{ isEdit ? 'edit' : 'manual add' }}
+              </p>
+              <h2 class="text-[18px] text-ink font-medium tracking-tight">
+                {{ isEdit ? `Edit rule · ${name || '…'}` : 'New detection rule' }}
+              </h2>
             </header>
 
             <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
               <div class="grid grid-cols-12 gap-3">
                 <div class="col-span-3">
-                  <label class="block font-mono text-[10px] uppercase tracking-wider text-ink-dim mb-1.5">kind <span class="text-sev-crit">*</span></label>
+                  <label class="block font-mono text-[10px] uppercase tracking-wider text-ink-dim mb-1.5">
+                    kind <span class="text-sev-crit">*</span>
+                  </label>
                   <select
                     v-model="kind"
-                    class="w-full px-2 py-2 bg-surface border border-rule-strong rounded text-[12px] focus:outline-none focus:border-signal/40 transition"
+                    :disabled="isEdit"
+                    class="w-full px-2 py-2 bg-surface border border-rule-strong rounded text-[12px] focus:outline-none focus:border-signal/40 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    :title="isEdit ? 'kind is immutable — different parsers' : ''"
                   >
                     <option v-for="k in RULE_KINDS" :key="k" :value="k">{{ k }}</option>
                   </select>
@@ -169,7 +213,7 @@ function onSubmit(): void {
             <footer class="px-6 py-4 border-t border-rule-strong flex items-center justify-end gap-2">
               <Button variant="ghost" size="sm" @click="emit('cancel')">Cancel</Button>
               <Button variant="primary" size="sm" :loading="loading" :disabled="!name.trim() || !content.trim()" @click="onSubmit">
-                Create rule
+                {{ isEdit ? 'Save changes' : 'Create rule' }}
               </Button>
             </footer>
           </aside>

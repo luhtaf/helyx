@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, toRef, watch, watchEffect, computed } from 'vue';
-import { useRule, useSetRuleReleaseTier, useApproveRule, useUnapproveRule, useRulePushReadiness, isApprovalStale, RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier, type PushBlockReason } from '@/composables/useRules';
+import { useRule, useSetRuleReleaseTier, useApproveRule, useUnapproveRule, useRulePushReadiness, useUpdateRule, isApprovalStale, RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier, type PushBlockReason, type UpdateRuleInput } from '@/composables/useRules';
+import AddRuleSlide from '@/components/rule/AddRuleSlide.vue';
+import { useAuthStore } from '@/stores/auth';
 import { KIND_CLASSES, type RuleKind } from '@/composables/rule-kinds';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
@@ -11,6 +13,19 @@ import NotesPanel from '@/components/notes/NotesPanel.vue';
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
 const { rule, loading, error } = useRule(() => idRef.value);
+const auth = useAuthStore();
+const canEdit = computed(() => auth.hasMinRole('ANALYST'));
+const editOpen = ref(false);
+const { submit: updateRule, loading: updating } = useUpdateRule();
+async function onUpdate(id: string, input: UpdateRuleInput): Promise<void> {
+  const r = await updateRule(id, input);
+  if (r) {
+    showToast('Rule updated · re-approval needed if content changed', 'success');
+    editOpen.value = false;
+  } else {
+    showToast('Update failed', 'error');
+  }
+}
 const { submit: setTier, loading: settingTier } = useSetRuleReleaseTier();
 const { show: showToast } = useToast();
 const { confirm } = useConfirm();
@@ -110,6 +125,7 @@ const REASON_LABEL: Record<PushBlockReason, string> = {
           <p :class="['font-mono text-[11px] uppercase tracking-wider', kindClass(rule.kind)]">{{ rule.kind }}</p>
           <h1 class="text-[22px] font-medium text-ink mt-1">{{ rule.name }}</h1>
           <p v-if="rule.description" class="mt-2 text-[13px] text-ink-dim max-w-[68ch]">{{ rule.description }}</p>
+          <Button v-if="canEdit" variant="ghost" size="sm" class="mt-3" @click="editOpen = true">Edit rule</Button>
         </div>
         <div class="flex items-baseline gap-4 font-mono text-[11px] text-ink-faint">
           <span>{{ rule.status.toLowerCase() }}</span>
@@ -275,5 +291,13 @@ const REASON_LABEL: Record<PushBlockReason, string> = {
         created {{ rule.createdAt.slice(0, 10) }} · updated {{ rule.updatedAt.slice(0, 10) }}
       </footer>
     </template>
+
+    <AddRuleSlide
+      :open="editOpen"
+      :loading="updating"
+      :existing="rule ? { id: rule.id, kind: rule.kind, name: rule.name, description: rule.description, content: rule.content, tags: rule.tags } : null"
+      @update="onUpdate"
+      @cancel="editOpen = false"
+    />
   </div>
 </template>
