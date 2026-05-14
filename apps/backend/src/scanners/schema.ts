@@ -111,5 +111,10 @@ export const scannerTypeDefs = /* GraphQL */ `
     """Reject a discovered row (false positive, off-scope). Optional
     reason. ANALYST role."""
     rejectDiscovered(discoveredId: ID!, reason: String): DiscoveredAsset!
+
+    """Accept every still-pending discovered item in a report as a new
+    Asset. Operator says 'I trust this whole batch'. Returns count of
+    items accepted. ANALYST role."""
+    bulkAcceptReport(reportId: ID!): Int!
   }
 `;

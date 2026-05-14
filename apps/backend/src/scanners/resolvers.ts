@@ -6,6 +6,7 @@ import {
   listScanners, getScanner, createScanner, rotateScannerToken, setScannerStatus,
   listScanReports, listDiscoveredAssets, setDiscoveredStatus,
   markReportReviewed, isReportFullyReviewed, createScanReport,
+  listPendingDiscoveredIds,
 } from './repo.js';
 import { z } from 'zod';
 import { ASSET_KINDS } from '../assets/types.js';
@@ -250,6 +251,35 @@ export const scannerResolvers = {
         await session.close();
       }
       return row;
+    },
+
+    async bulkAcceptReport(
+      _p: unknown, args: { reportId: string }, ctx: RequestContext,
+    ): Promise<number> {
+      assertOrgRole(ctx, 'ANALYST');
+      const ids = await listPendingDiscoveredIds(ctx.activeOrgId, args.reportId);
+      if (ids.length === 0) return 0;
+      // Reuse acceptDiscoveredAsNew per-id — keeps parent chain
+      // resolution + audit identical to single-item flow. Slow path
+      // (one tx per item) but acceptable for inbox batch sizes.
+      let accepted = 0;
+      for (const id of ids) {
+        try {
+          await this.acceptDiscoveredAsNew(_p, { discoveredId: id }, ctx);
+          accepted++;
+        } catch {
+          // Per-item failure shouldn't block the batch — operator
+          // can re-try the failed ones individually after.
+        }
+      }
+      await logAudit(
+        ctx.activeOrgId, ctx.user.id,
+        'inventory.bulk_accept',
+        { type: 'ScanReport', id: args.reportId },
+        null,
+        { accepted, total: ids.length },
+      );
+      return accepted;
     },
 
     async rejectDiscovered(

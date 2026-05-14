@@ -143,6 +143,12 @@ const UPLOAD_MANUAL = gql`
   }
 `;
 
+const BULK_ACCEPT_REPORT = gql`
+  mutation BulkAcceptReport($reportId: ID!) {
+    bulkAcceptReport(reportId: $reportId)
+  }
+`;
+
 // ─── Queries ────────────────────────────────────────────────────────
 
 export function useScanners() {
@@ -242,6 +248,27 @@ export function useScannerMutations() {
   }
 
   return { create, rotate, disable, enable, submitting, error };
+}
+
+export function useBulkAcceptReport() {
+  const { client } = useApolloClient();
+  const submitting = ref(false);
+  const error = ref<Error | null>(null);
+
+  async function submit(reportId: string): Promise<number | null> {
+    submitting.value = true; error.value = null;
+    try {
+      const r = await client.mutate<{ bulkAcceptReport: number }>({
+        mutation: BULK_ACCEPT_REPORT, variables: { reportId },
+        refetchQueries: ['DiscoveredAssetsForReport', 'ScanReports', 'Assets'],
+        awaitRefetchQueries: true,
+      });
+      return r.data?.bulkAcceptReport ?? null;
+    } catch (e) { error.value = e as Error; return null; }
+    finally { submitting.value = false; }
+  }
+
+  return { submit, submitting, error };
 }
 
 export function useUploadManualScan() {

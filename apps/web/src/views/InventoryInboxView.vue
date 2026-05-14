@@ -13,7 +13,7 @@
 import { ref, computed, watch } from 'vue';
 import {
   useScanReports, useDiscoveredAssets, useDiscoveredMutations,
-  useUploadManualScan,
+  useUploadManualScan, useBulkAcceptReport,
   type ScanReport, type DiscoveredAsset, type ScanReportStatus,
 } from '@/composables/useScanners';
 import { useAssetAutocomplete, type AssetAutocompleteHit } from '@/composables/useAssets';
@@ -118,6 +118,22 @@ const SAMPLE_PAYLOAD = `{
 function openUpload(): void {
   uploadJson.value = SAMPLE_PAYLOAD;
   uploadOpen.value = true;
+}
+
+// Bulk accept all pending in selected report
+const { submit: bulkAccept, submitting: bulkAccepting } = useBulkAcceptReport();
+async function onBulkAccept(): Promise<void> {
+  if (!selectedReportId.value || pendingItems.value.length === 0) return;
+  const ok = await confirm({
+    title: `Accept all ${pendingItems.value.length} pending items?`,
+    message: 'Each becomes a real Asset. Parent chains preserved. Cannot be undone individually.',
+    variant: 'danger',
+    confirmLabel: `Accept all ${pendingItems.value.length}`,
+  });
+  if (!ok) return;
+  const r = await bulkAccept(selectedReportId.value);
+  if (r != null) showToast(`Accepted ${r} item${r === 1 ? '' : 's'}`, 'success');
+  else showToast('Bulk accept failed', 'error');
 }
 
 async function onUpload(): Promise<void> {
@@ -256,6 +272,13 @@ function discoveredStatusLabel(s: DiscoveredAsset['status']): string {
             <template v-else>select a report</template>
           </h2>
           <div class="flex-1 border-b border-rule" />
+          <Button
+            v-if="selectedReportId && pendingItems.length > 0"
+            variant="ghost"
+            size="sm"
+            :loading="bulkAccepting"
+            @click="onBulkAccept"
+          >Accept all {{ pendingItems.length }}</Button>
         </div>
 
         <p v-if="!selectedReportId" class="text-[12px] text-ink-faint italic">pick a report from the left.</p>

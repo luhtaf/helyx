@@ -434,6 +434,25 @@ export async function markReportReviewed(
   }
 }
 
+/** Pending discovered ids in a report — for bulk-accept iteration. */
+export async function listPendingDiscoveredIds(
+  tenantId: string,
+  reportId: string,
+): Promise<string[]> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (d:DiscoveredAsset {tenantId: $tenantId, reportId: $reportId})
+       WHERE coalesce(d.status, 'pending') = 'pending'
+       RETURN d.id AS id`,
+      { tenantId, reportId },
+    );
+    return r.records.map((rec) => rec.get('id') as string);
+  } finally {
+    await session.close();
+  }
+}
+
 /** Test if all discovered assets in a report have moved off pending. */
 export async function isReportFullyReviewed(
   tenantId: string,
