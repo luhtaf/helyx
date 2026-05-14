@@ -70,6 +70,9 @@ const navItems = computed<NavItem[]>(() => {
   items.push({ to: '/admin/cti-egress', label: 'egress' });
   // H7/H9 — push targets visible to ANALYST+, push trigger OWNER-only.
   items.push({ to: '/admin/cti-push', label: 'push' });
+  // Scanner pipeline — agent admin (OWNER write) + inventory inbox (ANALYST review)
+  items.push({ to: '/admin/scanners', label: 'scanners' });
+  items.push({ to: '/admin/inventory-inbox', label: 'inventory-inbox' });
   return items;
 });
 

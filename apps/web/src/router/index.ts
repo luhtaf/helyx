@@ -116,6 +116,18 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'CTI push targets', requiresRole: 'ANALYST' },
   },
   {
+    path: '/admin/scanners',
+    name: 'scanners',
+    component: () => import('@/views/ScannersView.vue'),
+    meta: { title: 'Scanners', requiresRole: 'ANALYST' },
+  },
+  {
+    path: '/admin/inventory-inbox',
+    name: 'inventory-inbox',
+    component: () => import('@/views/InventoryInboxView.vue'),
+    meta: { title: 'Inventory inbox', requiresRole: 'ANALYST' },
+  },
+  {
     path: '/cases',
     name: 'cases',
     component: () => import('@/views/CasesView.vue'),
