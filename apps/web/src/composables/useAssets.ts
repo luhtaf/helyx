@@ -1,7 +1,8 @@
-import { computed } from 'vue';
-import { useQuery } from '@vue/apollo-composable';
+import { computed, ref } from 'vue';
+import { useApolloClient, useQuery } from '@vue/apollo-composable';
 import gql from 'graphql-tag';
 import type { MatchMode } from './useDashboard';
+import type { AssetKind } from './asset-kinds';
 
 const ASSETS_LIST = gql`
   query Assets($kind: AssetKind, $search: String, $page: Int, $perPage: Int) {
@@ -147,6 +148,90 @@ export function useAssetsList(opts: {
   );
   const data = computed(() => result.value?.assets ?? null);
   return { data, loading, error };
+}
+
+// Manual asset add — operator workflow (e.g. ops engineer registers
+// a hypervisor that's not in spiderfoot/SBOM). createAsset BE accepts
+// kind/name/hostname/ipAddresses/parentId; this composable wraps the
+// mutation, refetches the assets list (no Apollo cache surgery — safer
+// for the page filter state).
+
+const CREATE_ASSET = gql`
+  mutation CreateAsset($input: CreateAssetInput!) {
+    createAsset(input: $input) {
+      id kind name hostname ipAddresses
+    }
+  }
+`;
+
+const ASSET_AUTOCOMPLETE = gql`
+  query AssetAutocomplete($search: String!) {
+    assets(search: $search, page: 1, perPage: 10) {
+      items { id name kind }
+    }
+  }
+`;
+
+export interface CreateAssetInput {
+  kind: AssetKind;
+  name: string;
+  hostname?: string | null;
+  ipAddresses?: string[] | null;
+  parentId?: string | null;
+}
+
+export interface AssetAutocompleteHit {
+  id: string;
+  name: string;
+  kind: AssetKind;
+}
+
+export function useCreateAsset() {
+  const { client } = useApolloClient();
+  const submitting = ref(false);
+  const error = ref<Error | null>(null);
+
+  async function submit(input: CreateAssetInput): Promise<{ id: string; name: string } | null> {
+    submitting.value = true;
+    error.value = null;
+    try {
+      const r = await client.mutate<{ createAsset: { id: string; name: string } }>({
+        mutation: CREATE_ASSET,
+        variables: { input },
+        // Refetch the list so new asset appears without manual reload.
+        // 'assets' is the active query in AssetsView; refetch by name.
+        refetchQueries: ['Assets'],
+        awaitRefetchQueries: true,
+      });
+      return r.data?.createAsset ?? null;
+    } catch (e) {
+      error.value = e as Error;
+      return null;
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  return { submit, submitting, error };
+}
+
+export function useAssetAutocomplete() {
+  const { client } = useApolloClient();
+  async function search(q: string): Promise<AssetAutocompleteHit[]> {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) return [];
+    try {
+      const r = await client.query<{ assets: { items: AssetAutocompleteHit[] } }>({
+        query: ASSET_AUTOCOMPLETE,
+        variables: { search: trimmed },
+        fetchPolicy: 'network-only',
+      });
+      return r.data.assets.items;
+    } catch {
+      return [];
+    }
+  }
+  return { search };
 }
 
 export function useAssetDetail(id: () => string, mode: () => MatchMode) {

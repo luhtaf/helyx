@@ -2,9 +2,12 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
-import { useAssetsList } from '@/composables/useAssets';
+import { useAssetsList, useCreateAsset, type CreateAssetInput } from '@/composables/useAssets';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import Pagination from '@/components/ui/Pagination.vue';
+import Button from '@/components/ui/Button.vue';
+import AddAssetSlide from '@/components/asset/AddAssetSlide.vue';
+import { useToast } from '@/composables/useToast';
 
 const route = useRoute();
 const router = useRouter();
@@ -50,14 +53,40 @@ watch(search, () => {
 function fmtKind(k: string): string {
   return k.toLowerCase().replace('_', ' ');
 }
+
+// Manual asset add — slide-over from header. ANALYST+ can create.
+const addOpen = ref(false);
+const { submit: createAsset, submitting: creating } = useCreateAsset();
+const { show: showToast } = useToast();
+const canCreate = computed(() => auth.hasMinRole('ANALYST'));
+
+async function onCreate(input: CreateAssetInput): Promise<void> {
+  const r = await createAsset(input);
+  if (r) {
+    showToast(`Added ${r.name}`, 'success');
+    addOpen.value = false;
+  } else {
+    showToast('Add failed — check inputs', 'error');
+  }
+}
 </script>
 
 <template>
   <div class="px-12 py-10 max-w-[1080px] relative z-10">
-    <header class="border-b border-rule-strong pb-4 mb-10">
-      <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-dim">inventory</p>
-      <h1 class="mt-2 text-2xl font-medium tracking-tight">Assets</h1>
+    <header class="border-b border-rule-strong pb-4 mb-10 flex items-baseline justify-between gap-4">
+      <div>
+        <p class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-dim">inventory</p>
+        <h1 class="mt-2 text-2xl font-medium tracking-tight">Assets</h1>
+      </div>
+      <Button v-if="canCreate" variant="primary" size="sm" @click="addOpen = true">+ Add asset</Button>
     </header>
+
+    <AddAssetSlide
+      :open="addOpen"
+      :loading="creating"
+      @submit="onCreate"
+      @cancel="addOpen = false"
+    />
 
     <div class="mb-8 grid gap-5">
       <div class="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[11px]">
