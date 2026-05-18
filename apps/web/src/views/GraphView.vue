@@ -27,6 +27,7 @@ import { useRedactionProfiles, useSetHuntRedactionProfile } from '@/composables/
 import { useCtiPushTargets, useCtiPushMutations, PUSH_OUTCOME_LABELS } from '@/composables/useCtiPushTargets';
 import Button from '@/components/ui/Button.vue';
 import Input from '@/components/ui/Input.vue';
+import Dropdown from '@/components/ui/Dropdown.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -676,85 +677,91 @@ onMounted(() => { void plantSeed(); });
         </div>
         <div class="flex items-center gap-2 pointer-events-auto">
           <Button variant="ghost" @click="searchOpen = true">+ Add by search</Button>
-          <!-- F1b — release tier picker, hunt-mode only -->
-          <select
-            v-if="huntId && hunt"
-            :value="hunt.releaseTier"
-            :disabled="settingTier"
-            class="bg-surface border border-rule-strong rounded-md px-2 py-1 text-[11px] text-ink-dim font-mono uppercase tracking-wider"
-            :title="`release tier — F1 need-to-know enforcement (push: rule.tier ≤ target.tier)`"
-            @change="onChangeHuntTier"
-          >
-            <option v-for="t in RELEASE_TIERS" :key="t" :value="t">{{ RELEASE_TIER_LABELS[t] }}</option>
-          </select>
-          <!-- F3a — redaction profile picker. Empty = no mask. -->
-          <select
-            v-if="huntId && hunt"
-            :value="hunt.redactionProfileId ?? ''"
-            :disabled="settingRedaction"
-            class="bg-surface border border-rule-strong rounded-md px-2 py-1 text-[11px] text-ink-dim font-mono uppercase tracking-wider"
-            title="redaction profile — F3a field-mask applied at STIX export. Empty = full bundle."
-            @change="onChangeRedaction"
-          >
-            <option value="">no mask</option>
-            <option v-for="p in redactionProfiles" :key="p.id" :value="p.id">redact: {{ p.slug }}</option>
-          </select>
-          <Button v-if="huntId" variant="ghost" :loading="generatingRules" @click="onGenerateRules">
-            Generate rules
-          </Button>
-          <Button v-if="huntId" variant="ghost" :loading="downloadingZip" @click="onDownloadZip">
-            Download zip
-          </Button>
-          <Button
-            v-if="huntId"
-            variant="ghost"
-            :loading="exportingStix"
-            title="STIX 2.1 Bundle — only F2-approved + non-stale rules export. TLP marking derives from Hunt release tier."
-            @click="onExportStix"
-          >
-            Export STIX
-          </Button>
-          <Button
-            v-if="huntId"
-            variant="ghost"
-            :loading="exportingIocs"
-            title="OpenIOC 1.1 XML — raw observed IOCs from the hunt's case artifacts. TLP from hunt release tier."
-            @click="onExportIocs('OPENIOC')"
-          >
-            OpenIOC
-          </Button>
-          <Button
-            v-if="huntId"
-            variant="ghost"
-            :loading="exportingIocs"
-            title="Plain typed IOC list (text) — feeds blocklists / reputation pipeline."
-            @click="onExportIocs('PLAIN')"
-          >
-            IOC list
-          </Button>
-          <!-- H7/H9 — push to configured target. Empty when no targets / non-OWNER. -->
-          <select
-            v-if="huntId && pushTargets.length"
-            :disabled="pushing"
-            value=""
-            class="bg-surface border border-rule-strong rounded-md px-2 py-1 text-[11px] text-ink-dim font-mono uppercase tracking-wider"
-            title="Push hunt to a configured target. Runs F1+F2+F3a+F3b gates pre-flight."
-            @change="onPushHunt"
-          >
-            <option value="">push…</option>
-            <option v-for="t in pushTargets" :key="t.id" :value="t.id">
-              {{ t.kind }} · {{ t.label }}{{ t.dryRun ? ' (dry)' : '' }}
-            </option>
-          </select>
-          <Button v-if="!huntId" variant="ghost" @click="saveOpen = true">Save as Hunt…</Button>
           <Button variant="ghost" @click="graphRef?.relayoutAll()">Re-layout</Button>
-          <Button
-            v-if="huntId"
-            variant="ghost"
-            :loading="deletingHunt"
-            class="!text-sev-crit hover:!bg-sev-crit/10"
-            @click="onDeleteHunt"
-          >Delete hunt</Button>
+          <Button v-if="!huntId" variant="ghost" @click="saveOpen = true">Save as Hunt…</Button>
+
+          <!-- Hunt mode: all governance/export/push collapsed into one
+               menu so the header stays uncluttered (was 11 inline). -->
+          <Dropdown v-if="huntId && hunt" label="Hunt actions" align="right">
+            <template #default="{ close }">
+              <div class="w-[300px] bg-base border border-rule-strong rounded-md shadow-2xl overflow-hidden text-[13px]">
+                <p class="px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-ink-faint border-b border-rule">
+                  governance
+                </p>
+                <div class="px-4 py-3 space-y-3 border-b border-rule">
+                  <label class="block">
+                    <span class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">release tier</span>
+                    <select
+                      :value="hunt.releaseTier"
+                      :disabled="settingTier"
+                      class="mt-1 w-full bg-surface border border-rule-strong rounded-md px-2 py-1.5 text-[12px] text-ink-dim"
+                      title="F1 need-to-know enforcement (push: rule.tier ≤ target.tier)"
+                      @change="onChangeHuntTier"
+                    >
+                      <option v-for="t in RELEASE_TIERS" :key="t" :value="t">{{ RELEASE_TIER_LABELS[t] }}</option>
+                    </select>
+                  </label>
+                  <label class="block">
+                    <span class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">redaction profile</span>
+                    <select
+                      :value="hunt.redactionProfileId ?? ''"
+                      :disabled="settingRedaction"
+                      class="mt-1 w-full bg-surface border border-rule-strong rounded-md px-2 py-1.5 text-[12px] text-ink-dim"
+                      title="F3a field-mask applied at STIX export. Empty = full bundle."
+                      @change="onChangeRedaction"
+                    >
+                      <option value="">no mask</option>
+                      <option v-for="p in redactionProfiles" :key="p.id" :value="p.id">redact: {{ p.slug }}</option>
+                    </select>
+                  </label>
+                </div>
+
+                <p class="px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-ink-faint border-b border-rule">
+                  generate &amp; export
+                </p>
+                <button type="button" :disabled="generatingRules" class="w-full text-left px-4 py-2.5 text-ink hover:bg-surface transition disabled:opacity-50 border-b border-rule" @click="onGenerateRules">
+                  Generate rules{{ generatingRules ? '…' : '' }}
+                </button>
+                <button type="button" :disabled="downloadingZip" class="w-full text-left px-4 py-2.5 text-ink hover:bg-surface transition disabled:opacity-50 border-b border-rule" @click="onDownloadZip">
+                  Download zip{{ downloadingZip ? '…' : '' }}
+                </button>
+                <button type="button" :disabled="exportingStix" class="w-full text-left px-4 py-2.5 text-ink hover:bg-surface transition disabled:opacity-50 border-b border-rule" title="STIX 2.1 — only F2-approved + non-stale rules. TLP from hunt tier." @click="onExportStix">
+                  Export STIX 2.1{{ exportingStix ? '…' : '' }}
+                </button>
+                <button type="button" :disabled="exportingIocs" class="w-full text-left px-4 py-2.5 text-ink hover:bg-surface transition disabled:opacity-50 border-b border-rule" title="OpenIOC 1.1 XML — raw observed IOCs from case artifacts." @click="onExportIocs('OPENIOC')">
+                  Export OpenIOC 1.1
+                </button>
+                <button type="button" :disabled="exportingIocs" class="w-full text-left px-4 py-2.5 text-ink hover:bg-surface transition disabled:opacity-50" :class="pushTargets.length ? 'border-b border-rule' : ''" title="Plain typed IOC list — feeds blocklists / reputation pipeline." @click="onExportIocs('PLAIN')">
+                  Export plain IOC list
+                </button>
+
+                <template v-if="pushTargets.length">
+                  <p class="px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-ink-faint border-y border-rule">
+                    push to target
+                  </p>
+                  <select
+                    :disabled="pushing"
+                    value=""
+                    class="mx-4 my-3 w-[calc(100%-2rem)] bg-surface border border-rule-strong rounded-md px-2 py-1.5 text-[12px] text-ink-dim"
+                    title="Runs F1+F2+F3a+F3b gates pre-flight."
+                    @change="onPushHunt"
+                  >
+                    <option value="">select target…</option>
+                    <option v-for="t in pushTargets" :key="t.id" :value="t.id">
+                      {{ t.kind }} · {{ t.label }}{{ t.dryRun ? ' (dry)' : '' }}
+                    </option>
+                  </select>
+                </template>
+
+                <button
+                  type="button"
+                  :disabled="deletingHunt"
+                  class="w-full text-left px-4 py-2.5 text-sev-crit hover:bg-sev-crit/10 transition disabled:opacity-50 border-t border-rule"
+                  @click="close(); onDeleteHunt()"
+                >Delete hunt{{ deletingHunt ? '…' : '' }}</button>
+              </div>
+            </template>
+          </Dropdown>
         </div>
       </header>
 
