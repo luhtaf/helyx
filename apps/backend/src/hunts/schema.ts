@@ -175,6 +175,11 @@ export const huntTypeDefs = /* GraphQL */ `
     generateRulesFromHunt first; this is a packaging layer, not a generator.
     Returns base64-encoded bytes (small payloads only — typical zip <50KB)."""
     packHuntRulesAsZip(huntId: ID!): PackedRulesZip!
+    """Export the hunt's raw observed IOCs (from its case artifacts) as
+    OpenIOC 1.1 XML or a plain typed list. Reputation-feed / blocklist
+    shape — distinct from STIX (which exports F2-approved rule-derived
+    indicators). TLP banner derived from Hunt.releaseTier. ANALYST."""
+    exportHuntIocs(huntId: ID!, format: HuntIocFormat!): HuntIocExport!
     """H3 — Materialize a TTP-seed hunt. Counts first ('1,847 matches →
     refine'), then optional graph snapshot. Actor JOIN per Owner spec
     via actorId. Hard cap per type prevents silent data loss; UI must
@@ -230,6 +235,18 @@ export const huntTypeDefs = /* GraphQL */ `
   type GenerateSkippedReason {
     reason: String!
     count: Int!
+  }
+
+  enum HuntIocFormat { OPENIOC PLAIN }
+
+  type HuntIocExport {
+    filename: String!
+    "Base64-encoded file body (XML for OPENIOC, text for PLAIN)."
+    base64: String!
+    iocCount: Int!
+    format: HuntIocFormat!
+    "TLP handling label derived from the hunt's release tier."
+    tlp: String!
   }
 
   type PackedRulesZip {

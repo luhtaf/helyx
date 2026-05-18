@@ -333,6 +333,47 @@ export function useDownloadHuntZip() {
   };
 }
 
+// Hunt raw-IOC export — OpenIOC 1.1 XML or plain typed list. Distinct
+// from STIX (rule-derived); this is the observed-artifact IOC feed.
+const EXPORT_HUNT_IOCS = gql`
+  mutation ExportHuntIocs($huntId: ID!, $format: HuntIocFormat!) {
+    exportHuntIocs(huntId: $huntId, format: $format) {
+      filename base64 iocCount format tlp
+    }
+  }
+`;
+
+export type HuntIocFormat = 'OPENIOC' | 'PLAIN';
+export interface HuntIocExport {
+  filename: string;
+  base64: string;
+  iocCount: number;
+  format: HuntIocFormat;
+  tlp: string;
+}
+
+export function useExportHuntIocs() {
+  const { mutate, loading, error } = useMutation<
+    { exportHuntIocs: HuntIocExport },
+    { huntId: string; format: HuntIocFormat }
+  >(EXPORT_HUNT_IOCS);
+  return {
+    submit: async (huntId: string, format: HuntIocFormat): Promise<HuntIocExport | null> => {
+      const r = await mutate({ huntId, format });
+      const ex = r?.data?.exportHuntIocs ?? null;
+      if (ex) {
+        triggerBrowserDownload(
+          ex.filename,
+          ex.base64,
+          format === 'OPENIOC' ? 'application/xml' : 'text/plain',
+        );
+      }
+      return ex;
+    },
+    loading, error,
+  };
+}
+
 // F1c+ — Hunt push readiness: per-rule × per-tier matrix + summary.
 const HUNT_PUSH_READINESS = gql`
   query HuntPushReadiness($huntId: ID!) {

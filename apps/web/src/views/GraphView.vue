@@ -19,7 +19,7 @@ import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useUpdateHuntName, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, useDeleteHunt, type TtpFacets } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useUpdateHuntName, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useExportHuntIocs, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, useDeleteHunt, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import { useRedactionProfiles, useSetHuntRedactionProfile } from '@/composables/useRedactionProfiles';
 import { useCtiPushTargets, useCtiPushMutations, PUSH_OUTCOME_LABELS } from '@/composables/useCtiPushTargets';
@@ -295,6 +295,25 @@ async function onExportStix(): Promise<void> {
     } else {
       showToast(`STIX export failed: ${msg}`, 'error');
     }
+  }
+}
+
+const { submit: exportIocs, loading: exportingIocs } = useExportHuntIocs();
+async function onExportIocs(format: 'OPENIOC' | 'PLAIN'): Promise<void> {
+  if (!huntId.value) return;
+  try {
+    const ex = await exportIocs(huntId.value, format);
+    if (!ex) {
+      showToast('IOC export failed', 'error');
+      return;
+    }
+    showToast(
+      `${format === 'OPENIOC' ? 'OpenIOC' : 'IOC list'} exported · ${ex.iocCount} indicators · ${ex.tlp}`
+        + (ex.iocCount === 0 ? ' (hunt has no case artifacts)' : ''),
+      'success',
+    );
+  } catch (e) {
+    showToast(`IOC export failed: ${(e as Error).message ?? 'unknown'}`, 'error');
   }
 }
 
@@ -635,6 +654,24 @@ onMounted(() => { void plantSeed(); });
             @click="onExportStix"
           >
             Export STIX
+          </Button>
+          <Button
+            v-if="huntId"
+            variant="ghost"
+            :loading="exportingIocs"
+            title="OpenIOC 1.1 XML — raw observed IOCs from the hunt's case artifacts. TLP from hunt release tier."
+            @click="onExportIocs('OPENIOC')"
+          >
+            OpenIOC
+          </Button>
+          <Button
+            v-if="huntId"
+            variant="ghost"
+            :loading="exportingIocs"
+            title="Plain typed IOC list (text) — feeds blocklists / reputation pipeline."
+            @click="onExportIocs('PLAIN')"
+          >
+            IOC list
           </Button>
           <!-- H7/H9 — push to configured target. Empty when no targets / non-OWNER. -->
           <select

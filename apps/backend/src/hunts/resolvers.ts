@@ -22,6 +22,9 @@ import {
 import { logAudit } from '../audits/log.js';
 import { generateRulesFromHunt } from '../exporters/index.js';
 import { packHuntRulesAsZip } from '../exporters/zip.js';
+import { collectHuntIocs } from '../exporters/iocs.js';
+import { buildOpenIoc } from '../exporters/openioc.js';
+import { buildIocList } from '../exporters/ioc-list.js';
 import { buildHuntStixBundle, persistStixExport, listStixExportsForHunt } from '../exporters/stix.js';
 import { computeHuntPushReadiness } from '../cti/release/guards.js';
 import { getSession } from '../db/neo4j.js';
@@ -293,6 +296,34 @@ export const huntResolvers = {
         yaraCount: result.manifest.ruleCounts.yara,
         suricataCount: result.manifest.ruleCounts.suricata,
         sigmaCount: result.manifest.ruleCounts.sigma,
+      };
+    },
+
+    exportHuntIocs: async (
+      _p: unknown,
+      args: { huntId: string; format: 'OPENIOC' | 'PLAIN' },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      const hunt = await findHuntById(ctx.activeOrgId, args.huntId);
+      if (!hunt) throw notFound('hunt not found');
+      const { iocs, tlp, huntName } = await collectHuntIocs(ctx.activeOrgId, {
+        id: hunt.id,
+        name: hunt.name,
+        graphSnapshot: hunt.graphSnapshot,
+        releaseTier: hunt.releaseTier,
+      });
+      const slug = huntName.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40) || 'hunt';
+      const isOpenIoc = args.format === 'OPENIOC';
+      const body = isOpenIoc
+        ? buildOpenIoc(huntName, iocs, tlp)
+        : buildIocList(huntName, iocs, tlp);
+      return {
+        filename: isOpenIoc ? `${slug}.ioc` : `${slug}-iocs.txt`,
+        base64: Buffer.from(body, 'utf8').toString('base64'),
+        iocCount: iocs.length,
+        format: args.format,
+        tlp,
       };
     },
 
