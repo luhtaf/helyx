@@ -25,6 +25,7 @@ import { m023_notes } from './m023_notes.js';
 import { m024_pdn_egress } from './m024_pdn_egress.js';
 import { m025_cti_push } from './m025_cti_push.js';
 import { m026_scanner } from './m026_scanner.js';
+import { m027_oidc_config } from './m027_oidc_config.js';
 
 export const migrations: Migration[] = [
   m001_initial_schema,
@@ -53,4 +54,5 @@ export const migrations: Migration[] = [
   m024_pdn_egress,
   m025_cti_push,
   m026_scanner,
+  m027_oidc_config,
 ];

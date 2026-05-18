@@ -64,6 +64,10 @@ const schema = z.object({
   // tight enough that a stolen token can't firehose the inbox.
   SCANNER_RATE_MAX: z.coerce.number().int().positive().default(60),
   SCANNER_RATE_WINDOW_S: z.coerce.number().int().positive().default(3600),
+  // Phase Z — OIDC SSO config is DB-driven (admin panel at /admin/sso,
+  // :OidcConfig singleton, client secret AES-GCM sealed with
+  // CTI_SIGNING_MASTER_KEY). Nothing OIDC-related lives in env — the
+  // IdP can be changed at runtime without a redeploy.
 });
 
 const parsed = schema.safeParse(process.env);

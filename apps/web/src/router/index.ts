@@ -98,6 +98,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Members', requiresRole: 'ADMIN' },
   },
   {
+    path: '/admin/sso',
+    name: 'sso-settings',
+    component: () => import('@/views/SsoSettingsView.vue'),
+    meta: { title: 'SSO', requiresRole: 'OWNER' },
+  },
+  {
     path: '/admin/cti-keys',
     name: 'cti-keys',
     component: () => import('@/views/CtiKeypairsView.vue'),

@@ -165,6 +165,7 @@ These are the owner's stated rules. Treat them as review gates:
 - `auth:fail:<email>:ip:<ip>` — login fail counter (15min TTL)
 - `auth:lock:<email>:ip:<ip>` — account lockout (15min TTL)
 - `scanner:rate:<scannerId>` — per-scanner ingest counter (SCANNER_RATE_WINDOW_S TTL, default 1h). Fixed-window; keyed by scanner id so it survives token rotation. Throttle degrades open on Redis failure (`scanners/rate-limit.ts`).
+- `oidc:state:<state>` — OIDC SSO transaction (PKCE verifier + nonce + returnTo), 10min TTL, single-use via GETDEL (`auth/oidc/store.ts`).
 
 Redis policy `volatile-lru` — only TTL'd keys are eviction-eligible. Auth keys are TTL'd, so they survive memory pressure unless their TTL expires.
 
@@ -197,6 +198,25 @@ Single-flight is per-process — multi-instance backend deployments still allow 
 - `CSRF_SESSION_MISMATCH` — header doesn't match Redis-stored token
 - `CSRF_SESSION_EXPIRED` — Redis CSRF token expired (call refresh)
 - `REFRESH_EXPIRED` / `INVALID_REFRESH` / `NO_REFRESH` — refresh path failures (route to login)
+
+**OIDC SSO (Phase Z — `auth/oidc/`):**
+- Generic OIDC (Authorization Code + PKCE). Enabled only when the full
+  `OIDC_*` quartet is set (`oidcEnabled` in `config.ts`); otherwise
+  routes 404 and the FE button hides. Password login is independent.
+- Routes (mounted before `/graphql`, so no CSRF guard — top-level 302
+  navigations, not XHR): `GET /auth/oidc/status` (public `{enabled}`),
+  `/auth/oidc/start` (302 to IdP), `/auth/oidc/callback`.
+- **Invite-only**: an IdP identity logs in ONLY if a `:User` with that
+  verified email already exists. No auto-provisioning — same trust
+  model as `addOrganizationMember`. Unknown → `?sso_error=not_provisioned`.
+- Security: single-use Redis state (CSRF for the callback), PKCE S256,
+  nonce bound to the stored txn, `id_token` verified via remote JWKS
+  (`jose`, auto key-rotation) with issuer+audience checks, `email_verified`
+  required. On success calls the shared `issueUserSession` (`auth/session.ts`)
+  so an SSO session is byte-identical to a password session downstream.
+- `auth/session.ts` is the single source of truth for session issuance
+  (access JWT + CSRF + refresh JTI + 3 cookies). `login`, `refresh`, and
+  OIDC all call it — never inline the dance.
 
 **Bearer header (deprecated):**
 - `Authorization: Bearer <jwt>` still accepted in dual-mode for one release

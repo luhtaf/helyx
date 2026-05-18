@@ -21,6 +21,7 @@ import { noteTypeDefs } from '../notes/schema.js';
 import { ctiEgressTypeDefs } from '../cti/egress/schema.js';
 import { ctiPushTypeDefs } from '../cti/push/schema.js';
 import { scannerTypeDefs } from '../scanners/schema.js';
+import { oidcTypeDefs } from '../auth/oidc/schema.js';
 
 const coreTypeDefs = /* GraphQL */ `
   type Query {
@@ -60,4 +61,5 @@ export const typeDefs = [
   ctiEgressTypeDefs,
   ctiPushTypeDefs,
   scannerTypeDefs,
+  oidcTypeDefs,
 ];

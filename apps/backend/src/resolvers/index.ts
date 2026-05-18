@@ -26,6 +26,7 @@ import { noteResolvers } from '../notes/resolvers.js';
 import { ctiEgressResolvers } from '../cti/egress/resolvers.js';
 import { ctiPushResolvers } from '../cti/push/resolvers.js';
 import { scannerResolvers } from '../scanners/resolvers.js';
+import { oidcAdminResolvers } from '../auth/oidc/admin.resolvers.js';
 
 const coreResolvers = {
   Query: {
@@ -67,6 +68,7 @@ export const resolvers = {
     ...ctiEgressResolvers.Query,
     ...ctiPushResolvers.Query,
     ...scannerResolvers.Query,
+    ...oidcAdminResolvers.Query,
   },
   Mutation: {
     ...authResolvers.Mutation,
@@ -86,6 +88,7 @@ export const resolvers = {
     ...ctiEgressResolvers.Mutation,
     ...ctiPushResolvers.Mutation,
     ...scannerResolvers.Mutation,
+    ...oidcAdminResolvers.Mutation,
   },
   Organization: orgResolvers.Organization,
   Asset: assetResolvers.Asset,

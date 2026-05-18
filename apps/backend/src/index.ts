@@ -17,6 +17,7 @@ import { loadCsrfToken, safeEqual } from './auth/csrf.js';
 import { verifyAccessToken } from './auth/jwt.js';
 import { startScheduler } from './scheduler/index.js';
 import { scannerIngestHandler } from './scanners/ingest.js';
+import { oidcStatusHandler, oidcStartHandler, oidcCallbackHandler } from './auth/oidc/routes.js';
 
 // ---------------------------------------------------------------------------
 // CSRF guard — AST-based mutation detection
@@ -138,6 +139,13 @@ async function main(): Promise<void> {
   // before csrfGuard so the scanner agent doesn't need CSRF token.
   // The endpoint validates its own bearer token internally.
   app.post('/api/v1/scanner/ingest', scannerIngestHandler);
+
+  // OIDC SSO — top-level browser navigations (302 dance), not XHR, so
+  // mounted before csrfGuard. State+PKCE+nonce are the CSRF defense
+  // here. /status is public so the SPA can show/hide the SSO button.
+  app.get('/auth/oidc/status', oidcStatusHandler);
+  app.get('/auth/oidc/start', oidcStartHandler);
+  app.get('/auth/oidc/callback', oidcCallbackHandler);
 
   // Order: cors → cookieParser → apiLimiter → csrfGuard → /graphql
   app.use('/graphql', apiLimiter);

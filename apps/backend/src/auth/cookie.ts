@@ -27,6 +27,16 @@ export function setCsrfCookie(res: Response, token: string): void {
   });
 }
 
+export function setRefreshCookie(res: Response, jti: string): void {
+  res.cookie(REFRESH_COOKIE, jti, {
+    httpOnly: true,
+    secure: config.COOKIE_SECURE,
+    sameSite: 'strict',
+    path: '/graphql',
+    maxAge: SEVEN_DAYS_MS,
+  });
+}
+
 export function clearSessionCookie(res: Response): void {
   res.clearCookie(SESSION_COOKIE, { path: '/' });
   res.clearCookie(CSRF_COOKIE, { path: '/' });
