@@ -113,9 +113,9 @@ export async function addMember(input: AddMemberInput): Promise<MembershipRecord
       `MATCH (u:User {email: $email}), (o:Organization {id: $orgId})
        MERGE (u)-[m:MEMBER_OF]->(o)
        ON CREATE SET m.role = $role, m.joinedAt = datetime()
-       ON MATCH SET m.role = $role
+       ON MATCH SET m.role = $role, m.joinedAt = coalesce(m.joinedAt, datetime())
        RETURN u.id AS userId, u.email AS email, u.displayName AS displayName,
-              o.id AS orgId, m.role AS role, toString(m.joinedAt) AS joinedAt`,
+              o.id AS orgId, m.role AS role, toString(coalesce(m.joinedAt, o.createdAt)) AS joinedAt`,
       { email: input.userEmail.trim().toLowerCase(), orgId: input.orgId, role: input.role },
     );
     const rec = r.records[0];
@@ -138,9 +138,10 @@ export async function listMembers(orgId: string): Promise<MembershipRecord[]> {
   try {
     const r = await session.run(
       `MATCH (u:User)-[m:MEMBER_OF]->(o:Organization {id: $orgId})
+       WITH u, m, o, coalesce(m.joinedAt, o.createdAt) AS joined
        RETURN u.id AS userId, u.email AS email, u.displayName AS displayName,
-              o.id AS orgId, m.role AS role, toString(m.joinedAt) AS joinedAt
-       ORDER BY m.joinedAt`,
+              o.id AS orgId, m.role AS role, toString(joined) AS joinedAt
+       ORDER BY joined`,
       { orgId },
     );
     return r.records.map((rec) => ({
