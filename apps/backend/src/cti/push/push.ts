@@ -5,6 +5,7 @@ import { isHostnameAllowed } from '../egress/repo.js';
 import { logAudit } from '../../audits/log.js';
 import { fetchHuntName, getPushTarget, recordPushAttempt } from './repo.js';
 import { uploadStixToMisp } from './misp/client.js';
+import { uploadStixToTaxii } from './taxii/client.js';
 import type { CtiPushAttempt, CtiPushTarget, PushOutcome } from './types.js';
 
 // H7/H9 — push pipeline orchestration. Threads through every gate
@@ -207,8 +208,33 @@ export async function pushHuntToTarget(
     return { attempt: a, bundleContentHash };
   }
 
-  // OPENCTI / TAXII / ECLECTICIQ live clients still pending. Friendly
-  // error so operator knows to use dryRun for these kinds.
+  // H9 — TAXII 2.1: re-wrap bundle as envelope + POST to the collection.
+  if (target.kind === 'TAXII') {
+    const r = await uploadStixToTaxii(target.url, target.apiKey, result.json);
+    if (r.ok) {
+      const a = await recordAndAudit(
+        tenantId, actorUserId, target, huntId, huntName, 'success',
+        {
+          bundleContentHash,
+          indicatorCount: result.stats.indicatorCount,
+          errorDetail: r.statusId ? `TAXII status id: ${r.statusId}` : null,
+        },
+      );
+      return { attempt: a, bundleContentHash };
+    }
+    const a = await recordAndAudit(
+      tenantId, actorUserId, target, huntId, huntName, 'failed_http',
+      {
+        bundleContentHash,
+        indicatorCount: result.stats.indicatorCount,
+        errorDetail: r.errorDetail ?? `TAXII HTTP ${r.status}`,
+      },
+    );
+    return { attempt: a, bundleContentHash };
+  }
+
+  // OPENCTI / ECLECTICIQ live clients still pending. Friendly error so
+  // operator knows to use dryRun for these kinds.
   const a = await recordAndAudit(
     tenantId, actorUserId, target, huntId, huntName, 'failed_http',
     {

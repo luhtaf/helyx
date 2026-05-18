@@ -1,13 +1,13 @@
 // H7/H9 — CTI push target kinds.
 //
-// MISP: REST API + STIX 2.1 upload via /events/upload_stix
+// MISP: REST API + STIX 2.1 upload via /events/upload_stix      (live)
+// TAXII: STIX TAXII 2.1 add-objects envelope POST               (live)
 // OPENCTI: GraphQL push, more complex; placeholder until H7b
-// TAXII: STIX TAXII 2.1 server (Helyx as client publisher)
-// ECLECTICIQ: REST API
+// ECLECTICIQ: REST API; placeholder
 //
-// v1 ships scaffolding for all four; only MISP gets a real client
-// (still gated on dryRun). The push pipeline + audit ledger work
-// uniformly across kinds.
+// MISP + TAXII have real clients; OPENCTI/ECLECTICIQ still fall back to
+// the friendly "use dryRun" error. The push pipeline + audit ledger
+// work uniformly across kinds.
 
 export const PUSH_TARGET_KINDS = ['MISP', 'OPENCTI', 'TAXII', 'ECLECTICIQ'] as const;
 export type PushTargetKind = (typeof PUSH_TARGET_KINDS)[number];
