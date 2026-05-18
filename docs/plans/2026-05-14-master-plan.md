@@ -208,10 +208,60 @@ single top-right notification bell (drop both from sidebar) — better UX.
 **Cross-project workstream — Suricata custom ruleset:**
 Separate repo `/Users/fathulikhsan/Project/Rules/Suricata` (rules-only,
 not git, Suricata runs elsewhere). Authoritative spec:
-`docs/superpowers/specs/2026-05-18-suricata-ruleset-design.md` (DRAFT,
-pending its own /autoplan review). 100% hand-written low-FP Suricata
-7.x IDS alert-only ruleset, OWASP Top 10 2021 (minus A04/A09) + infra;
-PoC + benign negative test per rule; ET PRO = private offline reference
-only (never copied). **When working on Suricata rules, follow THAT
-repo's spec + CLAUDE.md, not Helyx conventions.** Tracked here (+ task
-list #97) so the dependency isn't lost; not part of the Helyx codebase.
+`docs/superpowers/specs/2026-05-18-suricata-ruleset-design.md`. 100%
+hand-written low-FP Suricata 7.x IDS alert-only ruleset, OWASP Top 10
+2021 (minus A04/A09) + infra; PoC + benign negative test per rule; ET
+PRO = private offline reference only (never copied). **When working on
+Suricata rules, follow THAT repo's spec + CLAUDE.md, not Helyx
+conventions.** Tracked here (+ task list #97); not part of the Helyx
+codebase.
+
+---
+
+## Status addendum (2026-05-18 pm — session: bugfix + Suricata + Phase R scope)
+
+**Suricata ruleset — substantially built (was DRAFT spec).** 28 rules
+across 9 authoring batches, ALL matrix-green (local 8.0.4 + Suricata
+7.0.3 + 7.0 containers, zero drift). Phase-2 harness LIVE
+(pcap→eve.json auto-assert; manual verification now forbidden per spec
+§9 AD1). Two pure-stdlib pcap-builder unlocks: `http_exchange`
+(response-side rules) + `tls_client_hello` (tls-meta JA3/JA4). One-cmd
+ship gate `scripts/verify-ship.sh` (Phase-1 + Phase-2 matrix + bundle
+export + standalone reload). Coverage: OWASP
+A01/A02/A03×7/A05/A07/A08/A10, 6 known-CVEs (Log4Shell, Spring4Shell,
+Citrix, Confluence, F5, Struts S2-045), recon-http, auth-brute,
+webshell, recon-l34, infra-brute, DNS-tunnel, protocol-anomaly,
+response-side info-leak, tls-meta SNI-anomaly.
+
+**Helyx bugfix + polish (committed to main):**
+- `/admin/members` 500 fixed — null `Membership.joinedAt` on a stray
+  edge; hardened `listMembers`/`addMember` with `coalesce(...,o.createdAt)`
+  + backfill (4c56a5b).
+- `verify2@helyx.test` was wrongly DETACH-DELETEd during that fix
+  (mistaken for e2e pollution — it is the primary demo account).
+  Restored via idempotent `restore-verify2.ts` (41c61e1); `cred.txt`
+  updated. **Lesson:** bug fixes are code+backfill only, never delete
+  data judged "pollution".
+- Hunt-mode graph header decluttered (11 inline controls → one reusable
+  `Dropdown` "Hunt actions" menu) (a75b43b).
+- `/rules/:id` 3 governance sections consolidated into one "Release
+  governance" card (6470fd4).
+
+**Phase R — SCOPE DIVERGENCE, READ THIS.** Task #86 / "Phase R" has a
+formal BREAKING design doc:
+`docs/plans/2026-05-08-polymorphic-stakeholder-refactor.md` (Org→
+Stakeholder collapse + User.globalRole=NSOC + N-level hierarchy +
+ancestorPath + drop `:Organization`; ~1300 LoC; 17.5h; strict
+two-release deploy). **That is the real Phase R and it is NOT done.**
+
+What shipped this session instead (f5e39cd) is a `Stakeholder.kind`
+discriminator (ORG|SUBUNIT|VENDOR|PERSON|FACILITY, additive m028,
+backfill→ORG, backward-compatible, backend-only). This was chosen by
+the owner as a deliberate "ga ngubah banyak tapi impactful" lightweight
+item — but note the formal Phase R doc explicitly lists `kind` variants
+under **"What's NOT in scope"**. So `Stakeholder.kind` is a standalone
+small feature, **not** the documented Phase R.
+
+→ Real Phase R (the breaking refactor) remains **DEFERRED**, design
+doc intact, pending owner decision on whether/when to execute. Do NOT
+treat `Stakeholder.kind` as closing it.

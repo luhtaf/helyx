@@ -1,0 +1,81 @@
+# Helyx backend — fan-out CI. Path-filtered so a web-only change never
+# rebuilds the backend. Build+push GHCR, then bump the image tag in the
+# manifest repo's helyx/backend-deployment.yaml (Fleet rolls it) — the
+# "Image Version Flow" from k3s-manifest-th/README, per-component.
+name: deploy-backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/backend/**'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/huntingyuk/helyx-backend
+  # manifest repo + path the bump commits to (mirror landing setup)
+  MANIFEST_REPO: HuntingYuk/k3s-manifest
+  # split FE/BE layout: backend image is in deployment (server + migrate
+  # init) AND cronjobs (nvd/mitre) — bump both.
+  MANIFEST_PATHS: "projects/helyx-backend/deployment.yaml projects/helyx-backend/cronjobs.yaml"
+
+jobs:
+  build-push-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version tag
+        id: ver
+        run: echo "tag=0.1.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.ver.outputs.tag }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Bump image tag in manifest repo
+        env:
+          MANIFEST_REPO_TOKEN: ${{ secrets.MANIFEST_REPO_TOKEN }}
+        run: |
+          set -eu
+          git clone --depth 1 \
+            "https://x-access-token:${MANIFEST_REPO_TOKEN}@github.com/${MANIFEST_REPO}.git" mrepo
+          cd mrepo
+          # bump every backend-image ref (deployment: migrate init +
+          # server container; cronjobs: nvd + mitre)
+          for f in ${MANIFEST_PATHS}; do
+            sed -i -E "s#(${IMAGE}):[^\"[:space:]]+#\1:${{ steps.ver.outputs.tag }}#g" "$f"
+          done
+          if git diff --quiet; then echo "no image change"; exit 0; fi
+          git config user.name  "helyx-ci"
+          git config user.email "ci@helyx.local"
+          git add ${MANIFEST_PATHS}
+          git commit -m "ci(backend): helyx-backend → ${{ steps.ver.outputs.tag }}"
+          git push

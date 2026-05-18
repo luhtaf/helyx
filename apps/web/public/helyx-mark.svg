@@ -1,0 +1,20 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Helyx">
+  <!-- Helyx mark — reads as H + node-link graph + helix twist.
+       Restrained 2-tone: ink strands, one signal-accent node.
+       Monochrome-safe (set every stroke/fill to currentColor). -->
+  <g stroke="#111317" stroke-width="3.4" stroke-linecap="round">
+    <!-- left strand -->
+    <line x1="17" y1="17" x2="17" y2="47"/>
+    <!-- right strand -->
+    <line x1="47" y1="17" x2="47" y2="47"/>
+    <!-- helix twist / H-bar: bottom-left to top-right -->
+    <line x1="17" y1="47" x2="47" y2="17"/>
+  </g>
+  <g fill="#111317">
+    <circle cx="17" cy="17" r="5.2"/>
+    <circle cx="17" cy="47" r="5.2"/>
+    <circle cx="47" cy="47" r="5.2"/>
+  </g>
+  <!-- single accent node = the "signal" -->
+  <circle cx="47" cy="17" r="5.2" fill="#4F6BFF"/>
+</svg>

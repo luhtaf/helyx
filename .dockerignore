@@ -1,0 +1,26 @@
+# Keep build context small AND keep secrets OUT of images.
+**/node_modules
+**/dist
+**/.git
+**/.DS_Store
+**/*.log
+
+# Secrets / local-only — must never land in an image layer
+.env
+.env.*
+cred.txt
+*.cred
+/config
+*.kubeconfig
+**/.surirun*
+
+# Dev/test noise
+docs
+**/*.md
+!apps/web/index.html
+.github
+.vscode
+.idea
+coverage
+**/*.test.ts
+**/*.spec.ts

@@ -1,0 +1,21 @@
+<svg width="232" height="64" viewBox="0 0 232 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Helyx">
+  <!-- Horizontal lockup: mark + wordmark. Wordmark uses a geometric
+       sans stack with tight tracking (Linear/Vercel register). For a
+       pixel-frozen asset, convert <text> to paths; kept as text so the
+       owner can retune type cheaply. -->
+  <g stroke="#111317" stroke-width="3.4" stroke-linecap="round">
+    <line x1="17" y1="17" x2="17" y2="47"/>
+    <line x1="47" y1="17" x2="47" y2="47"/>
+    <line x1="17" y1="47" x2="47" y2="17"/>
+  </g>
+  <g fill="#111317">
+    <circle cx="17" cy="17" r="5.2"/>
+    <circle cx="17" cy="47" r="5.2"/>
+    <circle cx="47" cy="47" r="5.2"/>
+  </g>
+  <circle cx="47" cy="17" r="5.2" fill="#4F6BFF"/>
+  <text x="74" y="41"
+        font-family="'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif"
+        font-size="30" font-weight="600" letter-spacing="-0.5"
+        fill="#111317">helyx</text>
+</svg>
