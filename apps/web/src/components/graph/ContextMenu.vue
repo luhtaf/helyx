@@ -15,7 +15,10 @@ const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'hide'): void;
   (e: 'pin'): void;
+  (e: 'add-child'): void;
 }>();
+
+const isAsset = computed(() => props.node.type === 'Asset');
 
 // Clamp menu so it doesn't render off-screen for nodes near right/bottom edges.
 const styleObject = computed(() => {
@@ -91,6 +94,12 @@ onUnmounted(() => window.removeEventListener('keydown', onEsc));
       </template>
 
       <div class="border-t border-rule mt-1 pt-1">
+        <button
+          v-if="isAsset"
+          type="button"
+          class="w-full text-left px-3 py-1.5 text-signal/90 hover:bg-signal/10 hover:text-signal transition"
+          @click="emit('add-child'); emit('close')"
+        >+ Add child asset</button>
         <button
           type="button"
           class="w-full text-left px-3 py-1.5 text-ink-faint hover:bg-surface hover:text-ink-dim transition"

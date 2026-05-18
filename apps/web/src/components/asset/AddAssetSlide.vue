@@ -18,7 +18,12 @@ import { useAssetAutocomplete, type CreateAssetInput, type AssetAutocompleteHit 
 import { useStakeholderAutocomplete, type StakeholderHit } from '@/composables/useStakeholders';
 import Button from '@/components/ui/Button.vue';
 
-const props = defineProps<{ open: boolean; loading: boolean }>();
+const props = defineProps<{
+  open: boolean;
+  loading: boolean;
+  /** Pre-pick a parent (e.g. opened from a /graph Asset node). */
+  presetParent?: { id: string; label: string } | null;
+}>();
 const emit = defineEmits<{
   (e: 'submit', payload: {
     input: CreateAssetInput;
@@ -120,7 +125,15 @@ function reset(): void {
   jsonRaw.value = '';
   jsonError.value = '';
 }
-watch(() => props.open, (o) => { if (!o) reset(); });
+watch(() => props.open, (o) => {
+  if (!o) { reset(); return; }
+  // Opened from a graph Asset node → pre-pick that node as parent.
+  if (props.presetParent) {
+    parentId.value = props.presetParent.id;
+    parentSearch.value = props.presetParent.label;
+    parentLabel.value = props.presetParent.label;
+  }
+});
 
 function onKey(e: KeyboardEvent): void {
   if (props.open && e.key === 'Escape') { e.preventDefault(); emit('cancel'); }

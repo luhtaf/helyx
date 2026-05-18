@@ -14,7 +14,9 @@ import HelyxGraph from '@/components/graph/HelyxGraph.vue';
 import ContextMenu from '@/components/graph/ContextMenu.vue';
 import NodeDetailDrawer from '@/components/graph/NodeDetailDrawer.vue';
 import { transformsFor } from '@/components/graph/transforms';
-import { nodeId, type GraphNode, type Transform } from '@/components/graph/graph-types';
+import { nodeId, edgeId, type GraphNode, type Transform } from '@/components/graph/graph-types';
+import AddAssetSlide from '@/components/asset/AddAssetSlide.vue';
+import { useCreateAsset, useIngestSbom, type CreateAssetInput } from '@/composables/useAssets';
 import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
@@ -438,6 +440,63 @@ async function onPick(transform: Transform, limit?: number): Promise<void> {
   }
 }
 
+// ─── Add child asset from an Asset node (visual advanced) ──────────
+const addChildOpen = ref(false);
+const addChildParent = ref<{ id: string; label: string } | null>(null);
+const { submit: createChildAsset, submitting: creatingChild } = useCreateAsset();
+const { submit: ingestChildSbom } = useIngestSbom();
+
+function onAddChild(): void {
+  if (!ctxMenu.value) return;
+  const n = ctxMenu.value.node;
+  addChildParent.value = { id: n.entityId, label: n.label };
+  ctxMenu.value = null;
+  addChildOpen.value = true;
+}
+
+async function onCreateChildAsset(payload: {
+  input: CreateAssetInput;
+  sbom: string | null;
+  sbomFilename: string | null;
+}): Promise<void> {
+  const parentId = addChildParent.value?.id ?? null;
+  const r = await createChildAsset(payload.input);
+  if (!r) {
+    showToast('Add failed — check inputs', 'error');
+    return;
+  }
+  if (payload.sbom) {
+    const sb = await ingestChildSbom(r.id, payload.sbom, payload.sbomFilename);
+    showToast(
+      sb
+        ? `Added ${r.name} · SBOM: ${sb.componentCount} components`
+        : `Added ${r.name} · SBOM ingest failed (asset kept)`,
+      sb ? 'success' : 'error',
+    );
+  } else {
+    showToast(`Added ${r.name}`, 'success');
+  }
+  // Reflect on canvas immediately: new Asset node + CONTAINS edge from
+  // the parent so the tier is visible without a reload.
+  if (graphRef.value) {
+    const childNodeId = nodeId('Asset', r.id);
+    const newNode: GraphNode = {
+      id: childNodeId, entityId: r.id, type: 'Asset', label: r.name,
+    };
+    const edges = parentId
+      ? [{
+          id: edgeId(nodeId('Asset', parentId), childNodeId, 'CONTAINS'),
+          source: nodeId('Asset', parentId),
+          target: childNodeId,
+          edgeType: 'CONTAINS',
+        }]
+      : [];
+    await graphRef.value.addNodes([newNode], edges);
+    autoSave();
+  }
+  addChildOpen.value = false;
+}
+
 // ─── Save as Hunt ─────────────────────────────────────────────────
 async function onSaveAsHunt(): Promise<void> {
   if (!graphRef.value || !saveName.value.trim()) return;
@@ -851,7 +910,16 @@ onMounted(() => { void plantSeed(); });
         :transforms="ctxTransforms"
         @pick="onPick"
         @hide="onHide"
+        @add-child="onAddChild"
         @close="ctxMenu = null"
+      />
+
+      <AddAssetSlide
+        :open="addChildOpen"
+        :loading="creatingChild"
+        :preset-parent="addChildParent"
+        @submit="onCreateChildAsset"
+        @cancel="addChildOpen = false"
       />
 
       <NodeDetailDrawer :node="selected" @close="selected = null" />
