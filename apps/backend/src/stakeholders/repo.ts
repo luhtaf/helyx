@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getSession } from '../db/neo4j.js';
 import type { StakeholderRow, StakeholderInput, SektorRow } from './types.js';
+import { DEFAULT_STAKEHOLDER_KIND } from './kinds.js';
 
 // ---------------------------------------------------------------------------
 // Return fragments
@@ -15,6 +16,7 @@ const STAKEHOLDER_RETURN = `
   coalesce(k.aliases, []) AS aliases,
   k.city AS city, k.coords AS coords, k.notes AS notes,
   k.status AS status,
+  coalesce(k.kind, 'ORG') AS kind,
   head([(k)-[:IN_SEKTOR]->(s:Sektor) | s.id]) AS sektorId,
   k.sensorStack AS sensorStack,
   k.sensorStatus AS sensorStatus,
@@ -49,6 +51,7 @@ function rowToStakeholder(rec: { get: (k: string) => unknown }): StakeholderRow 
     coords: rawCoords ?? null,
     notes: (rec.get('notes') as string | null) ?? null,
     status: rec.get('status') as StakeholderRow['status'],
+    kind: (rec.get('kind') as StakeholderRow['kind']) ?? 'ORG',
     sektorId: (rec.get('sektorId') as string | null) ?? null,
     sensorStack: (rec.get('sensorStack') as StakeholderRow['sensorStack']) ?? null,
     sensorStatus: (rec.get('sensorStatus') as StakeholderRow['sensorStatus']) ?? null,
@@ -112,7 +115,7 @@ export async function countStakeholdersInSektor(sektorId: string, tenantId: stri
 
 export async function listStakeholders(
   tenantId: string,
-  filter: { sektorId?: string; status?: string; search?: string; first?: number },
+  filter: { sektorId?: string; status?: string; kind?: string; search?: string; first?: number },
 ): Promise<StakeholderRow[]> {
   const session = getSession();
   const limit = BigInt(filter.first ?? 50);
@@ -133,6 +136,10 @@ export async function listStakeholders(
         params.status = filter.status;
         where += '\n  AND k.status = $status';
       }
+      if (filter.kind) {
+        params.kind = filter.kind;
+        where += "\n  AND coalesce(k.kind, 'ORG') = $kind";
+      }
       cypher = `
         CALL db.index.fulltext.queryNodes('stakeholder_search', $search) YIELD node AS k, score
         ${where}
@@ -146,6 +153,10 @@ export async function listStakeholders(
       if (filter.status) {
         params.status = filter.status;
         conditions.push('k.status = $status');
+      }
+      if (filter.kind) {
+        params.kind = filter.kind;
+        conditions.push("coalesce(k.kind, 'ORG') = $kind");
       }
       const whereClause = 'WHERE ' + conditions.join(' AND ');
 
@@ -228,6 +239,7 @@ export async function createStakeholder(tenantId: string, input: StakeholderInpu
            coords: $coords,
            notes: $notes,
            status: 'ACTIVE',
+           kind: $kind,
            sensorStack: null,
            sensorStatus: null,
            sensorAgentCount: null,
@@ -245,6 +257,7 @@ export async function createStakeholder(tenantId: string, input: StakeholderInpu
           city: input.city ?? null,
           coords: input.coords ?? null,
           notes: input.notes ?? null,
+          kind: input.kind ?? DEFAULT_STAKEHOLDER_KIND,
         },
       );
 
@@ -303,6 +316,7 @@ export async function bulkCreateStakeholders(
         city: r.city ?? null,
         notes: r.notes ?? null,
         sektorId: r.sektorId ?? null,
+        kind: r.kind ?? DEFAULT_STAKEHOLDER_KIND,
       }));
 
       await tx.run(
@@ -310,7 +324,7 @@ export async function bulkCreateStakeholders(
          CREATE (k:Stakeholder {
            id: row.id, tenantId: $tenantId, slug: row.slug, name: row.name,
            aliases: row.aliases, city: row.city, coords: null, notes: row.notes,
-           status: 'ACTIVE',
+           status: 'ACTIVE', kind: row.kind,
            sensorStack: null, sensorStatus: null, sensorAgentCount: null,
            sensorDeployedAt: null, sensorNotes: null,
            createdAt: datetime(), updatedAt: datetime()
@@ -348,6 +362,7 @@ export async function updateStakeholder(
       if (input.city !== undefined) patch.city = input.city;
       if (input.coords !== undefined) patch.coords = input.coords;
       if (input.notes !== undefined) patch.notes = input.notes;
+      if (input.kind !== undefined) patch.kind = input.kind;
 
       await tx.run(
         `MATCH (k:Stakeholder {id: $id})

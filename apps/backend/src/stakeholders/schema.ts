@@ -1,9 +1,10 @@
-import { SENSOR_STACKS, SENSOR_STATUSES, STAKEHOLDER_STATUSES } from './kinds.js';
+import { SENSOR_STACKS, SENSOR_STATUSES, STAKEHOLDER_STATUSES, STAKEHOLDER_KINDS } from './kinds.js';
 
 export const stakeholderTypeDefs = /* GraphQL */ `
   enum SensorStack       { ${SENSOR_STACKS.join(' ')} }
   enum SensorStatus      { ${SENSOR_STATUSES.join(' ')} }
   enum StakeholderStatus { ${STAKEHOLDER_STATUSES.join(' ')} }
+  enum StakeholderKind   { ${STAKEHOLDER_KINDS.join(' ')} }
 
   type Sektor {
     id: ID!
@@ -30,6 +31,7 @@ export const stakeholderTypeDefs = /* GraphQL */ `
     coords: [Float!]
     notes: String
     status: StakeholderStatus!
+    kind: StakeholderKind!
     sektor: Sektor
     sensor: SensorDeploymentSummary!
     createdAt: String!
@@ -44,6 +46,7 @@ export const stakeholderTypeDefs = /* GraphQL */ `
     coords: [Float!]
     notes: String
     sektorId: ID
+    kind: StakeholderKind
   }
 
   input StakeholderUpdateInput {
@@ -53,6 +56,7 @@ export const stakeholderTypeDefs = /* GraphQL */ `
     coords: [Float!]
     notes: String
     sektorId: ID
+    kind: StakeholderKind
   }
 
   input SensorInput {
@@ -65,7 +69,7 @@ export const stakeholderTypeDefs = /* GraphQL */ `
 
   extend type Query {
     sektors: [Sektor!]!
-    stakeholders(sektorId: ID, status: StakeholderStatus, search: String, first: Int = 50): [Stakeholder!]!
+    stakeholders(sektorId: ID, status: StakeholderStatus, kind: StakeholderKind, search: String, first: Int = 50): [Stakeholder!]!
     stakeholder(id: ID!): Stakeholder
     stakeholderBySlug(slug: String!): Stakeholder
   }

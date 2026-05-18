@@ -1,5 +1,5 @@
-export { type SensorStack, type SensorStatus, type StakeholderStatus } from './kinds.js';
-import type { SensorStack, SensorStatus, StakeholderStatus } from './kinds.js';
+export { type SensorStack, type SensorStatus, type StakeholderStatus, type StakeholderKind } from './kinds.js';
+import type { SensorStack, SensorStatus, StakeholderStatus, StakeholderKind } from './kinds.js';
 
 export interface SektorRow {
   id: string;
@@ -17,6 +17,7 @@ export interface StakeholderRow {
   coords: [number, number] | null;
   notes: string | null;
   status: StakeholderStatus;
+  kind: StakeholderKind;
   sektorId: string | null;
   sensorStack: SensorStack | null;
   sensorStatus: SensorStatus | null;
@@ -35,4 +36,5 @@ export interface StakeholderInput {
   coords?: [number, number];
   notes?: string;
   sektorId?: string;
+  kind?: StakeholderKind;
 }

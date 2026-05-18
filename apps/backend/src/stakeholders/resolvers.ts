@@ -13,13 +13,14 @@ import {
   setStakeholderSensor,
   updateStakeholder,
 } from './repo.js';
-import type { SektorRow, StakeholderRow } from './types.js';
+import type { SektorRow, StakeholderRow, StakeholderKind } from './types.js';
 import { logAudit } from '../audits/log.js';
 import { parseStakeholderCsv } from './csv-import.js';
 
 interface StakeholderFilterArgs {
   sektorId?: string;
   status?: string;
+  kind?: string;
   search?: string;
   first?: number;
 }
@@ -32,6 +33,7 @@ interface CreateInput {
   coords?: [number, number];
   notes?: string;
   sektorId?: string;
+  kind?: StakeholderKind;
 }
 
 interface UpdateInput {
@@ -41,6 +43,7 @@ interface UpdateInput {
   coords?: [number, number];
   notes?: string;
   sektorId?: string;
+  kind?: StakeholderKind;
 }
 
 interface SensorInput {
