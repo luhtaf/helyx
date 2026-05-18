@@ -182,3 +182,36 @@ Mengikuti "kerjain banyak banyak" — sequential commits, each verified.
 3. **Scanner = client agent (operator runs binary on their network) or pull (Helyx fetches from a configured target)?** Plan assumes push (client agent). Pull adds Helyx-side credentials surface.
 
 Default: assume push + per-tenant + always-review for v1, user can override.
+
+---
+
+## Status addendum (2026-05-18)
+
+Master plan P0–E2 + Phase Z all shipped + e2e-verified. CTI push: all 4
+kinds live (MISP, TAXII, OpenCTI, EclecticIQ-via-TAXII). OIDC SSO is
+DB-driven + admin-managed (`/admin/sso`). Org member mgmt + revoke
+shipped (E2).
+
+**Active build:** Per-type artifact create forms (11 types) for UI v2 —
+backend ready (`apps/backend/src/artifacts/`), FE had IOC-only. Building
+one generic descriptor-driven modal (DRY SoT) covering all 11 types.
+
+**Queued UX:** Merge reconciliation inbox + inventory inbox into a
+single top-right notification bell (drop both from sidebar) — better UX.
+
+**Scope clarifications (owner, 2026-05-18):**
+- Scanner agent = separate future **Go** project (not this TS repo).
+  SCANNER_BOT role is out-of-scope here. Ingest endpoint side is done.
+- Team membership = **in flux** — model moved Org → Stakeholder-centric;
+  per-Org Team semantics likely redesigned. Don't build; flag for owner.
+
+**Cross-project workstream — Suricata custom ruleset:**
+Separate repo `/Users/fathulikhsan/Project/Rules/Suricata` (rules-only,
+not git, Suricata runs elsewhere). Authoritative spec:
+`docs/superpowers/specs/2026-05-18-suricata-ruleset-design.md` (DRAFT,
+pending its own /autoplan review). 100% hand-written low-FP Suricata
+7.x IDS alert-only ruleset, OWASP Top 10 2021 (minus A04/A09) + infra;
+PoC + benign negative test per rule; ET PRO = private offline reference
+only (never copied). **When working on Suricata rules, follow THAT
+repo's spec + CLAUDE.md, not Helyx conventions.** Tracked here (+ task
+list #97) so the dependency isn't lost; not part of the Helyx codebase.

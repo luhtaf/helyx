@@ -9,8 +9,10 @@ import Breadcrumb from '@/components/layout/Breadcrumb.vue';
 import Button from '@/components/ui/Button.vue';
 import CloseCaseModal from '@/components/case/CloseCaseModal.vue';
 import NotesPanel from '@/components/notes/NotesPanel.vue';
-import AddIocArtifactModal from '@/components/case/AddIocArtifactModal.vue';
-import { useCreateIocArtifact, type IocArtifactInput } from '@/composables/useArtifacts';
+import AddArtifactModal from '@/components/case/AddArtifactModal.vue';
+import { useCreateArtifact, type ArtifactBaseInput } from '@/composables/useArtifacts';
+import type { ArtifactType } from '@/composables/artifact-kinds';
+import { useAuthStore } from '@/stores/auth';
 
 const props = defineProps<{ id: string }>();
 const idRef = toRef(props, 'id');
@@ -32,18 +34,25 @@ async function onCloseCase(verdict: CloseVerdict): Promise<void> {
   }
 }
 
-// Add IOC artifact (single, manual). Bulk-paste covers many; this is
-// the 1-at-a-time form.
-const addIocOpen = ref(false);
-const { submit: createIoc, submitting: creatingIoc } = useCreateIocArtifact();
-async function onAddIoc(input: IocArtifactInput): Promise<void> {
+// Add artifact — one generic modal, all 11 types (descriptor-driven).
+const auth = useAuthStore();
+const canAddArtifact = computed(() => auth.hasMinRole('ANALYST'));
+const addArtifactOpen = ref(false);
+const { submit: createArtifact, submitting: creatingArtifact } = useCreateArtifact();
+async function onAddArtifact(payload: {
+  type: ArtifactType;
+  base: ArtifactBaseInput;
+  fields: Record<string, unknown>;
+}): Promise<void> {
   if (!caseDetail.value) return;
-  const r = await createIoc(caseDetail.value.id, input);
+  const r = await createArtifact(
+    payload.type, caseDetail.value.id, payload.base, payload.fields,
+  );
   if (r) {
-    showToast(`Added IOC ${r.value}`, 'success');
-    addIocOpen.value = false;
+    showToast(`Added ${payload.type.replace('_', ' ').toLowerCase()} artifact`, 'success');
+    addArtifactOpen.value = false;
   } else {
-    showToast('Add IOC failed', 'error');
+    showToast('Add artifact failed', 'error');
   }
 }
 
@@ -102,9 +111,11 @@ const labelMap: Record<string, string> = {
             :to="{ name: 'graph', query: { seed: `case:${caseDetail.id}` } }"
             class="font-mono text-[11px] text-signal hover:underline ml-1"
           >Open in graph →</RouterLink>
-          <Button v-if="caseDetail.status === 'ACTIVE'" variant="ghost" @click="addIocOpen = true">
-            + Add IOC
-          </Button>
+          <Button
+            v-if="caseDetail.status === 'ACTIVE' && canAddArtifact"
+            variant="ghost"
+            @click="addArtifactOpen = true"
+          >+ Add artifact</Button>
           <Button v-if="caseDetail.status === 'ACTIVE'" variant="primary" @click="closeOpen = true">
             Close case
           </Button>
@@ -134,6 +145,13 @@ const labelMap: Record<string, string> = {
           {{ t }}
           <span v-if="t === 'artifacts'" class="ml-1 text-ink-faint">{{ caseDetail.artifactCount }}</span>
         </button>
+        <Button
+          v-if="activeTab === 'artifacts' && canAddArtifact"
+          variant="primary"
+          size="sm"
+          class="ml-auto mb-2"
+          @click="addArtifactOpen = true"
+        >+ Add artifact</Button>
       </nav>
 
       <!-- Summary tab -->
@@ -165,10 +183,15 @@ const labelMap: Record<string, string> = {
       <!-- Artifacts tab — smart empty state -->
       <section v-else>
         <div v-if="caseDetail.artifactCount === 0" class="py-12 text-center">
-          <p class="text-ink-dim text-[14px] mb-2">No artifacts yet</p>
-          <p class="font-mono text-[12px] text-ink-faint italic">
-            Per-type artifact create forms (11 types) shipping in UI v2.
-            Backend ready — see <span class="font-mono">apps/backend/src/artifacts/</span>.
+          <p class="text-ink-dim text-[14px] mb-3">No artifacts yet</p>
+          <Button
+            v-if="canAddArtifact"
+            variant="primary"
+            size="sm"
+            @click="addArtifactOpen = true"
+          >+ Add first artifact</Button>
+          <p v-else class="font-mono text-[12px] text-ink-faint italic">
+            ANALYST role required to add artifacts.
           </p>
         </div>
         <div v-else class="grid grid-cols-4 gap-4">
@@ -190,11 +213,11 @@ const labelMap: Record<string, string> = {
       </div>
     </template>
 
-    <AddIocArtifactModal
-      :open="addIocOpen"
-      :loading="creatingIoc"
-      @submit="onAddIoc"
-      @cancel="addIocOpen = false"
+    <AddArtifactModal
+      :open="addArtifactOpen"
+      :loading="creatingArtifact"
+      @submit="onAddArtifact"
+      @cancel="addArtifactOpen = false"
     />
 
     <CloseCaseModal
