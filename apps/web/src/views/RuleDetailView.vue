@@ -186,100 +186,100 @@ const REASON_LABEL: Record<PushBlockReason, string> = {
         <p class="font-mono text-[12px] text-ink-dim">{{ rule.sourceRef }}</p>
       </section>
 
-      <!-- F2 — approval state (sha256 content hash freshness check) -->
-      <section class="mb-8">
-        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">approval</p>
-        <p class="text-[12px] text-ink-dim mb-3 max-w-[68ch]">
-          Captures sha256 of rule.content at approval time. Editing the
-          rule body after approval makes the approval <em>stale</em> —
-          re-approval required before push.
-        </p>
-        <div class="flex items-center gap-3">
-          <span
-            v-if="rule.approvedAt && !approvalStale"
-            class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-sev-low/15 text-sev-low border-sev-low/30 font-mono text-[10px] uppercase tracking-wider"
-            :title="`Approved ${rule.approvedAt.slice(0, 19).replace('T', ' ')} by ${rule.approvedByUserId?.slice(0, 8) ?? '—'}`"
-          >approved</span>
-          <span
-            v-else-if="rule.approvedAt && approvalStale"
-            class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-sev-med/15 text-sev-med border-sev-med/30 font-mono text-[10px] uppercase tracking-wider"
-            title="Content was edited after approval — re-approve required"
-          >stale (content edited)</span>
-          <span
-            v-else
-            class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-ink-faint/10 text-ink-dim border-ink-faint/30 font-mono text-[10px] uppercase tracking-wider"
-          >unapproved</span>
-
-          <Button
-            v-if="!rule.approvedAt || approvalStale"
-            variant="primary" size="sm"
-            :loading="approving"
-            @click="onApprove"
-          >{{ approvalStale ? 'Re-approve' : 'Approve for release' }}</Button>
-          <Button
-            v-if="rule.approvedAt"
-            variant="ghost" size="sm"
-            :loading="unapproving"
-            @click="onUnapprove"
-          >Revoke</Button>
+      <!-- F1+F2 — release governance (approval · push readiness · tier),
+           one card so the workflow reads as a unit, not 3 walls of text -->
+      <section class="mb-8 border border-rule-strong rounded-md">
+        <div class="px-4 py-3 border-b border-rule">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint">release governance</p>
+          <p class="text-[12px] text-ink-dim mt-1 max-w-[72ch]">
+            F1 tier ladder + F2 approval (sha256 of rule.content captured at
+            approve time; editing the body after makes it
+            <em>stale</em>). Push paths (MISP · OpenCTI · TAXII) enforce
+            <code class="font-mono text-ink">rule.tier ≤ target.maxTier</code>
+            AND a non-stale approval.
+          </p>
         </div>
-      </section>
 
-      <!-- F1c — push readiness across all 4 target tiers -->
-      <section class="mb-8">
-        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">push readiness</p>
-        <p class="text-[12px] text-ink-dim mb-3 max-w-[68ch]">
-          Pre-flight check: can this rule ship to a downstream collector
-          accepting tier ≤ X? Combines F1 (tier ladder) + F2 (approval +
-          content-hash freshness). Push paths (H7 MISP, H7 OpenCTI, H9
-          TAXII) call the same guard.
-        </p>
-        <p v-if="pushLoading && pushRows.length === 0" class="text-[12px] text-ink-faint">checking…</p>
-        <div v-else class="border border-rule-strong rounded-md overflow-hidden">
-          <div
-            v-for="row in pushRows"
-            :key="row.tier"
-            class="grid grid-cols-[140px_90px_1fr] items-center gap-3 px-3 py-2 border-b border-rule last:border-b-0 font-mono text-[11px]"
-          >
-            <span class="text-ink-dim uppercase tracking-wider">→ {{ RELEASE_TIER_LABELS[row.tier] }}</span>
+        <!-- approval -->
+        <div class="px-4 py-3 border-b border-rule flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-3">
+            <span class="font-mono text-[10px] uppercase tracking-wider text-ink-faint w-[104px] shrink-0">approval</span>
             <span
-              :class="[
-                'inline-flex justify-center px-2 py-0.5 rounded-sm border text-[10px] uppercase tracking-wider',
-                row.allowed
-                  ? 'bg-sev-low/15 text-sev-low border-sev-low/30'
-                  : 'bg-sev-med/15 text-sev-med border-sev-med/30',
-              ]"
-            >{{ row.allowed ? 'allowed' : 'blocked' }}</span>
-            <span class="text-ink-faint truncate">
-              {{ row.allowed ? '—' : (row.reason ? REASON_LABEL[row.reason] : 'blocked') }}
-            </span>
+              v-if="rule.approvedAt && !approvalStale"
+              class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-sev-low/15 text-sev-low border-sev-low/30 font-mono text-[10px] uppercase tracking-wider"
+              :title="`Approved ${rule.approvedAt.slice(0, 19).replace('T', ' ')} by ${rule.approvedByUserId?.slice(0, 8) ?? '—'}`"
+            >approved</span>
+            <span
+              v-else-if="rule.approvedAt && approvalStale"
+              class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-sev-med/15 text-sev-med border-sev-med/30 font-mono text-[10px] uppercase tracking-wider"
+              title="Content was edited after approval — re-approve required"
+            >stale (content edited)</span>
+            <span
+              v-else
+              class="inline-flex items-center px-2 py-0.5 rounded-sm border bg-ink-faint/10 text-ink-dim border-ink-faint/30 font-mono text-[10px] uppercase tracking-wider"
+            >unapproved</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <Button
+              v-if="!rule.approvedAt || approvalStale"
+              variant="primary" size="sm"
+              :loading="approving"
+              @click="onApprove"
+            >{{ approvalStale ? 'Re-approve' : 'Approve for release' }}</Button>
+            <Button
+              v-if="rule.approvedAt"
+              variant="ghost" size="sm"
+              :loading="unapproving"
+              @click="onUnapprove"
+            >Revoke</Button>
           </div>
         </div>
-      </section>
 
-      <!-- F1 — release tier picker (4-tier need-to-know enforcement) -->
-      <section class="mb-8">
-        <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">release tier</p>
-        <p class="text-[12px] text-ink-dim mb-3 max-w-[68ch]">
-          Controls who can receive this rule. Push pre-conditions enforce
-          <code class="font-mono text-ink">rule.tier ≤ target.maxTier</code>.
-          Lower tier = wider sharing.
-        </p>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="t in RELEASE_TIERS"
-            :key="t"
-            type="button"
-            :disabled="settingTier"
-            :class="[
-              'px-3 py-1.5 rounded-sm border text-[11px] uppercase tracking-wider transition font-mono',
-              t === (pendingTier ?? rule.releaseTier)
-                ? TIER_CLASS[t]
-                : 'border-rule text-ink-faint hover:border-rule-strong hover:text-ink-dim',
-              settingTier ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
-            ]"
-            @click="onChangeTier(t)"
-          >{{ RELEASE_TIER_LABELS[t] }}</button>
+        <!-- push readiness -->
+        <div class="px-4 py-3 border-b border-rule">
+          <p class="font-mono text-[10px] uppercase tracking-wider text-ink-faint mb-2">push readiness · per target tier</p>
+          <p v-if="pushLoading && pushRows.length === 0" class="text-[12px] text-ink-faint">checking…</p>
+          <div v-else class="border border-rule rounded-md overflow-hidden">
+            <div
+              v-for="row in pushRows"
+              :key="row.tier"
+              class="grid grid-cols-[140px_90px_1fr] items-center gap-3 px-3 py-2 border-b border-rule last:border-b-0 font-mono text-[11px]"
+            >
+              <span class="text-ink-dim uppercase tracking-wider">→ {{ RELEASE_TIER_LABELS[row.tier] }}</span>
+              <span
+                :class="[
+                  'inline-flex justify-center px-2 py-0.5 rounded-sm border text-[10px] uppercase tracking-wider',
+                  row.allowed
+                    ? 'bg-sev-low/15 text-sev-low border-sev-low/30'
+                    : 'bg-sev-med/15 text-sev-med border-sev-med/30',
+                ]"
+              >{{ row.allowed ? 'allowed' : 'blocked' }}</span>
+              <span class="text-ink-faint truncate">
+                {{ row.allowed ? '—' : (row.reason ? REASON_LABEL[row.reason] : 'blocked') }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- release tier -->
+        <div class="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <span class="font-mono text-[10px] uppercase tracking-wider text-ink-faint w-[104px] shrink-0">release tier</span>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="t in RELEASE_TIERS"
+              :key="t"
+              type="button"
+              :disabled="settingTier"
+              :class="[
+                'px-3 py-1.5 rounded-sm border text-[11px] uppercase tracking-wider transition font-mono',
+                t === (pendingTier ?? rule.releaseTier)
+                  ? TIER_CLASS[t]
+                  : 'border-rule text-ink-faint hover:border-rule-strong hover:text-ink-dim',
+                settingTier ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+              ]"
+              @click="onChangeTier(t)"
+            >{{ RELEASE_TIER_LABELS[t] }}</button>
+          </div>
         </div>
       </section>
 
