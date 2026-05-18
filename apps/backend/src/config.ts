@@ -56,6 +56,14 @@ const schema = z.object({
   // to a separate runtime (Kubernetes CronJob, dedicated worker tier).
   // The CLI path `pnpm scheduler:run <name>` still works regardless.
   SCHEDULER_DISABLED: z.coerce.boolean().default(false),
+  // Per-scanner ingest rate limit — caps a single (possibly leaked)
+  // scanner token to N ingest POSTs per rolling window. Owner's "1
+  // scanner bisa pake beberapa kali doang ... biar aman" requirement:
+  // expiry bounds lifetime, this bounds blast radius within lifetime.
+  // 60 ingests / 3600s default = generous for a real agent on a cron,
+  // tight enough that a stolen token can't firehose the inbox.
+  SCANNER_RATE_MAX: z.coerce.number().int().positive().default(60),
+  SCANNER_RATE_WINDOW_S: z.coerce.number().int().positive().default(3600),
 });
 
 const parsed = schema.safeParse(process.env);

@@ -5,6 +5,7 @@ import { ASSET_KINDS } from '../assets/types.js';
 import {
   bumpScannerIngest, createScanReport, getScannerByTokenHash, hashToken,
 } from './repo.js';
+import { checkScannerRate } from './rate-limit.js';
 import type { HelyxDiscoveryV1Payload } from './types.js';
 
 // Inbound ingest endpoint — POST /api/v1/scanner/ingest
@@ -72,6 +73,30 @@ export async function scannerIngestHandler(req: Request, res: Response): Promise
   if (scanner.expiresAt && new Date(scanner.expiresAt).getTime() < Date.now()) {
     res.status(403).json({ error: err('SCANNER_EXPIRED', `expired at ${scanner.expiresAt}`, 403) });
     return;
+  }
+
+  // Per-scanner throttle — bounds blast radius of a leaked token within
+  // its lifetime. Degrades open: a Redis blip must not wedge ingestion
+  // (token + active-scanner checks already gate this path).
+  try {
+    const rate = await checkScannerRate(scanner.id);
+    if (!rate.allowed) {
+      res.setHeader('Retry-After', String(rate.resetSeconds));
+      res.status(429).json({
+        error: err(
+          'RATE_LIMITED',
+          `scanner over ${rate.limit}/window — retry in ${rate.resetSeconds}s`,
+          429,
+        ),
+      });
+      logger.warn(
+        { scannerId: scanner.id, tenantId: scanner.tenantId, count: rate.count, limit: rate.limit },
+        'scanner ingest rate-limited',
+      );
+      return;
+    }
+  } catch (e) {
+    logger.warn({ err: String(e), scannerId: scanner.id }, 'scanner rate check failed — allowing (degrade-open)');
   }
 
   // Body parse

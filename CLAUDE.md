@@ -164,6 +164,7 @@ These are the owner's stated rules. Treat them as review gates:
 - `auth:refresh:grace:<jti>` — refresh grace slot (30s TTL)
 - `auth:fail:<email>:ip:<ip>` — login fail counter (15min TTL)
 - `auth:lock:<email>:ip:<ip>` — account lockout (15min TTL)
+- `scanner:rate:<scannerId>` — per-scanner ingest counter (SCANNER_RATE_WINDOW_S TTL, default 1h). Fixed-window; keyed by scanner id so it survives token rotation. Throttle degrades open on Redis failure (`scanners/rate-limit.ts`).
 
 Redis policy `volatile-lru` — only TTL'd keys are eviction-eligible. Auth keys are TTL'd, so they survive memory pressure unless their TTL expires.
 
