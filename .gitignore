@@ -27,3 +27,14 @@ landing-page
 cred.txt
 *.cred
 .gstack/
+
+# local kubeconfig pulled from VPS — never commit
+/config
+
+# GitHub PAT for CI manifest-repo pushes — NEVER commit
+.reposecret
+
+# AI-assistant artifacts — keep out of the repo
+CLAUDE.md
+plan.md
+docs/superpowers/
