@@ -63,6 +63,8 @@ const isOwner = computed(() => auth.activeOrgRole === 'OWNER');
 const navItems = computed<NavItem[]>(() => {
   const items = [...baseNavItems];
   if (isAdminOrOwner.value) items.push({ to: '/admin/stakeholders/inbox', label: 'inbox' });
+  // E2 — org membership admin (invite / role / revoke). ADMIN+ only.
+  if (isAdminOrOwner.value) items.push({ to: '/admin/members', label: 'members' });
   if (isOwner.value) items.push({ to: '/admin/cti-keys', label: 'cti keys' });
   // F3a — redaction profiles visible to ANALYST+ (catalog is non-destructive).
   items.push({ to: '/admin/cti-redaction', label: 'redaction' });

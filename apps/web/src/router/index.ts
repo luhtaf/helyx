@@ -92,6 +92,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: 'Audit log', requiresRole: 'ANALYST' },
   },
   {
+    path: '/admin/members',
+    name: 'org-members',
+    component: () => import('@/views/OrgMembersView.vue'),
+    meta: { title: 'Members', requiresRole: 'ADMIN' },
+  },
+  {
     path: '/admin/cti-keys',
     name: 'cti-keys',
     component: () => import('@/views/CtiKeypairsView.vue'),

@@ -155,3 +155,45 @@ export async function listMembers(orgId: string): Promise<MembershipRecord[]> {
     await session.close();
   }
 }
+
+export interface RemoveMemberResult {
+  removed: boolean;
+  /** Set when refused: 'not_member' | 'last_owner'. */
+  reason?: 'not_member' | 'last_owner';
+  removedRole?: OrgRole;
+}
+
+// Revoke a user's org access. Guards the last-OWNER invariant inside one
+// session so two concurrent removals can't both pass the count check and
+// orphan the org (no owner = no one can ever re-grant). The owner-count
+// subquery + conditional DELETE run in a single Cypher statement so the
+// read and the write see the same snapshot.
+export async function removeMember(
+  orgId: string,
+  userId: string,
+): Promise<RemoveMemberResult> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (u:User {id: $userId})-[m:MEMBER_OF]->(o:Organization {id: $orgId})
+       WITH o, m, m.role AS role
+       CALL {
+         WITH o
+         MATCH (:User)-[om:MEMBER_OF {role: 'OWNER'}]->(o)
+         RETURN count(om) AS ownerCount
+       }
+       WITH m, role, (role = 'OWNER' AND ownerCount <= 1) AS isLastOwner
+       FOREACH (_ IN CASE WHEN isLastOwner THEN [] ELSE [1] END | DELETE m)
+       RETURN role AS removedRole, isLastOwner`,
+      { orgId, userId },
+    );
+    const rec = r.records[0];
+    if (!rec) return { removed: false, reason: 'not_member' };
+    if (rec.get('isLastOwner') === true) {
+      return { removed: false, reason: 'last_owner' };
+    }
+    return { removed: true, removedRole: rec.get('removedRole') as OrgRole };
+  } finally {
+    await session.close();
+  }
+}

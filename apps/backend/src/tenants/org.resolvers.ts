@@ -11,11 +11,13 @@ import {
   findOrganizationBySlug,
   listMembers,
   listOrganizationsForUser,
+  removeMember,
   type OrganizationRecord,
   type OrganizationWithRole,
 } from './orgs.repo.js';
 import { getUserOrgRole } from './users.repo.js';
 import { invalidateUserOrgRole } from '../cache/auth.js';
+import { logAudit } from '../audits/log.js';
 
 const CreateOrgInput = z.object({
   name: z.string().trim().min(1).max(120),
@@ -26,6 +28,11 @@ const AddMemberInput = z.object({
   orgId: z.string().min(1),
   email: z.string().email().max(254),
   role: z.enum(ORG_ROLES as readonly [OrgRole, ...OrgRole[]]),
+});
+
+const RemoveMemberInput = z.object({
+  orgId: z.string().min(1),
+  userId: z.string().min(1),
 });
 
 export const orgResolvers = {
@@ -74,11 +81,49 @@ export const orgResolvers = {
       });
       if (!result) throw notFound('User not found — they must register first');
       await invalidateUserOrgRole(result.userId, result.orgId);
+      await logAudit(
+        args.orgId, ctx.user.id,
+        'org.member_grant',
+        { type: 'User', id: result.userId },
+        null,
+        { email: result.userEmail, role: result.role },
+      );
       return {
         user: { id: result.userId, email: result.userEmail, displayName: result.userDisplayName },
         role: result.role,
         joinedAt: result.joinedAt,
       };
+    },
+
+    removeOrganizationMember: async (_p: unknown, raw: unknown, ctx: RequestContext) => {
+      const args = RemoveMemberInput.parse(raw);
+      assertAuthed(ctx);
+      const callerRole = await getUserOrgRole(ctx.user.id, args.orgId);
+      if (!callerRole || (callerRole !== 'OWNER' && callerRole !== 'ADMIN')) {
+        assertOrgRole({ ...ctx, activeOrgId: args.orgId, activeOrgRole: callerRole }, 'ADMIN');
+      }
+      // Removing yourself would orphan your own session's org context and
+      // is almost always an accident — block it. (Last-owner is guarded
+      // atomically in the repo regardless.)
+      if (args.userId === ctx.user.id) {
+        throw badInput('You cannot remove yourself from an organization', 'userId');
+      }
+      const result = await removeMember(args.orgId, args.userId);
+      if (!result.removed) {
+        if (result.reason === 'last_owner') {
+          throw conflict('Cannot remove the last OWNER — promote another member first');
+        }
+        throw notFound('User is not a member of this organization');
+      }
+      await invalidateUserOrgRole(args.userId, args.orgId);
+      await logAudit(
+        args.orgId, ctx.user.id,
+        'org.member_remove',
+        { type: 'User', id: args.userId },
+        { role: result.removedRole ?? null },
+        null,
+      );
+      return true;
     },
   },
 

@@ -52,6 +52,11 @@ export const tenantTypeDefs = /* GraphQL */ `
     logout: LogoutResult!
     refresh: RefreshResult!
     createOrganization(name: String!, slug: String!): Organization!
+    """Invite an existing user (by email) into an org, or change their
+    role if already a member. ADMIN+ in the target org."""
     addOrganizationMember(orgId: ID!, email: String!, role: OrgRole!): Membership!
+    """Revoke a user's org membership. ADMIN+ in the target org. Refuses
+    to remove the last OWNER or the caller themselves."""
+    removeOrganizationMember(orgId: ID!, userId: ID!): Boolean!
   }
 `;
