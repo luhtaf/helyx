@@ -70,8 +70,26 @@ export const stakeholderTypeDefs = /* GraphQL */ `
     stakeholderBySlug(slug: String!): Stakeholder
   }
 
+  type ImportError {
+    line: Int!
+    reason: String!
+  }
+
+  type StakeholderImportResult {
+    created: Int!
+    """Slugs already present in the org — skipped (import is additive)."""
+    skipped: Int!
+    """Per-line parse/validation failures. Created rows still committed."""
+    errors: [ImportError!]!
+  }
+
   extend type Mutation {
     createStakeholder(input: StakeholderInput!): Stakeholder!
+    """Bulk-onboard stakeholders from a CSV blob. Header (case-insensitive):
+    name (required), slug, sektor (slug or name), city, aliases
+    (semicolon-sep), notes. Additive — existing slugs skipped, parse
+    errors reported per-line, valid rows still commit. ANALYST role."""
+    bulkImportStakeholders(csv: String!): StakeholderImportResult!
     updateStakeholder(id: ID!, input: StakeholderUpdateInput!): Stakeholder!
     archiveStakeholder(id: ID!): Stakeholder!
     setStakeholderSensor(id: ID!, input: SensorInput!): Stakeholder!

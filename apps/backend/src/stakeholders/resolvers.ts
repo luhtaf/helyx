@@ -2,6 +2,7 @@ import type { RequestContext } from '../auth/context.js';
 import { assertOrgRole } from '../auth/middleware.js';
 import {
   archiveStakeholder,
+  bulkCreateStakeholders,
   countStakeholdersInSektor,
   createStakeholder,
   findSektorOfStakeholder,
@@ -14,6 +15,7 @@ import {
 } from './repo.js';
 import type { SektorRow, StakeholderRow } from './types.js';
 import { logAudit } from '../audits/log.js';
+import { parseStakeholderCsv } from './csv-import.js';
 
 interface StakeholderFilterArgs {
   sektorId?: string;
@@ -89,6 +91,37 @@ export const stakeholderResolvers = {
     ) => {
       assertOrgRole(ctx, 'ANALYST');
       return updateStakeholder(ctx.activeOrgId, args.id, args.input);
+    },
+
+    bulkImportStakeholders: async (
+      _p: unknown,
+      args: { csv: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      const sektors = await listSektors();
+      const { rows, errors } = parseStakeholderCsv(args.csv, sektors);
+      const { createdSlugs, skippedSlugs } = await bulkCreateStakeholders(
+        ctx.activeOrgId,
+        rows,
+      );
+      await logAudit(
+        ctx.activeOrgId,
+        ctx.user.id,
+        'stakeholder.bulk_import',
+        { type: 'Stakeholder', id: 'csv-import' },
+        null,
+        {
+          created: createdSlugs.length,
+          skipped: skippedSlugs.length,
+          parseErrors: errors.length,
+        },
+      );
+      return {
+        created: createdSlugs.length,
+        skipped: skippedSlugs.length,
+        errors,
+      };
     },
 
     archiveStakeholder: async (_p: unknown, args: { id: string }, ctx: RequestContext) => {

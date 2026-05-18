@@ -174,6 +174,47 @@ export function useUpdateStakeholder(): {
   return { submit, loading, error };
 }
 
+// ─── CSV bulk import ───────────────────────────────────────────────
+
+const BULK_IMPORT_STAKEHOLDERS = gql`
+  mutation BulkImportStakeholders($csv: String!) {
+    bulkImportStakeholders(csv: $csv) {
+      created
+      skipped
+      errors { line reason }
+    }
+  }
+`;
+
+export interface StakeholderImportResult {
+  created: number;
+  skipped: number;
+  errors: { line: number; reason: string }[];
+}
+
+export function useBulkImportStakeholders(): {
+  submit: (csv: string) => Promise<StakeholderImportResult | null>;
+  loading: Ref<boolean>;
+  error: Ref<Error | null>;
+} {
+  const { mutate, loading, error } = useMutation<
+    { bulkImportStakeholders: StakeholderImportResult },
+    { csv: string }
+  >(BULK_IMPORT_STAKEHOLDERS, () => ({
+    refetchQueries: ['Stakeholders', 'Sektors'],
+    awaitRefetchQueries: true,
+  }));
+  async function submit(csv: string): Promise<StakeholderImportResult | null> {
+    try {
+      const r = await mutate({ csv });
+      return r?.data?.bulkImportStakeholders ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return { submit, loading, error };
+}
+
 // ─── Sensor input (per-stakeholder) ────────────────────────────────
 // SensorStack/SensorStatus already imported at top of file.
 

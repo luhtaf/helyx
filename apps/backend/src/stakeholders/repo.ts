@@ -267,6 +267,71 @@ export async function createStakeholder(tenantId: string, input: StakeholderInpu
   }
 }
 
+// Bulk insert from CSV import. One executeWrite tx, two UNWINDs (create
+// + sektor link) — no N+1. Slugs already present in this tenant are
+// skipped (returned in skippedSlugs) so re-running an import is safe and
+// additive. Sektor ids are pre-resolved by the parser; we still MERGE
+// the edge only when sektorId is non-null.
+export async function bulkCreateStakeholders(
+  tenantId: string,
+  rows: StakeholderInput[],
+): Promise<{ createdSlugs: string[]; skippedSlugs: string[] }> {
+  if (rows.length === 0) return { createdSlugs: [], skippedSlugs: [] };
+  const session = getSession();
+  try {
+    return await session.executeWrite(async (tx) => {
+      // Which of the incoming slugs already exist for this tenant?
+      const existing = await tx.run(
+        `MATCH (k:Stakeholder {tenantId: $tenantId})
+         WHERE k.slug IN $slugs
+         RETURN collect(k.slug) AS slugs`,
+        { tenantId, slugs: rows.map((r) => r.slug) },
+      );
+      const taken = new Set<string>(
+        (existing.records[0]?.get('slugs') as string[] | undefined) ?? [],
+      );
+
+      const fresh = rows.filter((r) => !taken.has(r.slug));
+      const skippedSlugs = rows.filter((r) => taken.has(r.slug)).map((r) => r.slug);
+      if (fresh.length === 0) return { createdSlugs: [], skippedSlugs };
+
+      const payload = fresh.map((r) => ({
+        id: randomUUID(),
+        slug: r.slug,
+        name: r.name,
+        aliases: r.aliases ?? [],
+        city: r.city ?? null,
+        notes: r.notes ?? null,
+        sektorId: r.sektorId ?? null,
+      }));
+
+      await tx.run(
+        `UNWIND $payload AS row
+         CREATE (k:Stakeholder {
+           id: row.id, tenantId: $tenantId, slug: row.slug, name: row.name,
+           aliases: row.aliases, city: row.city, coords: null, notes: row.notes,
+           status: 'ACTIVE',
+           sensorStack: null, sensorStatus: null, sensorAgentCount: null,
+           sensorDeployedAt: null, sensorNotes: null,
+           createdAt: datetime(), updatedAt: datetime()
+         })`,
+        { payload, tenantId },
+      );
+
+      await tx.run(
+        `UNWIND [r IN $payload WHERE r.sektorId IS NOT NULL] AS row
+         MATCH (k:Stakeholder {id: row.id}), (s:Sektor {id: row.sektorId})
+         MERGE (k)-[:IN_SEKTOR]->(s)`,
+        { payload },
+      );
+
+      return { createdSlugs: fresh.map((r) => r.slug), skippedSlugs };
+    });
+  } finally {
+    await session.close();
+  }
+}
+
 export async function updateStakeholder(
   tenantId: string,
   id: string,

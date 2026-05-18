@@ -3,12 +3,13 @@ import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import {
-  useStakeholders, useSektors, useCreateStakeholder,
+  useStakeholders, useSektors, useCreateStakeholder, useBulkImportStakeholders,
   type StakeholdersFilter, type StakeholderInput,
 } from '@/composables/useStakeholders';
 import SensorStatusPill from '@/components/stakeholder/SensorStatusPill.vue';
 import SektorBadge from '@/components/stakeholder/SektorBadge.vue';
 import CreateStakeholderSlide from '@/components/reconciliation/CreateStakeholderSlide.vue';
+import StakeholderImportModal from '@/components/stakeholder/StakeholderImportModal.vue';
 import Button from '@/components/ui/Button.vue';
 import { useToast } from '@/composables/useToast';
 import { useAuthStore } from '@/stores/auth';
@@ -71,6 +72,29 @@ async function onCreateSubmit(input: StakeholderInput): Promise<void> {
     showToast(e instanceof Error ? e.message : 'create failed', 'error');
   }
 }
+
+// CSV bulk import. Modal stays open after submit so the operator can
+// review the per-line error report; the modal exposes setResult().
+const importOpen = ref(false);
+const importModal = ref<InstanceType<typeof StakeholderImportModal> | null>(null);
+const { submit: bulkImport, loading: importing } = useBulkImportStakeholders();
+
+async function onImportSubmit(csv: string): Promise<void> {
+  const r = await bulkImport(csv);
+  if (!r) {
+    showToast('import failed', 'error');
+    return;
+  }
+  importModal.value?.setResult(r);
+  if (r.created > 0) {
+    showToast(`imported ${r.created} stakeholder${r.created === 1 ? '' : 's'}`, 'success');
+    refetch();
+  } else if (r.errors.length > 0) {
+    showToast(`no rows imported — ${r.errors.length} error${r.errors.length === 1 ? '' : 's'}`, 'error');
+  } else {
+    showToast('nothing new — all rows already exist', 'success');
+  }
+}
 </script>
 
 <template>
@@ -85,10 +109,19 @@ async function onCreateSubmit(input: StakeholderInput): Promise<void> {
           <p class="font-mono text-[11px] text-ink-dim tabular-nums">
             {{ loading ? '…' : stakeholders.length }} entities
           </p>
+          <Button v-if="canCreate" variant="ghost" @click="importOpen = true">Import CSV</Button>
           <Button v-if="canCreate" variant="primary" @click="slideOpen = true">+ New Stakeholder</Button>
         </div>
       </div>
     </header>
+
+    <StakeholderImportModal
+      ref="importModal"
+      :open="importOpen"
+      :loading="importing"
+      @submit="onImportSubmit"
+      @cancel="importOpen = false"
+    />
 
     <!-- Error banner -->
     <div
