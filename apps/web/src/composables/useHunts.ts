@@ -185,6 +185,33 @@ export function useSaveGraphAsHunt() {
   return { submit, loading, error };
 }
 
+const UPDATE_HUNT_NAME = gql`
+  mutation UpdateHuntName($id: ID!, $name: String!) {
+    updateHuntName(id: $id, name: $name) { id name updatedAt }
+  }
+`;
+
+export function useUpdateHuntName() {
+  // Refetch both list + graph detail so the rename shows everywhere
+  // immediately (HuntsView list, /graph?hunt=<id> header).
+  const { mutate, loading, error } = useMutation<
+    { updateHuntName: { id: string; name: string; updatedAt: string } },
+    { id: string; name: string }
+  >(UPDATE_HUNT_NAME, () => ({
+    refetchQueries: ['Hunts', 'HuntGraphDetail', 'HuntDetail'],
+    awaitRefetchQueries: true,
+  }));
+  async function submit(id: string, name: string) {
+    try {
+      const r = await mutate({ id, name });
+      return r?.data?.updateHuntName ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return { submit, loading, error };
+}
+
 export function useUpdateHuntSnapshot() {
   const { mutate, loading, error } = useMutation<
     { updateHuntSnapshot: { id: string; updatedAt: string } },

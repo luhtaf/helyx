@@ -163,6 +163,9 @@ export const huntTypeDefs = /* GraphQL */ `
     saveGraphAsHunt(input: SaveGraphAsHuntInput!): Hunt!
     """Update an existing GRAPH-kind Hunt's snapshot (auto-save path)."""
     updateHuntSnapshot(id: ID!, snapshot: String!): Hunt!
+    """Rename a Hunt — typo fixes, ops rebrands. Both STRUCTURED + GRAPH.
+    Audit-logged. ANALYST role."""
+    updateHuntName(id: ID!, name: String!): Hunt!
     """Walk a Hunt's nodes (Case → Artifact + AttackPattern), categorize
     IOCs/TTPs, run YARA/Suricata/Sigma generators, persist as
     :DetectionRule kind=GENERATED. Returns counters for what was created."""

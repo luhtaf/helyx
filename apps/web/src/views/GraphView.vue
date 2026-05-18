@@ -19,7 +19,7 @@ import { useGraphTransform } from '@/composables/useGraphTransform';
 import { useToast } from '@/composables/useToast';
 import { useConfirm } from '@/composables/useConfirm';
 import { useAuthStore } from '@/stores/auth';
-import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, useDeleteHunt, type TtpFacets } from '@/composables/useHunts';
+import { useSaveGraphAsHunt, useUpdateHuntSnapshot, useUpdateHuntName, useHuntGraph, useSearchEntities, useGenerateRulesFromHunt, useDownloadHuntZip, useExportHuntAsStix, useRecentStixExports, useHuntPushReadiness, useTtpMaterialize, useSetHuntReleaseTier, useDeleteHunt, type TtpFacets } from '@/composables/useHunts';
 import { RELEASE_TIERS, RELEASE_TIER_LABELS, type ReleaseTier } from '@/composables/useRules';
 import { useRedactionProfiles, useSetHuntRedactionProfile } from '@/composables/useRedactionProfiles';
 import { useCtiPushTargets, useCtiPushMutations, PUSH_OUTCOME_LABELS } from '@/composables/useCtiPushTargets';
@@ -140,6 +140,34 @@ function tsRelative(iso: string): string {
   return `${Math.round(hr / 24)}d ago`;
 }
 const { submit: setTier, loading: settingTier } = useSetHuntReleaseTier();
+
+// Inline hunt rename — click name → edit field. Enter saves, Esc cancels.
+const { submit: renameHunt, loading: renaming } = useUpdateHuntName();
+const renamingName = ref(false);
+const renameDraft = ref('');
+function startRename(): void {
+  if (!hunt.value) return;
+  renameDraft.value = hunt.value.name;
+  renamingName.value = true;
+}
+function cancelRename(): void {
+  renamingName.value = false;
+  renameDraft.value = '';
+}
+async function saveRename(): Promise<void> {
+  const next = renameDraft.value.trim();
+  if (!huntId.value || !hunt.value || !next || next === hunt.value.name) {
+    cancelRename();
+    return;
+  }
+  const r = await renameHunt(huntId.value, next);
+  if (r) {
+    showToast(`Hunt renamed → ${r.name}`, 'success');
+    cancelRename();
+  } else {
+    showToast('Rename failed', 'error');
+  }
+}
 
 async function onChangeHuntTier(e: Event): Promise<void> {
   const next = (e.target as HTMLSelectElement).value as ReleaseTier;
@@ -538,9 +566,32 @@ onMounted(() => { void plantSeed(); });
           <p class="font-mono text-[9px] uppercase tracking-wider text-ink-faint">
             {{ huntId ? 'hunt' : (ttpCode ? `ttp seed · ${ttpCode}${ttpActorId ? ' · actor scope' : ''}` : (isEmptyCanvas ? 'empty canvas' : 'seed')) }}
           </p>
-          <p class="font-mono text-[12px] text-ink mt-0.5">
-            {{ huntId ? (hunt?.name ?? 'loading…') : (seedNode?.label ?? (isEmptyCanvas ? 'fresh start' : (seed?.id ?? '—'))) }}
-          </p>
+          <div class="mt-0.5">
+            <input
+              v-if="huntId && renamingName"
+              v-model="renameDraft"
+              type="text"
+              autofocus
+              :disabled="renaming"
+              class="font-mono text-[12px] text-ink bg-surface border border-signal/40 rounded px-1.5 py-0.5 w-[260px] focus:outline-none"
+              @keydown.enter.prevent="saveRename"
+              @keydown.esc.prevent="cancelRename"
+              @blur="saveRename"
+            />
+            <button
+              v-else-if="huntId && hunt"
+              type="button"
+              class="font-mono text-[12px] text-ink hover:text-signal transition group"
+              title="click to rename hunt"
+              @click="startRename"
+            >
+              {{ hunt.name }}
+              <span class="text-ink-faint opacity-0 group-hover:opacity-100 transition ml-1">✎</span>
+            </button>
+            <p v-else class="font-mono text-[12px] text-ink">
+              {{ huntId ? 'loading…' : (seedNode?.label ?? (isEmptyCanvas ? 'fresh start' : (seed?.id ?? '—'))) }}
+            </p>
+          </div>
           <p v-if="huntId" class="font-mono text-[9px] text-ink-faint mt-0.5">
             auto-saving · last edit {{ hunt?.updatedAt?.slice(11, 16) ?? '' }}
           </p>

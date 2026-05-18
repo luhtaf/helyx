@@ -16,8 +16,10 @@ import {
   listTopTtps,
   saveGraphAsHunt,
   searchEntities,
+  updateHuntName,
   updateHuntSnapshot,
 } from './repo.js';
+import { logAudit } from '../audits/log.js';
 import { generateRulesFromHunt } from '../exporters/index.js';
 import { packHuntRulesAsZip } from '../exporters/zip.js';
 import { buildHuntStixBundle, persistStixExport, listStixExportsForHunt } from '../exporters/stix.js';
@@ -48,6 +50,11 @@ const SaveGraphAsHuntSchema = z.object({
 const UpdateSnapshotSchema = z.object({
   id: z.string().min(1),
   snapshot: z.string().min(2).max(512 * 1024),
+});
+
+const UpdateHuntNameSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().min(1).max(200),
 });
 
 function clampPage(raw: number | undefined): number {
@@ -227,6 +234,27 @@ export const huntResolvers = {
       const input = UpdateSnapshotSchema.parse(args);
       const updated = await updateHuntSnapshot(ctx.activeOrgId, input.id, input.snapshot);
       if (!updated) throw notFound('graph hunt not found');
+      return updated;
+    },
+
+    updateHuntName: async (
+      _p: unknown,
+      args: { id: string; name: string },
+      ctx: RequestContext,
+    ) => {
+      assertOrgRole(ctx, 'ANALYST');
+      const input = UpdateHuntNameSchema.parse(args);
+      const before = await findHuntById(ctx.activeOrgId, input.id);
+      if (!before) throw notFound('hunt not found');
+      const updated = await updateHuntName(ctx.activeOrgId, input.id, input.name);
+      if (!updated) throw notFound('hunt not found');
+      await logAudit(
+        ctx.activeOrgId, ctx.user.id,
+        'hunt.rename',
+        { type: 'Hunt', id: input.id },
+        { name: before.name },
+        { name: updated.name },
+      );
       return updated;
     },
 

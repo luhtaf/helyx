@@ -400,6 +400,29 @@ export async function updateHuntSnapshot(
   }
 }
 
+// H-meta — Update Hunt name (typo fixes, ops rebrands). Snapshot path is
+// `updateHuntSnapshot` — kept separate because that's auto-saved on every
+// canvas mutation; this is operator-explicit. Both kinds (STRUCTURED + GRAPH).
+export async function updateHuntName(
+  tenantId: string,
+  id: string,
+  name: string,
+): Promise<HuntRecord | null> {
+  const session = getSession();
+  try {
+    const r = await session.run(
+      `MATCH (h:Hunt {id: $id, tenantId: $tenantId})
+       SET h.name = $name, h.updatedAt = datetime()
+       RETURN ${HUNT_RETURN}`,
+      { id, tenantId, name },
+    );
+    const rec = r.records[0];
+    return rec ? rowToHunt(rec) : null;
+  } finally {
+    await session.close();
+  }
+}
+
 // Cross-entity search for graph search-add. Tenant-scoped; case-insensitive
 // substring match on name/slug/cveId across 4 entity types. Limit per type
 // to avoid one type swamping the result set.
