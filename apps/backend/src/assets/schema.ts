@@ -84,6 +84,8 @@ export const assetTypeDefs = /* GraphQL */ `
     hostname: String
     ipAddresses: [String!]
     parentId: ID
+    "Optional owning stakeholder — links (:Stakeholder)-[:OWNS]->(:Asset)."
+    stakeholderId: ID
   }
 
   type AssetPage {

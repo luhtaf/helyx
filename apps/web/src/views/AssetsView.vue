@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
-import { useAssetsList, useCreateAsset, type CreateAssetInput } from '@/composables/useAssets';
+import { useAssetsList, useCreateAsset, useIngestSbom, type CreateAssetInput } from '@/composables/useAssets';
 import SectionRule from '@/components/ui/SectionRule.vue';
 import Pagination from '@/components/ui/Pagination.vue';
 import Button from '@/components/ui/Button.vue';
@@ -57,17 +57,37 @@ function fmtKind(k: string): string {
 // Manual asset add — slide-over from header. ANALYST+ can create.
 const addOpen = ref(false);
 const { submit: createAsset, submitting: creating } = useCreateAsset();
+const { submit: ingestSbom } = useIngestSbom();
 const { show: showToast } = useToast();
 const canCreate = computed(() => auth.hasMinRole('ANALYST'));
 
-async function onCreate(input: CreateAssetInput): Promise<void> {
-  const r = await createAsset(input);
-  if (r) {
-    showToast(`Added ${r.name}`, 'success');
-    addOpen.value = false;
-  } else {
+// Slide emits { input, sbom, sbomFilename }. Create the asset first;
+// if an SBOM was attached, ingest it onto the new asset id (best-effort
+// — asset is already created, SBOM failure shouldn't lose the asset).
+async function onCreate(payload: {
+  input: CreateAssetInput;
+  sbom: string | null;
+  sbomFilename: string | null;
+}): Promise<void> {
+  const r = await createAsset(payload.input);
+  if (!r) {
     showToast('Add failed — check inputs', 'error');
+    return;
   }
+  if (payload.sbom) {
+    const sb = await ingestSbom(r.id, payload.sbom, payload.sbomFilename);
+    if (sb) {
+      showToast(
+        `Added ${r.name} · SBOM: ${sb.componentCount} components, ${sb.productLinkCount} linked`,
+        'success',
+      );
+    } else {
+      showToast(`Added ${r.name} · SBOM ingest failed (asset kept)`, 'error');
+    }
+  } else {
+    showToast(`Added ${r.name}`, 'success');
+  }
+  addOpen.value = false;
 }
 </script>
 

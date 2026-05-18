@@ -26,6 +26,7 @@ const CreateAssetSchema = z.object({
   hostname: z.string().trim().min(1).max(255).nullable().optional(),
   ipAddresses: z.array(z.string().trim().min(1)).optional(),
   parentId: z.string().min(1).nullable().optional(),
+  stakeholderId: z.string().min(1).nullable().optional(),
 });
 
 export const assetResolvers = {
@@ -68,6 +69,7 @@ export const assetResolvers = {
         hostname: input.hostname ?? null,
         ipAddresses: input.ipAddresses ?? [],
         parentId: input.parentId ?? null,
+        stakeholderId: input.stakeholderId ?? null,
       });
     },
 

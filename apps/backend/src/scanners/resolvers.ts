@@ -232,6 +232,7 @@ export const scannerResolvers = {
           hostname: (rec.get('hostname') as string | null) ?? null,
           ipAddresses: (rec.get('ipAddresses') as string[]) ?? [],
           parentId: parentAssetId,
+          stakeholderId: null, // scanner-discovered; owner assigned later
         });
         row = await setDiscoveredStatus(
           ctx.activeOrgId, args.discoveredId, 'created_new', newAsset.id,

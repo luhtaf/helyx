@@ -30,38 +30,58 @@ export interface CreateAssetInput {
   hostname: string | null;
   ipAddresses: string[];
   parentId: string | null;
+  /** Optional owning stakeholder — adds (:Stakeholder)-[:OWNS]->(:Asset). */
+  stakeholderId: string | null;
 }
 
 export async function createAsset(input: CreateAssetInput): Promise<AssetRecord> {
   const id = newId();
   const session = getSession();
   try {
+    // Atomic: when parentId/stakeholderId are given they become
+    // REQUIRED matches in the same statement, so a bad id matches
+    // nothing → no asset created (no orphan), and we throw. Both are
+    // tenant-scoped so cross-tenant attach is impossible. Building the
+    // clauses dynamically also collapses the old parent/no-parent
+    // branch duplication.
+    const matches: string[] = [];
+    const links: string[] = [];
     if (input.parentId) {
-      const r = await session.run(
-        `MATCH (parent:Asset {id: $parentId, tenantId: $tenantId})
-         CREATE (a:Asset {
-           id: $id, tenantId: $tenantId, kind: $kind, name: $name,
-           hostname: $hostname, ipAddresses: $ipAddresses,
-           createdAt: datetime(), updatedAt: datetime()
-         })
-         CREATE (parent)-[:CONTAINS]->(a)
-         RETURN ${ASSET_RETURN}`,
-        { id, ...input },
-      );
-      const rec = r.records[0];
-      if (!rec) throw new Error('Parent asset not found in tenant');
-      return rowToAsset(rec);
+      matches.push('MATCH (parent:Asset {id: $parentId, tenantId: $tenantId})');
+      links.push('CREATE (parent)-[:CONTAINS]->(a)');
     }
-    const r = await session.run(
-      `CREATE (a:Asset {
-         id: $id, tenantId: $tenantId, kind: $kind, name: $name,
-         hostname: $hostname, ipAddresses: $ipAddresses,
-         createdAt: datetime(), updatedAt: datetime()
-       })
-       RETURN ${ASSET_RETURN}`,
-      { id, ...input },
-    );
-    return rowToAsset(r.records[0]!);
+    if (input.stakeholderId) {
+      matches.push('MATCH (sk:Stakeholder {id: $stakeholderId, tenantId: $tenantId})');
+      links.push('MERGE (sk)-[:OWNS]->(a)');
+    }
+    const cypher = `
+      ${matches.join('\n')}
+      CREATE (a:Asset {
+        id: $id, tenantId: $tenantId, kind: $kind, name: $name,
+        hostname: $hostname, ipAddresses: $ipAddresses,
+        createdAt: datetime(), updatedAt: datetime()
+      })
+      ${links.join('\n')}
+      RETURN ${ASSET_RETURN}`;
+    const r = await session.run(cypher, {
+      id,
+      tenantId: input.tenantId,
+      kind: input.kind,
+      name: input.name,
+      hostname: input.hostname,
+      ipAddresses: input.ipAddresses,
+      parentId: input.parentId,
+      stakeholderId: input.stakeholderId,
+    });
+    const rec = r.records[0];
+    if (!rec) {
+      // A required MATCH failed — nothing was created.
+      const which: string[] = [];
+      if (input.parentId) which.push('parent asset');
+      if (input.stakeholderId) which.push('stakeholder');
+      throw new Error(`${which.join(' / ') || 'reference'} not found in tenant`);
+    }
+    return rowToAsset(rec);
   } finally {
     await session.close();
   }

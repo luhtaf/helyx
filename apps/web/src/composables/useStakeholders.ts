@@ -1,6 +1,6 @@
 // apps/web/src/composables/useStakeholders.ts
 import { computed, type ComputedRef, type Ref } from 'vue';
-import { useQuery, useMutation } from '@vue/apollo-composable';
+import { useQuery, useMutation, useApolloClient } from '@vue/apollo-composable';
 import gql from 'graphql-tag';
 export { type SensorStack, type SensorStatus, type StakeholderStatus } from './stakeholder-kinds';
 import type { SensorStack, SensorStatus, StakeholderStatus } from './stakeholder-kinds';
@@ -47,6 +47,35 @@ const SEKTORS = gql`
     sektors { id slug name displayOrder stakeholderCount }
   }
 `;
+
+const STAKEHOLDER_AUTOCOMPLETE = gql`
+  query StakeholderAutocomplete($search: String!) {
+    stakeholders(search: $search, first: 10) { id name slug }
+  }
+`;
+
+export interface StakeholderHit {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+// Lazy autocomplete (caller debounces). no-cache so each keystroke is
+// fresh. Used by the asset-add owner picker.
+export function useStakeholderAutocomplete() {
+  const { client } = useApolloClient();
+  return {
+    async search(q: string): Promise<StakeholderHit[]> {
+      if (q.trim().length < 2) return [];
+      const r = await client.query<{ stakeholders: StakeholderHit[] }>({
+        query: STAKEHOLDER_AUTOCOMPLETE,
+        variables: { search: q.trim() },
+        fetchPolicy: 'no-cache',
+      });
+      return r.data?.stakeholders ?? [];
+    },
+  };
+}
 
 const STAKEHOLDERS = gql`
   query Stakeholders($sektorId: ID, $status: StakeholderStatus, $search: String, $first: Int = 100) {

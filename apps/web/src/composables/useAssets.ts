@@ -178,6 +178,7 @@ export interface CreateAssetInput {
   hostname?: string | null;
   ipAddresses?: string[] | null;
   parentId?: string | null;
+  stakeholderId?: string | null;
 }
 
 export interface AssetAutocompleteHit {
@@ -213,6 +214,43 @@ export function useCreateAsset() {
   }
 
   return { submit, submitting, error };
+}
+
+const INGEST_SBOM = gql`
+  mutation IngestSbom($assetId: ID!, $sbomJson: String!, $sourceFilename: String) {
+    ingestSbom(assetId: $assetId, sbomJson: $sbomJson, sourceFilename: $sourceFilename) {
+      componentCount
+      productLinkCount
+      skippedNoPurl
+    }
+  }
+`;
+
+export interface SbomIngestResult {
+  componentCount: number;
+  productLinkCount: number;
+  skippedNoPurl: number;
+}
+
+// Optional follow-up after createAsset — attach a CycloneDX SBOM so the
+// asset's SoftwareComponents (→ CVE matching) populate immediately.
+export function useIngestSbom() {
+  const { client } = useApolloClient();
+  async function submit(
+    assetId: string, sbomJson: string, sourceFilename?: string | null,
+  ): Promise<SbomIngestResult | null> {
+    try {
+      const r = await client.mutate<{ ingestSbom: SbomIngestResult }>({
+        mutation: INGEST_SBOM,
+        variables: { assetId, sbomJson, sourceFilename: sourceFilename ?? null },
+        refetchQueries: ['Assets'],
+      });
+      return r.data?.ingestSbom ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return { submit };
 }
 
 export function useAssetAutocomplete() {
