@@ -6,6 +6,7 @@ import { logAudit } from '../../audits/log.js';
 import { fetchHuntName, getPushTarget, recordPushAttempt } from './repo.js';
 import { uploadStixToMisp } from './misp/client.js';
 import { uploadStixToTaxii } from './taxii/client.js';
+import { uploadStixToOpenCti } from './opencti/client.js';
 import type { CtiPushAttempt, CtiPushTarget, PushOutcome } from './types.js';
 
 // H7/H9 — push pipeline orchestration. Threads through every gate
@@ -233,8 +234,64 @@ export async function pushHuntToTarget(
     return { attempt: a, bundleContentHash };
   }
 
-  // OPENCTI / ECLECTICIQ live clients still pending. Friendly error so
-  // operator knows to use dryRun for these kinds.
+  // H7b — OpenCTI: GraphQL multipart uploadImport (built-in import
+  // connector processes the bundle async).
+  if (target.kind === 'OPENCTI') {
+    const r = await uploadStixToOpenCti(target.url, target.apiKey, result.json);
+    if (r.ok) {
+      const a = await recordAndAudit(
+        tenantId, actorUserId, target, huntId, huntName, 'success',
+        {
+          bundleContentHash,
+          indicatorCount: result.stats.indicatorCount,
+          errorDetail: r.importId ? `OpenCTI import id: ${r.importId}` : null,
+        },
+      );
+      return { attempt: a, bundleContentHash };
+    }
+    const a = await recordAndAudit(
+      tenantId, actorUserId, target, huntId, huntName, 'failed_http',
+      {
+        bundleContentHash,
+        indicatorCount: result.stats.indicatorCount,
+        errorDetail: r.errorDetail ?? `OpenCTI HTTP ${r.status}`,
+      },
+    );
+    return { attempt: a, bundleContentHash };
+  }
+
+  // H9 — EclecticIQ: EIQ Intelligence Center ingests STIX 2.1 via its
+  // native TAXII 2.1 inbox. Rather than ship a guessed EIQ-proprietary
+  // REST mapping (brittle, untestable without a licensed instance), we
+  // route through the verified TAXII client — the operator points the
+  // target.url at EIQ's TAXII collection objects endpoint and uses a
+  // Bearer token (TAXII client auto-sniffs Bearer vs Basic from apiKey).
+  // Same wire contract we already e2e'd for the TAXII kind.
+  if (target.kind === 'ECLECTICIQ') {
+    const r = await uploadStixToTaxii(target.url, target.apiKey, result.json);
+    if (r.ok) {
+      const a = await recordAndAudit(
+        tenantId, actorUserId, target, huntId, huntName, 'success',
+        {
+          bundleContentHash,
+          indicatorCount: result.stats.indicatorCount,
+          errorDetail: r.statusId ? `EclecticIQ (TAXII) status id: ${r.statusId}` : null,
+        },
+      );
+      return { attempt: a, bundleContentHash };
+    }
+    const a = await recordAndAudit(
+      tenantId, actorUserId, target, huntId, huntName, 'failed_http',
+      {
+        bundleContentHash,
+        indicatorCount: result.stats.indicatorCount,
+        errorDetail: r.errorDetail ?? `EclecticIQ (TAXII) HTTP ${r.status}`,
+      },
+    );
+    return { attempt: a, bundleContentHash };
+  }
+
+  // No live client for this kind — friendly hint to use dryRun.
   const a = await recordAndAudit(
     tenantId, actorUserId, target, huntId, huntName, 'failed_http',
     {
